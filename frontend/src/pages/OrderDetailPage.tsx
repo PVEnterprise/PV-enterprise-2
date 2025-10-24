@@ -290,9 +290,37 @@ export default function OrderDetailPage() {
     rejectMutation.reset();
   };
 
-  const handleGetQuotation = () => {
-    // Generate PDF quotation
-    window.open(`/api/v1/orders/${orderId}/quotation/pdf`, '_blank');
+  const handleGetQuotation = async () => {
+    try {
+      // Fetch PDF with authentication
+      const response = await fetch(`/api/v1/orders/${orderId}/quotation/pdf`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate quotation');
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob();
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Quotation_${order?.order_number || 'order'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading quotation:', error);
+      alert('Failed to generate quotation. Please try again.');
+    }
   };
 
   if (isLoading) {

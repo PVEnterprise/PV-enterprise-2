@@ -598,8 +598,8 @@ def generate_quotation_pdf(
     
     Available for sales and executive roles.
     """
-    from fastapi.responses import Response
-    from sqlalchemy.orm import joinedload
+    from fastapi.responses import StreamingResponse
+    from app.services.pdf_generator import generate_order_quotation_pdf
     
     # Fetch order with all relationships
     order = db.query(Order).options(
@@ -620,104 +620,16 @@ def generate_quotation_pdf(
             detail="Order must be approved before generating quotation"
         )
     
-    # Generate simple HTML quotation (can be enhanced with PDF library later)
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Quotation - {order.order_number}</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 40px; }}
-            h1 {{ color: #333; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
-            th {{ background-color: #4CAF50; color: white; }}
-            .total {{ font-weight: bold; font-size: 1.2em; }}
-            .header {{ margin-bottom: 30px; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>QUOTATION</h1>
-            <p><strong>Order Number:</strong> {order.order_number}</p>
-            <p><strong>Customer:</strong> {order.customer.hospital_name if order.customer else 'N/A'}</p>
-            <p><strong>Contact:</strong> {order.customer.contact_person if order.customer else 'N/A'}</p>
-            <p><strong>Email:</strong> {order.customer.email if order.customer else 'N/A'}</p>
-            <p><strong>Date:</strong> {order.created_at.strftime('%Y-%m-%d')}</p>
-        </div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>Item</th>
-                    <th>SKU</th>
-                    <th>Qty</th>
-                    <th>Unit Price</th>
-                    <th>GST %</th>
-                    <th>Subtotal</th>
-                    <th>GST Amount</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
+    # Generate PDF
+    pdf_buffer = generate_order_quotation_pdf(order)
     
-    grand_subtotal = 0
-    grand_gst = 0
-    grand_total = 0
+    # Return as downloadable file
+    filename = f"Quotation_{order.order_number}.pdf"
     
-    for item in order.items:
-        if item.inventory_item and item.unit_price:
-            subtotal = float(item.quantity * item.unit_price)
-            gst_amount = float(subtotal * item.gst_percentage / 100)
-            total = subtotal + gst_amount
-            
-            grand_subtotal += subtotal
-            grand_gst += gst_amount
-            grand_total += total
-            
-            html_content += f"""
-                <tr>
-                    <td>{item.inventory_item.item_name}</td>
-                    <td>{item.inventory_item.sku}</td>
-                    <td>{item.quantity}</td>
-                    <td>₹{float(item.unit_price):,.2f}</td>
-                    <td>{float(item.gst_percentage):.2f}%</td>
-                    <td>₹{subtotal:,.2f}</td>
-                    <td>₹{gst_amount:,.2f}</td>
-                    <td>₹{total:,.2f}</td>
-                </tr>
-            """
-    
-    html_content += f"""
-            </tbody>
-            <tfoot>
-                <tr class="total">
-                    <td colspan="5">TOTAL</td>
-                    <td>₹{grand_subtotal:,.2f}</td>
-                    <td>₹{grand_gst:,.2f}</td>
-                    <td>₹{grand_total:,.2f}</td>
-                </tr>
-            </tfoot>
-        </table>
-        
-        <div style="margin-top: 40px;">
-            <p><strong>Terms and Conditions:</strong></p>
-            <ul>
-                <li>Payment terms: Net 30 days</li>
-                <li>Delivery: As per agreed schedule</li>
-                <li>Prices are subject to change without notice</li>
-            </ul>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return Response(
-        content=html_content,
-        media_type="text/html",
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
         headers={
-            "Content-Disposition": f"attachment; filename=quotation_{order.order_number}.html"
+            "Content-Disposition": f"attachment; filename={filename}"
         }
     )
