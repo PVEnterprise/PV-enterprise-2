@@ -4,7 +4,8 @@ Quotation management endpoints.
 from typing import List
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, date
 from pydantic import BaseModel, Field, ConfigDict
 from decimal import Decimal
@@ -15,6 +16,7 @@ from app.core.permissions import Permission
 from app.models.user import User
 from app.models.quotation import Quotation, QuotationItem
 from app.models.order import Order
+from app.services.pdf_generator import generate_quotation_pdf
 
 
 router = APIRouter()
@@ -133,3 +135,40 @@ def submit_quotation(
     db.commit()
     
     return {"message": "Quotation submitted for approval"}
+
+
+@router.get("/{quotation_id}/pdf")
+def download_quotation_pdf(
+    quotation_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(Permission.QUOTATION_READ))
+):
+    """
+    Generate and download quotation as PDF.
+    Includes company info, customer details, items, and totals.
+    """
+    # Fetch quotation with all relationships
+    quotation = db.query(Quotation).options(
+        joinedload(Quotation.order).joinedload(Order.customer),
+        joinedload(Quotation.items).joinedload(QuotationItem.inventory_item)
+    ).filter(Quotation.id == quotation_id).first()
+    
+    if not quotation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quotation not found"
+        )
+    
+    # Generate PDF
+    pdf_buffer = generate_quotation_pdf(quotation)
+    
+    # Return as downloadable file
+    filename = f"Quotation_{quotation.quote_number}.pdf"
+    
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )

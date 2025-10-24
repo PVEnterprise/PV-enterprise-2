@@ -47,3 +47,6 @@ fastapi-mail==1.4.1
 # Optional: Excel export
 openpyxl==3.1.2
 xlsxwriter==3.1.9
+
+# PDF Generation
+reportlab==4.0.9
