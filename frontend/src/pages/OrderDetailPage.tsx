@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Order, OrderItem, Inventory, Dispatch } from '@/types';
 import { useAuth } from '@/context/AuthContext';
-import { ArrowLeft, Edit, Check, X, Search, FileText, Package, Truck } from 'lucide-react';
+import { ArrowLeft, Edit, Check, X, Search, FileText, Package, Truck, ChevronDown, ChevronUp } from 'lucide-react';
 import AttachmentManager from '@/components/common/AttachmentManager';
 import DispatchModal, { DispatchFormData } from '@/components/DispatchModal';
 import DispatchDetailModal from '@/components/DispatchDetailModal';
@@ -383,6 +383,11 @@ export default function OrderDetailPage() {
   // Dispatch Management
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [selectedDispatch, setSelectedDispatch] = useState<Dispatch | null>(null);
+  
+  // Collapsible sections state
+  const [isOrderItemsExpanded, setIsOrderItemsExpanded] = useState(true);
+  const [isDispatchesExpanded, setIsDispatchesExpanded] = useState(true);
+  const [isOutstandingExpanded, setIsOutstandingExpanded] = useState(true);
 
   // Fetch dispatches for this order
   const { data: dispatches = [] } = useQuery<Dispatch[]>({
@@ -481,7 +486,13 @@ export default function OrderDetailPage() {
           <div className="card flex flex-col max-h-[600px]">
             {/* Fixed Header */}
             <div className="flex items-center justify-between mb-4 flex-shrink-0">
-              <h2 className="text-xl font-semibold">Order Items</h2>
+              <button
+                onClick={() => setIsOrderItemsExpanded(!isOrderItemsExpanded)}
+                className="flex items-center gap-2 hover:text-blue-600 transition-colors"
+              >
+                <h2 className="text-xl font-semibold">Order Items</h2>
+                {isOrderItemsExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+              </button>
               {canDecode && order.status === 'draft' && order.items?.some(item => item.inventory_id) && (
                 <button
                   onClick={handleEditAllDecodedItems}
@@ -494,6 +505,7 @@ export default function OrderDetailPage() {
             </div>
 
             {/* Scrollable Table */}
+            {isOrderItemsExpanded && (
             <div className="flex-1 overflow-y-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0">
@@ -547,9 +559,10 @@ export default function OrderDetailPage() {
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* Fixed Footer - Order Total */}
-            {order.items?.some(item => item.inventory_id) && (
+            {isOrderItemsExpanded && order.items?.some(item => item.inventory_id) && (
               <div className="border-t-2 border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 flex-shrink-0">
                 <div className="flex justify-end space-x-8">
                 {(() => {
@@ -599,11 +612,16 @@ export default function OrderDetailPage() {
               {dispatches.length > 0 && (
                 <div className="card">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                    <button
+                      onClick={() => setIsDispatchesExpanded(!isDispatchesExpanded)}
+                      className="flex items-center gap-2 hover:text-blue-600 transition-colors"
+                    >
                       <Truck size={24} className="text-blue-600" />
-                      Dispatches ({dispatches.length})
-                    </h2>
+                      <h2 className="text-xl font-semibold">Dispatches ({dispatches.length})</h2>
+                      {isDispatchesExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    </button>
                   </div>
+                  {isDispatchesExpanded && (
                   <div className="space-y-3">
                     {dispatches.map((dispatch) => (
                       <div 
@@ -636,16 +654,21 @@ export default function OrderDetailPage() {
                       </div>
                     ))}
                   </div>
+                  )}
                 </div>
               )}
 
               {/* Outstanding Items */}
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <button
+                    onClick={() => setIsOutstandingExpanded(!isOutstandingExpanded)}
+                    className="flex items-center gap-2 hover:text-blue-600 transition-colors"
+                  >
                     <Package size={24} className="text-orange-600" />
-                    Outstanding Items
-                  </h2>
+                    <h2 className="text-xl font-semibold">Outstanding Items</h2>
+                    {isOutstandingExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </button>
                   {(user?.role_name === 'inventory_admin' || user?.role_name === 'executive') && (
                     <button
                       onClick={() => setShowDispatchModal(true)}
@@ -657,6 +680,7 @@ export default function OrderDetailPage() {
                     </button>
                   )}
                 </div>
+                {isOutstandingExpanded && (
                 <div className="space-y-2">
                   {order.items?.filter(item => item.inventory_id && (item.outstanding_quantity || item.quantity) > 0).length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
@@ -701,6 +725,7 @@ export default function OrderDetailPage() {
                       })
                   )}
                 </div>
+                )}
               </div>
             </>
           )}

@@ -88,7 +88,7 @@ export default function Layout() {
                 {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
               <h1 className="ml-2 text-xl font-bold text-primary-600">
-                Medical Equipment Supply
+                SreeDevi Life Sciences
               </h1>
             </div>
             <div className="flex items-center space-x-4">
