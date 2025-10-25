@@ -37,6 +37,9 @@ class Order(BaseModel):
                            primaryjoin="and_(Order.id==Approval.entity_id, Approval.entity_type=='order')",
                            viewonly=True)
     dispatches = relationship("Dispatch", back_populates="order")
+    attachments = relationship("Attachment", foreign_keys="Attachment.entity_id",
+                              primaryjoin="and_(Order.id==Attachment.entity_id, Attachment.entity_type=='order')",
+                              viewonly=True)
     
     def __repr__(self) -> str:
         return f"<Order {self.order_number}>"

@@ -171,7 +171,8 @@ def get_order(
     
     order = db.query(Order).options(
         joinedload(Order.items).joinedload(OrderItem.inventory_item),
-        joinedload(Order.customer)
+        joinedload(Order.customer),
+        joinedload(Order.attachments)
     ).filter(Order.id == order_id).first()
     
     if not order:
@@ -633,3 +634,220 @@ def generate_quotation_pdf(
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+
+@router.post("/{order_id}/quote-sent", response_model=dict)
+def mark_quote_sent_to_customer(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Mark quotation as sent to customer.
+    Changes workflow_stage to 'waiting_purchase_order'.
+    Available for sales and executive roles.
+    """
+    # Check if user is sales or executive
+    if current_user.role.name not in ['sales_rep', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only sales representatives and executives can mark quotes as sent"
+        )
+    
+    order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Check if order is in quotation stage
+    if order.workflow_stage != "quotation":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order must be in quotation stage"
+        )
+    
+    # Update workflow stage
+    order.workflow_stage = "waiting_purchase_order"
+    order.status = "quote_sent"
+    order.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return {"message": "Quotation marked as sent to customer. Waiting for purchase order."}
+
+
+@router.post("/{order_id}/request-po-approval", response_model=dict)
+def request_po_approval(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Request PO approval from executive.
+    Requires at least one attachment (PO document).
+    Changes workflow_stage to 'po_approval' and status to 'pending_po_approval'.
+    Available for sales role.
+    """
+    # Check if user is sales or executive
+    if current_user.role.name not in ['sales_rep', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only sales representatives can request PO approval"
+        )
+    
+    from app.models.attachment import Attachment
+    
+    order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Check if order is waiting for PO
+    if order.workflow_stage != "waiting_purchase_order":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order must be in waiting_purchase_order stage"
+        )
+    
+    # Check if at least one attachment exists (query directly)
+    attachment_count = db.query(Attachment).filter(
+        Attachment.entity_type == "order",
+        Attachment.entity_id == order.id
+    ).count()
+    
+    if attachment_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please upload purchase order document before requesting approval"
+        )
+    
+    # Create approval request
+    approval = Approval(
+        entity_type="order",
+        entity_id=order.id,
+        stage="po_approval",
+        status="pending"
+    )
+    db.add(approval)
+    
+    # Update order workflow
+    order.workflow_stage = "po_approval"
+    order.status = "pending_po_approval"
+    order.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return {"message": "PO approval requested successfully"}
+
+
+@router.post("/{order_id}/approve-po", response_model=dict)
+def approve_purchase_order(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(Permission.APPROVAL_EXECUTE))
+):
+    """
+    Approve purchase order.
+    Changes workflow_stage to 'inventory_check'.
+    Available for executive role only.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Check if order is in PO approval stage
+    if order.workflow_stage != "po_approval":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order must be in PO approval stage"
+        )
+    
+    # Find pending approval
+    approval = db.query(Approval).filter(
+        Approval.entity_type == "order",
+        Approval.entity_id == order.id,
+        Approval.stage == "po_approval",
+        Approval.status == "pending"
+    ).first()
+    
+    if approval:
+        approval.status = "approved"
+        approval.approver_id = current_user.id
+        approval.approved_at = datetime.utcnow()
+    
+    # Update order workflow
+    order.workflow_stage = "inventory_check"
+    order.status = "po_approved"
+    order.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return {"message": "Purchase order approved successfully"}
+
+
+@router.post("/{order_id}/reject-po", response_model=dict)
+def reject_purchase_order(
+    order_id: UUID,
+    rejection_data: OrderReject,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(Permission.APPROVAL_EXECUTE))
+):
+    """
+    Reject purchase order with comments.
+    Sends order back to waiting_purchase_order stage.
+    Available for executive role only.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Check if order is in PO approval stage
+    if order.workflow_stage != "po_approval":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order must be in PO approval stage"
+        )
+    
+    # Find pending approval
+    approval = db.query(Approval).filter(
+        Approval.entity_type == "order",
+        Approval.entity_id == order.id,
+        Approval.stage == "po_approval",
+        Approval.status == "pending"
+    ).first()
+    
+    if approval:
+        approval.status = "rejected"
+        approval.approver_id = current_user.id
+        approval.approved_at = datetime.utcnow()
+        approval.comments = rejection_data.reason
+    
+    # Update order - send back to waiting for PO
+    order.workflow_stage = "waiting_purchase_order"
+    order.status = "po_rejected"
+    order.updated_at = datetime.utcnow()
+    
+    # Add rejection reason to order notes
+    rejection_note = f"\n\n[PO Rejected by {current_user.full_name} on {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}]\n{rejection_data.reason}"
+    if order.notes:
+        order.notes += rejection_note
+    else:
+        order.notes = rejection_note.strip()
+    
+    db.commit()
+    
+    return {"message": "Purchase order rejected. Sales can re-upload and request approval again."}
