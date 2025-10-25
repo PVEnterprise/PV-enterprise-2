@@ -323,6 +323,61 @@ export default function OrderDetailPage() {
     }
   };
 
+  // Mark quote sent to customer
+  const quoteSentMutation = useMutation({
+    mutationFn: () => api.post(`/orders/${orderId}/quote-sent`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.detail || 'Failed to mark quotation as sent');
+    },
+  });
+
+  // Request PO approval
+  const requestPOApprovalMutation = useMutation({
+    mutationFn: () => api.post(`/orders/${orderId}/request-po-approval`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.detail || 'Failed to request PO approval');
+    },
+  });
+
+  // Approve PO
+  const approvePOMutation = useMutation({
+    mutationFn: () => api.post(`/orders/${orderId}/approve-po`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.detail || 'Failed to approve PO');
+    },
+  });
+
+  // Reject PO
+  const [showPORejectModal, setShowPORejectModal] = useState(false);
+  const [poRejectionReason, setPORejectionReason] = useState('');
+
+  const rejectPOMutation = useMutation({
+    mutationFn: (reason: string) => api.post(`/orders/${orderId}/reject-po`, { reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      setShowPORejectModal(false);
+      setPORejectionReason('');
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.detail || 'Failed to reject PO');
+    },
+  });
+
+  const handlePORejectSubmit = () => {
+    if (poRejectionReason.trim()) {
+      rejectPOMutation.mutate(poRejectionReason.trim());
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -569,8 +624,8 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {/* Approved Status */}
-            {order.status === 'approved' && (
+            {/* Approved/Quotation Stage */}
+            {(order.status === 'approved' && order.workflow_stage === 'quotation') && (
               <div className="space-y-2">
                 <div className="text-center py-2">
                   <Check size={32} className="mx-auto text-green-600 mb-1" />
@@ -578,13 +633,79 @@ export default function OrderDetailPage() {
                   <p className="text-xs text-gray-600">Ready for quotation</p>
                 </div>
                 {(user?.role_name === 'executive' || (user?.role_name === 'sales_rep' && order.sales_rep_id === user?.id)) && (
-                  <button
-                    onClick={handleGetQuotation}
-                    className="btn btn-primary btn-sm w-full text-xs"
-                  >
-                    <FileText size={14} className="mr-1" />
-                    Get Quotation
-                  </button>
+                  <>
+                    <button
+                      onClick={handleGetQuotation}
+                      className="btn btn-primary btn-sm w-full text-xs"
+                    >
+                      <FileText size={14} className="mr-1" />
+                      Get Quotation
+                    </button>
+                    <button
+                      onClick={() => quoteSentMutation.mutate()}
+                      disabled={quoteSentMutation.isPending}
+                      className="btn btn-sm w-full text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <Check size={14} className="mr-1" />
+                      {quoteSentMutation.isPending ? 'Processing...' : 'Quote Sent to Customer'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Waiting for Purchase Order */}
+            {order.workflow_stage === 'waiting_purchase_order' && (
+              <div className="space-y-2">
+                <div className="text-center py-2">
+                  <FileText size={32} className="mx-auto text-blue-600 mb-1" />
+                  <p className="text-sm text-blue-600 font-medium">Waiting for PO</p>
+                  <p className="text-xs text-gray-600">Upload purchase order</p>
+                </div>
+                {(user?.role_name === 'sales_rep' && order.sales_rep_id === user?.id) && (
+                  <>
+                    <button
+                      onClick={() => requestPOApprovalMutation.mutate()}
+                      disabled={requestPOApprovalMutation.isPending}
+                      className="btn btn-primary btn-sm w-full text-xs"
+                    >
+                      <Check size={14} className="mr-1" />
+                      {requestPOApprovalMutation.isPending ? 'Requesting...' : 'Request PO Approval'}
+                    </button>
+                    <div className="text-xs text-center text-gray-500 py-1">
+                      {order.attachments ? `${order.attachments.length} attachment(s)` : 'No attachments loaded'}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Pending PO Approval */}
+            {order.workflow_stage === 'po_approval' && (
+              <div className="space-y-2">
+                <div className="text-center py-2">
+                  <FileText size={32} className="mx-auto text-yellow-600 mb-1" />
+                  <p className="text-sm text-yellow-600 font-medium">Pending PO Approval</p>
+                  <p className="text-xs text-gray-600">Waiting for executive review</p>
+                </div>
+                {user?.role_name === 'executive' && (
+                  <>
+                    <button
+                      onClick={() => approvePOMutation.mutate()}
+                      disabled={approvePOMutation.isPending}
+                      className="btn btn-success btn-sm w-full text-xs"
+                    >
+                      <Check size={14} className="mr-1" />
+                      {approvePOMutation.isPending ? 'Approving...' : 'Approve PO'}
+                    </button>
+                    <button
+                      onClick={() => setShowPORejectModal(true)}
+                      className="btn btn-danger btn-sm w-full text-xs"
+                    >
+                      <X size={14} className="mr-1" />
+                      Reject PO
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -921,6 +1042,75 @@ export default function OrderDetailPage() {
                   </svg>
                 )}
                 {rejectMutation.isPending ? 'Rejecting...' : 'Reject Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject PO Modal */}
+      {showPORejectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full flex flex-col">
+            {/* Fixed Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h2 className="text-2xl font-bold">Reject Purchase Order</h2>
+              <button
+                onClick={() => {
+                  setShowPORejectModal(false);
+                  setPORejectionReason('');
+                  rejectPOMutation.reset();
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-4">
+              <p className="text-gray-600 mb-4">
+                Please provide a reason for rejecting this purchase order. The sales team will be notified.
+              </p>
+              <textarea
+                value={poRejectionReason}
+                onChange={(e) => setPORejectionReason(e.target.value)}
+                placeholder="Enter rejection reason..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 min-h-[120px]"
+                autoFocus
+              />
+              {rejectPOMutation.isError && (
+                <p className="text-red-600 text-sm mt-2">
+                  Failed to reject PO. Please try again.
+                </p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowPORejectModal(false);
+                  setPORejectionReason('');
+                  rejectPOMutation.reset();
+                }}
+                className="btn btn-secondary"
+                disabled={rejectPOMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePORejectSubmit}
+                className="btn btn-danger flex items-center"
+                disabled={!poRejectionReason.trim() || rejectPOMutation.isPending}
+              >
+                {rejectPOMutation.isPending && (
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                {rejectPOMutation.isPending ? 'Rejecting...' : 'Reject PO'}
               </button>
             </div>
           </div>

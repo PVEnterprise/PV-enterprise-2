@@ -65,6 +65,7 @@ export interface Order {
   created_by?: string;
   updated_by?: string;
   items?: OrderItem[];
+  attachments?: Attachment[]; // Populated when fetching with relationships
 }
 
 export interface OrderItem {
@@ -139,6 +140,18 @@ export interface Invoice {
   notes?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Attachment {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  file_type: string;
+  uploaded_by: string;
+  created_at: string;
 }
 
 export interface DashboardStats {

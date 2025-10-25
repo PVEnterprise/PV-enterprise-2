@@ -121,6 +121,11 @@ class ApiService {
   rejectOrder = async (orderId: string, data: { reason: string }) => {
     return (await this.client.post(`/orders/${orderId}/reject`, data)).data;
   }
+
+  // Generic POST method for flexibility
+  post = async (url: string, data?: any) => {
+    return (await this.client.post(url, data)).data;
+  }
 }
 
 export default new ApiService();

@@ -40,13 +40,52 @@ const PermissionRoute = ({
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
           <p className="text-gray-600">You don't have permission to access this page.</p>
-          <Navigate to="/" replace />
         </div>
       </div>
     );
   }
   
   return <>{children}</>;
+};
+
+const SmartRedirect = () => {
+  const { user } = useAuth();
+  
+  // Redirect to first accessible page based on permissions
+  if (user?.role?.permissions?.['order:read']) {
+    return <Navigate to="/orders" replace />;
+  } else if (user?.role?.permissions?.['inventory:read']) {
+    return <Navigate to="/inventory" replace />;
+  } else if (user?.role?.permissions?.['customer:read']) {
+    return <Navigate to="/customers" replace />;
+  } else if (user?.role?.permissions?.['user:read']) {
+    return <Navigate to="/employees" replace />;
+  }
+  
+  // Fallback to orders if no specific permission found
+  return <Navigate to="/orders" replace />;
+};
+
+const HomePage = () => {
+  const { user } = useAuth();
+  
+  // Redirect based on role - prioritize workflow pages over dashboard
+  // Each role goes to their main workflow page
+  if (user?.role_name === 'decoder' || user?.role_name === 'sales_rep' || user?.role_name === 'quoter') {
+    return <Navigate to="/orders" replace />;
+  }
+  
+  if (user?.role_name === 'inventory_admin') {
+    return <Navigate to="/inventory" replace />;
+  }
+  
+  // Executives and admins go to dashboard if they have permission
+  if (user?.role?.permissions?.['dashboard:view']) {
+    return <DashboardPage />;
+  }
+  
+  // Otherwise redirect to first accessible page
+  return <SmartRedirect />;
 };
 
 function AppRoutes() {
@@ -61,8 +100,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
+        <Route index element={<HomePage />} />
         <Route 
-          index 
+          path="dashboard" 
           element={
             <PermissionRoute permission="dashboard:view">
               <DashboardPage />
