@@ -126,6 +126,17 @@ class ApiService {
   post = async (url: string, data?: any) => {
     return (await this.client.post(url, data)).data;
   }
+
+  // Dispatches
+  getOrderDispatches = async (orderId: string) => {
+    return (await this.client.get(`/dispatches/order/${orderId}`)).data;
+  }
+  getDispatch = async (dispatchId: string) => {
+    return (await this.client.get(`/dispatches/${dispatchId}`)).data;
+  }
+  createDispatch = async (data: any) => {
+    return (await this.client.post('/dispatches/', data)).data;
+  }
 }
 
 export default new ApiService();

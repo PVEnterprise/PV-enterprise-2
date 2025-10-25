@@ -42,11 +42,13 @@ class DispatchItem(BaseModel):
     
     dispatch_id = Column(UUID(as_uuid=True), ForeignKey("dispatches.id", ondelete="CASCADE"),
                          nullable=False, index=True)
+    order_item_id = Column(UUID(as_uuid=True), ForeignKey("order_items.id"), nullable=True, index=True)
     inventory_id = Column(UUID(as_uuid=True), ForeignKey("inventory.id"), nullable=False, index=True)
     quantity = Column(Integer, nullable=False)
     
     # Relationships
     dispatch = relationship("Dispatch", back_populates="items")
+    order_item = relationship("OrderItem", back_populates="dispatch_items")
     inventory_item = relationship("Inventory", back_populates="dispatch_items")
     
     # Constraints

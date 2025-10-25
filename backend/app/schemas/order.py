@@ -14,6 +14,8 @@ class InventoryBasic(BaseModel):
     sku: str
     item_name: str
     unit_price: Decimal
+    stock_quantity: int
+    reserved_quantity: int
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,6 +77,10 @@ class OrderItemResponse(OrderItemBase):
     status: str
     created_at: datetime
     updated_at: datetime
+    # Dispatch tracking properties (computed from model properties)
+    dispatched_quantity: Optional[int] = None
+    outstanding_quantity: Optional[int] = None
+    dispatch_status: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

@@ -82,6 +82,9 @@ export interface OrderItem {
   notes?: string;
   created_at: string;
   updated_at: string;
+  dispatched_quantity?: number;
+  outstanding_quantity?: number;
+  dispatch_status?: 'pending' | 'partial' | 'delivered';
 }
 
 export interface Inventory {
@@ -152,6 +155,38 @@ export interface Attachment {
   file_type: string;
   uploaded_by: string;
   created_at: string;
+}
+
+export interface DispatchItem {
+  id: string;
+  dispatch_id: string;
+  order_item_id: string;
+  inventory_id: string;
+  quantity: number;
+  inventory_item?: {
+    id: string;
+    sku: string;
+    item_name: string;
+    unit_price: number;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Dispatch {
+  id: string;
+  dispatch_number: string;
+  order_id: string;
+  invoice_id?: string;
+  dispatch_date: string;
+  courier_name?: string;
+  tracking_number?: string;
+  status: string;
+  notes?: string;
+  created_by: string;
+  items: DispatchItem[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DashboardStats {
