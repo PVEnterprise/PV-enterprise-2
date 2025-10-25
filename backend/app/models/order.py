@@ -82,6 +82,7 @@ class OrderItem(BaseModel):
     order = relationship("Order", back_populates="items")
     inventory_item = relationship("Inventory", back_populates="order_items")
     decoder = relationship("User", back_populates="decoded_items", foreign_keys=[decoded_by])
+    dispatch_items = relationship("DispatchItem", back_populates="order_item", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (
@@ -102,3 +103,24 @@ class OrderItem(BaseModel):
         if self.unit_price:
             return float(self.quantity * self.unit_price)
         return 0.0
+    
+    @property
+    def dispatched_quantity(self) -> int:
+        """Calculate total dispatched quantity for this item."""
+        return sum(di.quantity for di in self.dispatch_items)
+    
+    @property
+    def outstanding_quantity(self) -> int:
+        """Calculate outstanding quantity (ordered - dispatched)."""
+        return self.quantity - self.dispatched_quantity
+    
+    @property
+    def dispatch_status(self) -> str:
+        """Get dispatch status: pending, partial, or delivered."""
+        dispatched = self.dispatched_quantity
+        if dispatched == 0:
+            return "pending"
+        elif dispatched < self.quantity:
+            return "partial"
+        else:
+            return "delivered"

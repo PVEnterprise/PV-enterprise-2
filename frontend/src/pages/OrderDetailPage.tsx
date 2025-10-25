@@ -6,10 +6,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
-import { Order, OrderItem, Inventory } from '@/types';
+import { Order, OrderItem, Inventory, Dispatch } from '@/types';
 import { useAuth } from '@/context/AuthContext';
-import { ArrowLeft, Edit, Check, X, Search, FileText } from 'lucide-react';
+import { ArrowLeft, Edit, Check, X, Search, FileText, Package, Truck } from 'lucide-react';
 import AttachmentManager from '@/components/common/AttachmentManager';
+import DispatchModal, { DispatchFormData } from '@/components/DispatchModal';
+import DispatchDetailModal from '@/components/DispatchDetailModal';
 
 export default function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -378,6 +380,31 @@ export default function OrderDetailPage() {
     }
   };
 
+  // Dispatch Management
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [selectedDispatch, setSelectedDispatch] = useState<Dispatch | null>(null);
+
+  // Fetch dispatches for this order
+  const { data: dispatches = [] } = useQuery<Dispatch[]>({
+    queryKey: ['dispatches', orderId],
+    queryFn: () => api.getOrderDispatches(orderId!),
+    enabled: !!orderId && order?.workflow_stage === 'inventory_check',
+  });
+
+  // Create dispatch mutation
+  const createDispatchMutation = useMutation({
+    mutationFn: (data: DispatchFormData) => api.createDispatch(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['dispatches', orderId] });
+      setShowDispatchModal(false);
+    },
+    onError: (error: any) => {
+      // Error is displayed in the modal
+      console.error('Failed to create dispatch:', error);
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -564,6 +591,119 @@ export default function OrderDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Dispatches Section - Only show in inventory_check stage */}
+          {order.workflow_stage === 'inventory_check' && (
+            <>
+              {/* Dispatches */}
+              {dispatches.length > 0 && (
+                <div className="card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                      <Truck size={24} className="text-blue-600" />
+                      Dispatches ({dispatches.length})
+                    </h2>
+                  </div>
+                  <div className="space-y-3">
+                    {dispatches.map((dispatch) => (
+                      <div 
+                        key={dispatch.id} 
+                        className="border border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+                        onClick={() => setSelectedDispatch(dispatch)}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="font-semibold text-blue-600 hover:text-blue-800 underline">
+                              {dispatch.dispatch_number}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Date: {new Date(dispatch.dispatch_date).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                            {dispatch.status}
+                          </span>
+                        </div>
+                        {dispatch.courier_name && (
+                          <p className="text-sm text-gray-600">
+                            Courier: {dispatch.courier_name}
+                            {dispatch.tracking_number && ` - ${dispatch.tracking_number}`}
+                          </p>
+                        )}
+                        <div className="mt-2 text-sm text-gray-600">
+                          <p className="font-medium">Items: {dispatch.items.length}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Outstanding Items */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold flex items-center gap-2">
+                    <Package size={24} className="text-orange-600" />
+                    Outstanding Items
+                  </h2>
+                  {(user?.role_name === 'inventory_admin' || user?.role_name === 'executive') && (
+                    <button
+                      onClick={() => setShowDispatchModal(true)}
+                      className="btn btn-primary btn-sm flex items-center gap-1"
+                      disabled={order.items?.filter(item => item.inventory_id && (item.outstanding_quantity || item.quantity) > 0).length === 0}
+                    >
+                      <Package size={16} />
+                      Create Dispatch
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {order.items?.filter(item => item.inventory_id && (item.outstanding_quantity || item.quantity) > 0).length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Package size={48} className="mx-auto mb-2 text-gray-400" />
+                      <p>All items have been dispatched</p>
+                    </div>
+                  ) : (
+                    order.items
+                      ?.filter(item => item.inventory_id && (item.outstanding_quantity || item.quantity) > 0)
+                      .map((item) => {
+                        const outstanding = item.outstanding_quantity ?? item.quantity;
+                        const dispatched = item.dispatched_quantity ?? 0;
+                        const status = item.dispatch_status || 'pending';
+                        
+                        return (
+                          <div key={item.id} className="border border-gray-200 rounded-lg p-3 bg-white">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">{item.item_description}</p>
+                                <div className="mt-1 flex gap-4 text-sm">
+                                  <span className="text-gray-600">
+                                    Ordered: <span className="font-medium">{item.quantity}</span>
+                                  </span>
+                                  <span className="text-gray-600">
+                                    Dispatched: <span className="font-medium text-blue-600">{dispatched}</span>
+                                  </span>
+                                  <span className="text-gray-600">
+                                    Outstanding: <span className="font-medium text-orange-600">{outstanding}</span>
+                                  </span>
+                                </div>
+                              </div>
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                status === 'delivered' ? 'bg-green-100 text-green-800' :
+                                status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {status}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Notes */}
           {order.notes && (
@@ -1115,6 +1255,26 @@ export default function OrderDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Dispatch Modal */}
+      {showDispatchModal && (
+        <DispatchModal
+          orderItems={order.items || []}
+          orderId={orderId!}
+          onClose={() => setShowDispatchModal(false)}
+          onSubmit={(data) => createDispatchMutation.mutate(data)}
+          isSubmitting={createDispatchMutation.isPending}
+          error={createDispatchMutation.error?.response?.data?.detail}
+        />
+      )}
+
+      {/* Dispatch Detail Modal */}
+      {selectedDispatch && (
+        <DispatchDetailModal
+          dispatch={selectedDispatch}
+          onClose={() => setSelectedDispatch(null)}
+        />
       )}
     </div>
   );
