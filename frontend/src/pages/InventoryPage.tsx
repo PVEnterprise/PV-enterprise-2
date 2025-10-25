@@ -206,11 +206,10 @@ export default function InventoryPage() {
       label: 'Stock',
       width: '12%',
       render: (value: number, row: Inventory) => {
-        const available = value - (row.reserved_quantity || 0);
-        const isLowStock = available <= row.reorder_level;
+        const isLowStock = value <= row.reorder_level;
         return (
           <span className={isLowStock ? 'text-red-600 font-semibold' : 'text-gray-900'}>
-            {available} / {value}
+            {value}
           </span>
         );
       },
@@ -230,9 +229,8 @@ export default function InventoryPage() {
       key: 'status',
       label: 'Status',
       width: '14%',
-      render: (value: any, row: Inventory) => {
-        const available = row.stock_quantity - (row.reserved_quantity || 0);
-        const isLowStock = available <= row.reorder_level;
+      render: (_value: any, row: Inventory) => {
+        const isLowStock = row.stock_quantity <= row.reorder_level;
         return isLowStock ? (
           <span className="badge badge-danger">Low Stock</span>
         ) : (

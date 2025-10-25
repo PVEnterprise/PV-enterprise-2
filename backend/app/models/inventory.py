@@ -21,14 +21,10 @@ class Inventory(BaseModel):
     model_number = Column(String(100))
     unit_price = Column(Numeric(15, 2), nullable=False)
     stock_quantity = Column(Integer, default=0, nullable=False, index=True)
-    reserved_quantity = Column(Integer, default=0, nullable=False)
     reorder_level = Column(Integer, default=10, nullable=False)
     unit_of_measure = Column(String(50), default="piece", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
     
-    # Computed column for available quantity
-    # Note: SQLAlchemy 2.0 syntax for computed columns
-    # available_quantity = computed_column(stock_quantity - reserved_quantity)
     
     # Relationships
     order_items = relationship("OrderItem", back_populates="inventory_item")
@@ -39,7 +35,6 @@ class Inventory(BaseModel):
     # Constraints
     __table_args__ = (
         CheckConstraint('stock_quantity >= 0', name='check_stock_non_negative'),
-        CheckConstraint('reserved_quantity >= 0', name='check_reserved_non_negative'),
         CheckConstraint('unit_price >= 0', name='check_price_non_negative'),
     )
     
@@ -48,10 +43,10 @@ class Inventory(BaseModel):
     
     @property
     def available_quantity(self) -> int:
-        """Calculate available quantity (stock - reserved)."""
-        return self.stock_quantity - self.reserved_quantity
+        """Calculate available quantity (just stock quantity now)."""
+        return self.stock_quantity
     
     @property
     def is_low_stock(self) -> bool:
         """Check if stock is below reorder level."""
-        return self.available_quantity <= self.reorder_level
+        return self.stock_quantity <= self.reorder_level
