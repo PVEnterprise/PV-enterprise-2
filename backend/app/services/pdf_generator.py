@@ -24,7 +24,7 @@ class QuotationPDFGenerator:
     """Generate professional quotation PDFs."""
     
     # Company Information
-    COMPANY_NAME = "Medical Equipment Supply"
+    COMPANY_NAME = "SreeDevi Life Sciences"
     COMPANY_ADDRESS = "123 Medical District, Healthcare City"
     COMPANY_PHONE = "+91 1234567890"
     COMPANY_EMAIL = "info@medicalequipment.com"
