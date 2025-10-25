@@ -58,7 +58,6 @@ class StockUpdate(BaseModel):
 
 class InventoryResponse(InventoryBase):
     id: UUID
-    reserved_quantity: int
     is_active: bool
     created_at: datetime
     updated_at: datetime
