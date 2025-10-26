@@ -66,7 +66,7 @@ def get_dashboard_stats(
     
     # Inventory statistics
     low_stock_items = db.query(Inventory).filter(
-        (Inventory.stock_quantity - Inventory.reserved_quantity) <= Inventory.reorder_level,
+        Inventory.stock_quantity <= Inventory.reorder_level,
         Inventory.is_active == True
     ).count()
     

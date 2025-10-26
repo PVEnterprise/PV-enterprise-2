@@ -70,22 +70,10 @@ def create_order(
         workflow_stage="order_request",
         priority=order_data.priority,
         source=order_data.source,
+        sales_rep_description=order_data.sales_rep_description,
         notes=order_data.notes
     )
     db.add(order)
-    db.flush()  # Get order ID
-    
-    # Create order items
-    for item_data in order_data.items:
-        order_item = OrderItem(
-            order_id=order.id,
-            item_description=item_data.item_description,
-            quantity=item_data.quantity,
-            status="pending",
-            notes=item_data.notes
-        )
-        db.add(order_item)
-    
     db.commit()
     db.refresh(order)
     
@@ -432,6 +420,7 @@ def decode_order_item(
     # Update order item
     item.inventory_id = decode_data.inventory_id
     item.decoded_by = current_user.id
+    item.quantity = decode_data.quantity if decode_data.quantity is not None else item.quantity
     item.unit_price = decode_data.unit_price or inventory.unit_price
     item.gst_percentage = decode_data.gst_percentage or 18.00
     item.status = "decoded"
@@ -784,6 +773,16 @@ def approve_purchase_order(
         approval.status = "approved"
         approval.approver_id = current_user.id
         approval.approved_at = datetime.utcnow()
+    
+    # Update all decoded order items status to "pending"
+    # This marks them as ready for dispatch
+    order_items = db.query(OrderItem).filter(
+        OrderItem.order_id == order_id,
+        OrderItem.inventory_id.isnot(None)  # Only decoded items
+    ).all()
+    
+    for item in order_items:
+        item.status = "pending"
     
     # Update order workflow
     order.workflow_stage = "inventory_check"

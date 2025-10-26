@@ -22,6 +22,7 @@ class Order(BaseModel):
     workflow_stage = Column(String(50), nullable=False, index=True, default="order_request")
     priority = Column(String(20), default="medium", nullable=False)
     source = Column(String(50))  # email, whatsapp, phone, direct
+    sales_rep_description = Column(Text)  # Requirements/description from sales rep
     po_number = Column(String(100))
     po_date = Column(Date)
     po_amount = Column(Numeric(15, 2))
@@ -74,7 +75,7 @@ class OrderItem(BaseModel):
     inventory_id = Column(UUID(as_uuid=True), ForeignKey("inventory.id"), index=True)
     decoded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     unit_price = Column(Numeric(15, 2))
-    gst_percentage = Column(Numeric(5, 2), default=18.00)  # GST percentage (default 18%)
+    gst_percentage = Column(Numeric(5, 2), default=5.00)  # GST percentage (default 5%)
     status = Column(String(50), default="pending", nullable=False, index=True)
     notes = Column(Text)
     

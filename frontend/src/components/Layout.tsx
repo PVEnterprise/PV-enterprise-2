@@ -11,7 +11,8 @@ import {
   UserCog,
   LogOut,
   Menu,
-  X
+  X,
+  TrendingUp
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -36,6 +37,12 @@ export default function Layout() {
       permission: 'order:read'
     },
     { 
+      name: 'Outstanding', 
+      href: '/outstanding', 
+      icon: TrendingUp,
+      roleOnly: 'executive'
+    },
+    { 
       name: 'Inventory', 
       href: '/inventory', 
       icon: Package,
@@ -56,7 +63,12 @@ export default function Layout() {
   ];
 
   // Filter navigation based on user permissions
-  const navigation = allNavigation.filter(item => {
+  const navigation = allNavigation.filter((item: any) => {
+    // Handle role-only items (like Outstanding for executives)
+    if (item.roleOnly) {
+      return user?.role_name === item.roleOnly;
+    }
+    
     if (!user?.role?.permissions) return false;
     
     // Dashboard only visible to executive

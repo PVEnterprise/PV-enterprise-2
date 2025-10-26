@@ -125,9 +125,9 @@ def list_inventory(
         )
     
     if low_stock:
-        # Filter items where available quantity <= reorder level
+        # Filter items where stock quantity <= reorder level
         query = query.filter(
-            (Inventory.stock_quantity - Inventory.reserved_quantity) <= Inventory.reorder_level
+            Inventory.stock_quantity <= Inventory.reorder_level
         )
     
     # Order by item name

@@ -15,7 +15,6 @@ class InventoryBasic(BaseModel):
     item_name: str
     unit_price: Decimal
     stock_quantity: int
-    reserved_quantity: int
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,12 +90,13 @@ class OrderBase(BaseModel):
     customer_id: UUID
     priority: str = Field(default="medium", pattern="^(low|medium|high|urgent)$")
     source: Optional[str] = None
+    sales_rep_description: Optional[str] = None  # Requirements from sales rep
     notes: Optional[str] = None
 
 
 class OrderCreate(OrderBase):
     """Schema for creating an order."""
-    items: List[OrderItemCreate] = Field(..., min_length=1)
+    pass  # No items required at creation - will be added during decoding
 
 
 class OrderUpdate(BaseModel):
@@ -104,6 +104,7 @@ class OrderUpdate(BaseModel):
     customer_id: Optional[UUID] = None
     priority: Optional[str] = Field(None, pattern="^(low|medium|high|urgent)$")
     source: Optional[str] = None
+    sales_rep_description: Optional[str] = None
     po_number: Optional[str] = None
     po_date: Optional[date] = None
     po_amount: Optional[Decimal] = None

@@ -37,6 +37,20 @@ export default function OrderDetailPage() {
     enabled: !!orderId,
   });
 
+  // Fetch attachments to check if PO is uploaded
+  const { data: attachments = [] } = useQuery<any[]>({
+    queryKey: ['attachments', 'order', orderId],
+    queryFn: async () => {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`/api/v1/attachments/order/${orderId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!orderId,
+  });
+
   // Debounce search with 250ms delay
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -493,13 +507,13 @@ export default function OrderDetailPage() {
                 <h2 className="text-xl font-semibold">Order Items</h2>
                 {isOrderItemsExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
               </button>
-              {canDecode && order.status === 'draft' && order.items?.some(item => item.inventory_id) && (
+              {canDecode && order.status === 'draft' && (
                 <button
-                  onClick={handleEditAllDecodedItems}
-                  className="btn btn-secondary btn-sm"
+                  onClick={() => navigate(`/orders/${orderId}/decode`)}
+                  className="btn btn-primary btn-sm"
                 >
                   <Edit size={16} className="mr-1" />
-                  Edit Decoded Items
+                  {order.items?.some(item => !item.inventory_id) ? 'Decode Items' : 'Edit Decoded Items'}
                 </button>
               )}
             </div>
@@ -545,12 +559,8 @@ export default function OrderDetailPage() {
                         <td className="p-3 text-center">
                           {item.inventory_id ? (
                             <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Decoded</span>
-                          ) : canDecode && order.status === 'draft' ? (
-                            <button onClick={() => handleDecodeItem(item)} className="btn btn-primary btn-sm">
-                              <Edit size={14} className="mr-1" />Decode
-                            </button>
                           ) : (
-                            <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">Pending</span>
+                            <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Not Decoded</span>
                           )}
                         </td>
                       </tr>
@@ -693,13 +703,18 @@ export default function OrderDetailPage() {
                       .map((item) => {
                         const outstanding = item.outstanding_quantity ?? item.quantity;
                         const dispatched = item.dispatched_quantity ?? 0;
-                        const status = item.dispatch_status || 'pending';
+                        const status = item.status || 'pending';
+                        const displayName = item.inventory?.item_name || item.item_description;
+                        const sku = item.inventory?.sku;
                         
                         return (
                           <div key={item.id} className="border border-gray-200 rounded-lg p-3 bg-white">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
-                                <p className="font-medium text-gray-900">{item.item_description}</p>
+                                <div>
+                                  <p className="font-medium text-gray-900">{displayName}</p>
+                                  {sku && <p className="text-xs text-gray-500 mt-0.5">SKU: {sku}</p>}
+                                </div>
                                 <div className="mt-1 flex gap-4 text-sm">
                                   <span className="text-gray-600">
                                     Ordered: <span className="font-medium">{item.quantity}</span>
@@ -713,8 +728,9 @@ export default function OrderDetailPage() {
                                 </div>
                               </div>
                               <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                status === 'delivered' ? 'bg-green-100 text-green-800' :
-                                status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                                status === 'completed' ? 'bg-green-100 text-green-800' :
+                                status === 'partial' ? 'bg-orange-100 text-orange-800' :
+                                status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                                 'bg-gray-100 text-gray-800'
                               }`}>
                                 {status}
@@ -762,7 +778,24 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {/* Executive Actions */}
+            {/* Executive Submit for Approval (if order is still draft) */}
+            {canApprove && order.status === 'draft' && !canDecode && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-600 mb-2">
+                  Submit order for approval
+                </p>
+                <button
+                  onClick={() => submitForApprovalMutation.mutate()}
+                  className="btn btn-primary btn-sm w-full text-xs"
+                  disabled={order.items?.some(item => !item.inventory_id) || submitForApprovalMutation.isPending}
+                >
+                  <Check size={14} className="mr-1" />
+                  {submitForApprovalMutation.isPending ? 'Submitting...' : 'Submit for Approval'}
+                </button>
+              </div>
+            )}
+
+            {/* Executive Approve/Reject Actions */}
             {canApprove && order.status === 'pending_approval' && (
               <div className="space-y-2">
                 <p className="text-xs text-gray-600 mb-2">
@@ -825,20 +858,51 @@ export default function OrderDetailPage() {
                 <div className="text-center py-2">
                   <FileText size={32} className="mx-auto text-blue-600 mb-1" />
                   <p className="text-sm text-blue-600 font-medium">Waiting for PO</p>
-                  <p className="text-xs text-gray-600">Upload purchase order</p>
+                  <p className="text-xs text-gray-600">Upload purchase order in attachments</p>
                 </div>
                 {(user?.role_name === 'sales_rep' && order.sales_rep_id === user?.id) && (
                   <>
                     <button
-                      onClick={() => requestPOApprovalMutation.mutate()}
+                      onClick={() => {
+                        if (!attachments || attachments.length === 0) {
+                          alert('Please upload the Purchase Order in the Attachments section before submitting for approval.');
+                          return;
+                        }
+                        requestPOApprovalMutation.mutate();
+                      }}
                       disabled={requestPOApprovalMutation.isPending}
                       className="btn btn-primary btn-sm w-full text-xs"
                     >
                       <Check size={14} className="mr-1" />
-                      {requestPOApprovalMutation.isPending ? 'Requesting...' : 'Request PO Approval'}
+                      {requestPOApprovalMutation.isPending ? 'Requesting...' : 'PO Uploaded - Request Approval'}
                     </button>
-                    <div className="text-xs text-center text-gray-500 py-1">
-                      {order.attachments ? `${order.attachments.length} attachment(s)` : 'No attachments loaded'}
+                    <div className={`text-xs text-center py-1 ${attachments && attachments.length > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {attachments && attachments.length > 0 
+                        ? `✓ ${attachments.length} attachment(s) uploaded` 
+                        : '⚠ No PO uploaded - Please add in Attachments'}
+                    </div>
+                  </>
+                )}
+                {user?.role_name === 'executive' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        if (!attachments || attachments.length === 0) {
+                          alert('Please upload the Purchase Order in the Attachments section before submitting for approval.');
+                          return;
+                        }
+                        requestPOApprovalMutation.mutate();
+                      }}
+                      disabled={requestPOApprovalMutation.isPending}
+                      className="btn btn-primary btn-sm w-full text-xs"
+                    >
+                      <Check size={14} className="mr-1" />
+                      {requestPOApprovalMutation.isPending ? 'Requesting...' : 'PO Uploaded - Request Approval'}
+                    </button>
+                    <div className={`text-xs text-center py-1 ${attachments && attachments.length > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {attachments && attachments.length > 0 
+                        ? `✓ ${attachments.length} attachment(s) uploaded` 
+                        : '⚠ No PO uploaded - Please add in Attachments'}
                     </div>
                   </>
                 )}

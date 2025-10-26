@@ -56,6 +56,7 @@ export interface Order {
   workflow_stage: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   source?: string;
+  sales_rep_description?: string; // Requirements from sales rep
   po_number?: string;
   po_date?: string;
   po_amount?: number;

@@ -92,18 +92,12 @@ export default function OrdersPage() {
 
   const handleSubmit = async (data: Record<string, any>) => {
     // Transform form data to match backend schema
-    // Sales describes requirements in words, decoder will map to inventory items later
+    // Sales describes requirements in words, decoder will create items later
     const orderData = {
       customer_id: data.customer_id,
       priority: data.priority,
+      sales_rep_description: data.requirements, // Store requirements at order level
       notes: data.notes,
-      items: [
-        {
-          item_description: data.requirements,
-          quantity: 1, // Placeholder - decoder will create actual items with quantities
-          notes: 'Pending decoder review - items need to be mapped to inventory',
-        },
-      ],
     };
     await createMutation.mutateAsync(orderData);
   };

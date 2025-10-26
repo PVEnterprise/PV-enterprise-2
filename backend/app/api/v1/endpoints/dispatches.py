@@ -129,6 +129,27 @@ def create_dispatch(
         # Update inventory - reduce stock quantity when dispatched
         inventory = db.query(Inventory).filter(Inventory.id == item_data.inventory_id).first()
         inventory.stock_quantity -= item_data.quantity
+        
+        # Update OrderItem status based on dispatch
+        order_item = db.query(OrderItem).filter(OrderItem.id == item_data.order_item_id).first()
+        total_dispatched = sum(di.quantity for di in order_item.dispatch_items) + item_data.quantity
+        
+        if total_dispatched >= order_item.quantity:
+            order_item.status = "completed"
+        elif total_dispatched > 0:
+            order_item.status = "partial"
+        else:
+            order_item.status = "pending"
+    
+    # Update overall order status based on all items
+    all_order_items = db.query(OrderItem).filter(OrderItem.order_id == dispatch_data.order_id).all()
+    all_completed = all(item.status == "completed" for item in all_order_items)
+    any_partial = any(item.status in ["partial", "completed"] for item in all_order_items)
+    
+    if all_completed:
+        order.status = "completed"
+    elif any_partial:
+        order.status = "partially_dispatched"
     
     db.commit()
     db.refresh(dispatch)

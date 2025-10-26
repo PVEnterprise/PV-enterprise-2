@@ -137,6 +137,17 @@ class ApiService {
   createDispatch = async (data: any) => {
     return (await this.client.post('/dispatches/', data)).data;
   }
+
+  // Outstanding
+  getOutstandingByCustomer = async () => {
+    return (await this.client.get('/outstanding/by-customer')).data;
+  }
+  getOutstandingByItem = async () => {
+    return (await this.client.get('/outstanding/by-item')).data;
+  }
+  getOutstandingSummary = async () => {
+    return (await this.client.get('/outstanding/summary')).data;
+  }
 }
 
 export default new ApiService();
