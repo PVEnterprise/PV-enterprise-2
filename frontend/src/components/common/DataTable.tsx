@@ -33,6 +33,8 @@ export interface DataTableProps<T> {
   enableSorting?: boolean;
   enableGrouping?: boolean;
   maxGroupLevels?: number;
+  tableId?: string; // Unique identifier for localStorage persistence
+  defaultGroupBy?: string[]; // Default columns to group by (if no saved preference)
 }
 
 type SortDirection = 'asc' | 'desc' | null;
@@ -53,11 +55,39 @@ export default function DataTable<T extends Record<string, any>>({
   enableSorting = true,
   enableGrouping = true,
   maxGroupLevels = 3,
+  tableId = 'default-table',
+  defaultGroupBy = [],
 }: DataTableProps<T>) {
+  // Load grouping state from localStorage or use default
+  const loadGroupingState = (): string[] => {
+    if (!tableId) return defaultGroupBy;
+    try {
+      const saved = localStorage.getItem(`datatable-grouping-${tableId}`);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+      // If no saved preference, use default and save it
+      if (defaultGroupBy.length > 0) {
+        localStorage.setItem(`datatable-grouping-${tableId}`, JSON.stringify(defaultGroupBy));
+        return defaultGroupBy;
+      }
+      return [];
+    } catch {
+      return defaultGroupBy;
+    }
+  };
+
   const [sortState, setSortState] = useState<SortState>({ key: '', direction: null });
-  const [groupByColumns, setGroupByColumns] = useState<string[]>([]);
+  const [groupByColumns, setGroupByColumns] = useState<string[]>(loadGroupingState());
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Save grouping state to localStorage whenever it changes
+  React.useEffect(() => {
+    if (tableId) {
+      localStorage.setItem(`datatable-grouping-${tableId}`, JSON.stringify(groupByColumns));
+    }
+  }, [groupByColumns, tableId]);
   
   const getValue = (row: T, key: string): any => {
     if (key.includes('.')) {
@@ -236,6 +266,9 @@ export default function DataTable<T extends Record<string, any>>({
     );
   }
 
+  // Filter out grouped columns from display
+  const visibleColumns = columns.filter(col => !groupByColumns.includes(String(col.key)));
+
   // Render grouped rows recursively
   const renderGroupedRows = (groups: any, level: number = 0, parentPath: string = ''): React.ReactNode => {
     return Object.entries(groups).map(([groupKey, groupData]: [string, any]) => {
@@ -248,7 +281,7 @@ export default function DataTable<T extends Record<string, any>>({
         <React.Fragment key={`${level}-${groupKey}`}>
           <tr className={`bg-gray-${Math.min(100 + level * 50, 200)} hover:bg-gray-${Math.min(150 + level * 50, 250)} cursor-pointer`}>
             <td 
-              colSpan={columns.length + (actions.length > 0 ? 1 : 0)} 
+              colSpan={visibleColumns.length + (actions.length > 0 ? 1 : 0)} 
               className="px-6 py-3"
               onClick={() => toggleGroupCollapse(groupPath)}
             >
@@ -282,7 +315,7 @@ export default function DataTable<T extends Record<string, any>>({
       onClick={() => onRowClick?.(row)}
       className={onRowClick ? 'hover:bg-gray-50 cursor-pointer' : ''}
     >
-      {columns.map((column, colIndex) => {
+      {visibleColumns.map((column, colIndex) => {
         const value = getValue(row, String(column.key));
         return (
           <td key={String(column.key)} className="px-6 py-4 whitespace-nowrap">
@@ -290,7 +323,7 @@ export default function DataTable<T extends Record<string, any>>({
               {column.render ? column.render(value, row) : (
                 <span className="text-sm text-gray-900">{value || '-'}</span>
               )}
-              {showAuditInfo && column.key === columns[0].key && formatAuditInfo(row)}
+              {showAuditInfo && column.key === visibleColumns[0].key && formatAuditInfo(row)}
             </div>
           </td>
         );
@@ -352,7 +385,7 @@ export default function DataTable<T extends Record<string, any>>({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {columns.map((column) => (
+              {visibleColumns.map((column) => (
                 <th
                   key={String(column.key)}
                   className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${

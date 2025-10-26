@@ -7,9 +7,11 @@ import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import OrdersPage from '@/pages/OrdersPage';
 import OrderDetailPage from '@/pages/OrderDetailPage';
+import DecodeOrderPage from '@/pages/DecodeOrderPage';
 import InventoryPage from '@/pages/InventoryPage';
 import CustomersPage from '@/pages/CustomersPage';
 import EmployeesPage from '@/pages/EmployeesPage';
+import OutstandingPage from '@/pages/OutstandingPage';
 import Layout from '@/components/Layout';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -40,6 +42,32 @@ const PermissionRoute = ({
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
           <p className="text-gray-600">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  return <>{children}</>;
+};
+
+const RoleRoute = ({ 
+  children, 
+  allowedRoles 
+}: { 
+  children: React.ReactNode; 
+  allowedRoles: string[];
+}) => {
+  const { user } = useAuth();
+  
+  // Check if user has one of the allowed roles
+  const hasRole = allowedRoles.includes(user?.role_name || '');
+  
+  if (!hasRole) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
+          <p className="text-gray-600">Only executives can access this page.</p>
         </div>
       </div>
     );
@@ -126,6 +154,14 @@ function AppRoutes() {
           } 
         />
         <Route 
+          path="orders/:orderId/decode" 
+          element={
+            <PermissionRoute permission="order:update">
+              <DecodeOrderPage />
+            </PermissionRoute>
+          } 
+        />
+        <Route 
           path="inventory" 
           element={
             <PermissionRoute permission="inventory:read">
@@ -147,6 +183,14 @@ function AppRoutes() {
             <PermissionRoute permission="user:read">
               <EmployeesPage />
             </PermissionRoute>
+          } 
+        />
+        <Route 
+          path="outstanding" 
+          element={
+            <RoleRoute allowedRoles={['executive']}>
+              <OutstandingPage />
+            </RoleRoute>
           } 
         />
       </Route>
