@@ -12,6 +12,7 @@ import { ArrowLeft, Edit, Check, X, Search, FileText, Package, Truck, ChevronDow
 import AttachmentManager from '@/components/common/AttachmentManager';
 import DispatchModal, { DispatchFormData } from '@/components/DispatchModal';
 import DispatchDetailModal from '@/components/DispatchDetailModal';
+import OrderNotesPanel from '@/components/OrderNotesPanel';
 
 export default function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -745,14 +746,6 @@ export default function OrderDetailPage() {
               </div>
             </>
           )}
-
-          {/* Notes */}
-          {order.notes && (
-            <div className="card">
-              <h2 className="text-xl font-semibold mb-4">Order Notes</h2>
-              <p className="text-gray-700 whitespace-pre-wrap">{order.notes}</p>
-            </div>
-          )}
         </div>
 
         {/* Sidebar - Compact */}
@@ -940,6 +933,16 @@ export default function OrderDetailPage() {
             )}
           </div>
 
+          {/* Attachments */}
+          <div className="card p-3">
+            <AttachmentManager
+              entityType="order"
+              entityId={order.id}
+              canUpload={true}
+              canDelete={true}
+            />
+          </div>
+
           {/* Order Details */}
           <div className="card p-3">
             <h2 className="text-sm font-semibold mb-2">Details</h2>
@@ -982,16 +985,6 @@ export default function OrderDetailPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Attachments */}
-          <div className="card p-3">
-            <AttachmentManager
-              entityType="order"
-              entityId={order.id}
-              canUpload={true}
-              canDelete={true}
-            />
           </div>
         </div>
       </div>
@@ -1365,6 +1358,9 @@ export default function OrderDetailPage() {
           onClose={() => setSelectedDispatch(null)}
         />
       )}
+
+      {/* Order Notes Panel - Expandable from right side */}
+      <OrderNotesPanel notes={order.notes || null} />
     </div>
   );
 }
