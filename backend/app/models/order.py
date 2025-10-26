@@ -1,12 +1,12 @@
 """
 Order and OrderItem database models.
 """
-from sqlalchemy import Column, String, Text, Integer, Numeric, ForeignKey, Date, CheckConstraint
+from sqlalchemy import Column, String, Text, Integer, Numeric, ForeignKey, CheckConstraint, DateTime, Boolean, Date, UniqueConstraint, event
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-
+from sqlalchemy.orm import relationship, Session
 from app.db.base import BaseModel
-
+import uuid
+from datetime import datetime
 
 class Order(BaseModel):
     """
@@ -59,6 +59,15 @@ class Order(BaseModel):
     def is_fully_decoded(self) -> bool:
         """Check if all items are decoded."""
         return self.total_items > 0 and self.decoded_items_count == self.total_items
+    
+    @property
+    def notes_reversed(self) -> str:
+        """Get notes in reverse order (latest first) for display."""
+        if not self.notes:
+            return ""
+        # Split by double newline (action separator), reverse, and rejoin
+        actions = self.notes.split('\n\n')
+        return '\n\n'.join(reversed(actions))
 
 
 class OrderItem(BaseModel):
@@ -125,3 +134,17 @@ class OrderItem(BaseModel):
             return "partial"
         else:
             return "delivered"
+
+
+# Event listener to update parent order timestamp when order items change
+@event.listens_for(OrderItem, 'after_insert')
+@event.listens_for(OrderItem, 'after_update')
+@event.listens_for(OrderItem, 'after_delete')
+def touch_order_on_item_change(mapper, connection, target):
+    """Update parent order's updated_at timestamp when order items change."""
+    if target.order_id:
+        connection.execute(
+            Order.__table__.update().
+            where(Order.id == target.order_id).
+            values(updated_at=datetime.utcnow())
+        )

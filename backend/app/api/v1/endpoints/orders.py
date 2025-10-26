@@ -15,6 +15,7 @@ from app.models.order import Order, OrderItem
 from app.models.customer import Customer
 from app.models.inventory import Inventory
 from app.models.approval import Approval
+from app.utils.order_tracking import add_order_action
 from app.schemas.order import (
     OrderCreate,
     OrderUpdate,
@@ -74,6 +75,16 @@ def create_order(
         notes=order_data.notes
     )
     db.add(order)
+    db.flush()  # Get order ID before tracking
+    
+    # Track order creation
+    add_order_action(
+        order=order,
+        action="Order Created",
+        user=current_user,
+        details=f"Customer: {customer.name or customer.hospital_name}\nPriority: {order_data.priority}"
+    )
+    
     db.commit()
     db.refresh(order)
     
@@ -281,10 +292,20 @@ def update_decoded_items(
             inventory_id=decode_item.inventory_id,
             decoded_by=current_user.id,
             unit_price=decode_item.unit_price or inventory.unit_price,
-            gst_percentage=decode_item.gst_percentage or 18.00,
+            gst_percentage=decode_item.gst_percentage or 5.00,
             status="decoded"
         )
         db.add(new_item)
+    
+    # Track decoding action
+    item_list = "\n".join([f"- {db.query(Inventory).get(item.inventory_id).item_name} (Qty: {item.quantity})" 
+                           for item in decode_data.items])
+    add_order_action(
+        order=order,
+        action="Items Decoded",
+        user=current_user,
+        details=f"Decoded {len(decode_data.items)} items:\n{item_list}"
+    )
     
     db.commit()
     
@@ -463,7 +484,6 @@ def submit_order_for_approval(
     # Update order status
     order.workflow_stage = "decoding_approval"
     order.status = "pending_approval"
-    order.updated_at = datetime.utcnow()
     
     # Create approval record
     approval = Approval(
@@ -474,6 +494,14 @@ def submit_order_for_approval(
         status="pending"
     )
     db.add(approval)
+    
+    # Track submission
+    add_order_action(
+        order=order,
+        action="Submitted for Approval",
+        user=current_user,
+        details="Order submitted for executive approval"
+    )
     
     db.commit()
     
@@ -514,14 +542,24 @@ def approve_order(
         approval.approved_at = datetime.utcnow()
     
     # Update order workflow
+    stage_name = ""
     if order.workflow_stage == "decoding_approval":
         order.workflow_stage = "quotation"
         order.status = "approved"
+        stage_name = "Decoding"
     elif order.workflow_stage == "po_approval":
         order.workflow_stage = "inventory_check"
         order.status = "approved"
+        stage_name = "Purchase Order"
     
-    order.updated_at = datetime.utcnow()
+    # Track approval
+    add_order_action(
+        order=order,
+        action=f"{stage_name} Approved",
+        user=current_user,
+        details=f"Comments: {comments}" if comments else None
+    )
+    
     db.commit()
     
     return {"message": "Order approved successfully"}
@@ -563,14 +601,14 @@ def reject_order(
     # Update order status - send back to draft for decoder to update
     order.status = "draft"
     order.workflow_stage = "decoding"
-    order.updated_at = datetime.utcnow()
     
-    # Add rejection reason to order notes
-    rejection_note = f"\n\n[REJECTED by {current_user.full_name} on {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}]\n{reject_data.reason}"
-    if order.notes:
-        order.notes += rejection_note
-    else:
-        order.notes = rejection_note.strip()
+    # Track rejection (this will add to notes automatically)
+    add_order_action(
+        order=order,
+        action="Order Rejected",
+        user=current_user,
+        details=f"Reason: {reject_data.reason}\nSent back to draft for decoder to update"
+    )
     
     db.commit()
     
@@ -661,7 +699,14 @@ def mark_quote_sent_to_customer(
     # Update workflow stage
     order.workflow_stage = "waiting_purchase_order"
     order.status = "quote_sent"
-    order.updated_at = datetime.utcnow()
+    
+    # Track quotation sent action
+    add_order_action(
+        order=order,
+        action="Quotation Sent to Customer",
+        user=current_user,
+        details=f"Customer: {order.customer.name or order.customer.hospital_name}\nWaiting for purchase order"
+    )
     
     db.commit()
     
@@ -728,7 +773,14 @@ def request_po_approval(
     # Update order workflow
     order.workflow_stage = "po_approval"
     order.status = "pending_po_approval"
-    order.updated_at = datetime.utcnow()
+    
+    # Track PO approval request
+    add_order_action(
+        order=order,
+        action="Purchase Order Approval Requested",
+        user=current_user,
+        details=f"PO document uploaded ({attachment_count} attachment(s))\nWaiting for executive approval"
+    )
     
     db.commit()
     
@@ -787,7 +839,14 @@ def approve_purchase_order(
     # Update order workflow
     order.workflow_stage = "inventory_check"
     order.status = "po_approved"
-    order.updated_at = datetime.utcnow()
+    
+    # Track PO approval
+    add_order_action(
+        order=order,
+        action="Purchase Order Approved",
+        user=current_user,
+        details=f"Order items marked as pending for dispatch\nReady for inventory check and dispatch"
+    )
     
     db.commit()
     
@@ -838,14 +897,14 @@ def reject_purchase_order(
     # Update order - send back to waiting for PO
     order.workflow_stage = "waiting_purchase_order"
     order.status = "po_rejected"
-    order.updated_at = datetime.utcnow()
     
-    # Add rejection reason to order notes
-    rejection_note = f"\n\n[PO Rejected by {current_user.full_name} on {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}]\n{rejection_data.reason}"
-    if order.notes:
-        order.notes += rejection_note
-    else:
-        order.notes = rejection_note.strip()
+    # Track PO rejection (this will add to notes automatically)
+    add_order_action(
+        order=order,
+        action="Purchase Order Rejected",
+        user=current_user,
+        details=f"Reason: {rejection_data.reason}\nSent back to waiting for PO - Sales can re-upload and request approval again"
+    )
     
     db.commit()
     
