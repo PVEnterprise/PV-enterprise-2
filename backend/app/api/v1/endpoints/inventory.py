@@ -21,16 +21,13 @@ router = APIRouter()
 
 # Schemas
 class InventoryBase(BaseModel):
-    sku: str = Field(..., max_length=100)
-    item_name: str = Field(..., max_length=255)
-    description: Optional[str] = None
-    category: Optional[str] = None
-    manufacturer: Optional[str] = None
-    model_number: Optional[str] = None
-    unit_price: Decimal = Field(..., ge=0)
-    stock_quantity: int = Field(default=0, ge=0)
-    reorder_level: int = Field(default=10, ge=0)
-    unit_of_measure: str = Field(default="piece", max_length=50)
+    sku: str = Field(..., max_length=100, description="Catalog Number")
+    description: Optional[str] = Field(None, description="Item description")
+    batch_no: Optional[str] = Field(None, max_length=100, description="Batch number")
+    unit_price: Decimal = Field(..., ge=0, description="Unit price in rupees")
+    stock_quantity: int = Field(default=0, ge=0, description="Current stock quantity")
+    hsn_code: str = Field(..., min_length=8, max_length=8, pattern="^[0-9]{8}$", description="HSN code (8 digits)")
+    tax: Decimal = Field(..., ge=0, le=100, description="Tax percentage")
 
 
 class InventoryCreate(InventoryBase):
@@ -39,15 +36,12 @@ class InventoryCreate(InventoryBase):
 
 class InventoryUpdate(BaseModel):
     sku: Optional[str] = Field(None, max_length=100)
-    item_name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
-    category: Optional[str] = None
-    manufacturer: Optional[str] = None
-    model_number: Optional[str] = None
+    batch_no: Optional[str] = Field(None, max_length=100)
     unit_price: Optional[Decimal] = Field(None, ge=0)
     stock_quantity: Optional[int] = Field(None, ge=0)
-    reorder_level: Optional[int] = Field(None, ge=0)
-    unit_of_measure: Optional[str] = Field(None, max_length=50)
+    hsn_code: Optional[str] = Field(None, min_length=8, max_length=8, pattern="^[0-9]{8}$")
+    tax: Optional[Decimal] = Field(None, ge=0, le=100)
     is_active: Optional[bool] = None
 
 
@@ -97,7 +91,6 @@ def create_inventory_item(
 def list_inventory(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    category: Optional[str] = None,
     search: Optional[str] = None,
     low_stock: bool = False,
     active_only: bool = True,
@@ -113,25 +106,21 @@ def list_inventory(
     if active_only:
         query = query.filter(Inventory.is_active == True)
     
-    if category:
-        query = query.filter(Inventory.category == category)
-    
     if search:
         search_term = f"%{search}%"
         query = query.filter(
             (Inventory.sku.ilike(search_term)) |
-            (Inventory.item_name.ilike(search_term)) |
             (Inventory.description.ilike(search_term))
         )
     
     if low_stock:
-        # Filter items where stock quantity <= reorder level
+        # Filter items where stock quantity is low (< 50)
         query = query.filter(
-            Inventory.stock_quantity <= Inventory.reorder_level
+            Inventory.stock_quantity < 50
         )
     
-    # Order by item name
-    query = query.order_by(Inventory.item_name)
+    # Order by SKU (catalog number)
+    query = query.order_by(Inventory.sku)
     
     # Pagination
     items = query.offset(skip).limit(limit).all()

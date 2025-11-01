@@ -78,7 +78,7 @@ def get_outstanding_by_customer(
     Only accessible to executives.
     """
     # Check if user is executive
-    if current_user.role.name != 'executive':
+    if current_user.role_name != 'executive':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only executives can access outstanding items"
@@ -97,7 +97,7 @@ def get_outstanding_by_customer(
         Customer.name.label('customer_name'),
         Customer.hospital_name.label('hospital_name'),
         Inventory.id.label('item_id'),
-        Inventory.item_name.label('item_name'),
+        Inventory.sku.label('item_name'),
         Inventory.sku.label('sku'),
         Inventory.stock_quantity.label('available_stock'),
         OrderItem.quantity.label('ordered'),
@@ -123,15 +123,17 @@ def get_outstanding_by_customer(
         Customer.name,
         Customer.hospital_name,
         Inventory.id,
-        Inventory.item_name,
+        Inventory.description,
         Inventory.sku,
         Inventory.stock_quantity,
         OrderItem.quantity,
         OrderItem.unit_price
     )\
-    .having((OrderItem.quantity - func.coalesce(func.sum(DispatchItem.quantity), 0)) > 0)\
-    .order_by(Customer.name, Inventory.item_name)\
+    .order_by(Customer.name, Inventory.description)\
     .all()
+    
+    # Filter out items with no outstanding quantity (do this in Python since HAVING with non-aggregated columns is complex)
+    query = [row for row in query if (row.ordered - row.dispatched) > 0]
     
     # Format results - one record per OrderItem
     outstanding_items = []
@@ -170,7 +172,7 @@ def get_outstanding_by_item(
     Only accessible to executives.
     """
     # Check if user is executive
-    if current_user.role.name != 'executive':
+    if current_user.role_name != 'executive':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only executives can access outstanding items"
@@ -179,7 +181,7 @@ def get_outstanding_by_item(
     # Query to get outstanding items by item
     query = db.query(
         Inventory.id.label('item_id'),
-        Inventory.item_name.label('item_name'),
+        Inventory.sku.label('item_name'),
         Inventory.sku.label('sku'),
         func.sum(OrderItem.quantity).label('total_ordered'),
         func.coalesce(func.sum(DispatchItem.quantity), 0).label('total_dispatched'),
@@ -196,12 +198,12 @@ def get_outstanding_by_item(
     )\
     .group_by(
         Inventory.id,
-        Inventory.item_name,
+        Inventory.description,
         Inventory.sku,
         OrderItem.unit_price
     )\
     .having((func.sum(OrderItem.quantity) - func.coalesce(func.sum(DispatchItem.quantity), 0)) > 0)\
-    .order_by(Inventory.item_name)
+    .order_by(Inventory.description)
     
     results = query.all()
     
@@ -234,7 +236,7 @@ def get_outstanding_summary(
     Only accessible to executives.
     """
     # Check if user is executive
-    if current_user.role.name != 'executive':
+    if current_user.role_name != 'executive':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only executives can access outstanding items"

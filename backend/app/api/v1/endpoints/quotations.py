@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.quotation import Quotation, QuotationItem
 from app.models.order import Order
 from app.services.pdf_generator import generate_quotation_pdf
+from app.services.estimate_pdf_generator import generate_estimate_pdf
 
 
 router = APIRouter()
@@ -144,12 +145,13 @@ def download_quotation_pdf(
     current_user: User = Depends(PermissionChecker(Permission.QUOTATION_READ))
 ):
     """
-    Generate and download quotation as PDF.
+    Generate and download quotation as PDF in ESTIMATE format.
     Includes company info, customer details, items, and totals.
     """
     # Fetch quotation with all relationships
     quotation = db.query(Quotation).options(
         joinedload(Quotation.order).joinedload(Order.customer),
+        joinedload(Quotation.order).joinedload(Order.items).joinedload(Order.items[0].inventory),
         joinedload(Quotation.items).joinedload(QuotationItem.inventory_item)
     ).filter(Quotation.id == quotation_id).first()
     
@@ -159,11 +161,11 @@ def download_quotation_pdf(
             detail="Quotation not found"
         )
     
-    # Generate PDF
-    pdf_buffer = generate_quotation_pdf(quotation)
+    # Generate PDF using the new ESTIMATE format
+    pdf_buffer = generate_estimate_pdf(quotation.order)
     
     # Return as downloadable file
-    filename = f"Quotation_{quotation.quote_number}.pdf"
+    filename = f"Estimate_{quotation.quote_number}.pdf"
     
     return StreamingResponse(
         pdf_buffer,

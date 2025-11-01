@@ -28,6 +28,10 @@ class Order(BaseModel):
     po_amount = Column(Numeric(15, 2))
     notes = Column(Text)
     
+    # Quotation details
+    price_list_id = Column(UUID(as_uuid=True), ForeignKey("price_lists.id"), nullable=True)
+    discount_percentage = Column(Numeric(5, 2), default=0)
+    
     # Relationships
     customer = relationship("Customer", back_populates="orders")
     sales_rep = relationship("User", back_populates="created_orders", foreign_keys=[sales_rep_id])

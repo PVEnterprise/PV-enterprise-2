@@ -8,6 +8,7 @@ import { ChevronDown, X } from 'lucide-react';
 export interface AutocompleteOption {
   value: string | number;
   label: string;
+  subtitle?: string; // For additional info like address
 }
 
 export interface AutocompleteFieldProps {
@@ -169,14 +170,19 @@ export default function AutocompleteField({
       {/* Dropdown results */}
       {isOpen && options.length > 0 && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-          {options.map((option) => (
+          {options.map((option, index) => (
             <button
               key={option.value}
               type="button"
               onClick={() => handleSelect(option)}
-              className="w-full text-left px-4 py-2 hover:bg-primary-50 hover:text-primary-700 focus:bg-primary-50 focus:text-primary-700 focus:outline-none"
+              className={`w-full text-left px-4 py-3 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none transition-colors ${
+                index % 2 === 0 ? 'bg-white' : 'bg-gray-100'
+              }`}
             >
-              {option.label}
+              <div className="font-medium text-gray-900">{option.label}</div>
+              {option.subtitle && (
+                <div className="text-sm text-gray-600 mt-1 line-clamp-2">{option.subtitle}</div>
+              )}
             </button>
           ))}
         </div>

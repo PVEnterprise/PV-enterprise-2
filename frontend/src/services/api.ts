@@ -36,6 +36,12 @@ class ApiService {
   createCustomer = async (data: any) => {
     return (await this.client.post('/customers/', data)).data;
   }
+  updateCustomer = async (id: string, data: any) => {
+    return (await this.client.put(`/customers/${id}`, data)).data;
+  }
+  deleteCustomer = async (id: string) => {
+    return (await this.client.delete(`/customers/${id}`)).data;
+  }
 
   // Orders
   getOrders = async (params?: any) => {
@@ -147,6 +153,57 @@ class ApiService {
   }
   getOutstandingSummary = async () => {
     return (await this.client.get('/outstanding/summary')).data;
+  }
+
+  // Attachments
+  getAttachments = async (orderId: string) => {
+    return (await this.client.get(`/attachments/order/${orderId}`)).data;
+  }
+
+  // Price Lists
+  getPriceLists = async () => {
+    return (await this.client.get('/price-lists')).data;
+  }
+  createPriceList = async (data: any) => {
+    return (await this.client.post('/price-lists', data)).data;
+  }
+  updatePriceList = async (id: string, data: any) => {
+    return (await this.client.put(`/price-lists/${id}`, data)).data;
+  }
+  deletePriceList = async (id: string) => {
+    return (await this.client.delete(`/price-lists/${id}`)).data;
+  }
+  getPriceListItems = async (priceListId: string) => {
+    return (await this.client.get(`/price-lists/${priceListId}/items`)).data;
+  }
+  updatePriceListItem = async (priceListId: string, itemId: string, data: any) => {
+    return (await this.client.put(`/price-lists/${priceListId}/items/${itemId}`, data)).data;
+  }
+  
+  // Quotation
+  submitQuotation = async (orderId: string, data: any) => {
+    return (await this.client.post(`/orders/${orderId}/quotation-generated`, data)).data;
+  }
+  
+  // Attachments
+  uploadAttachment = async (entityType: string, entityId: string, formData: FormData) => {
+    console.log('API uploadAttachment called');
+    console.log('FormData entries:');
+    for (let pair of formData.entries()) {
+      console.log(pair[0], pair[1]);
+    }
+    
+    // Don't set Content-Type manually - let axios set it with the correct boundary
+    // But we need to remove the default application/json header
+    const config = {
+      headers: {
+        'Content-Type': undefined, // Remove default JSON header, let browser set multipart
+      },
+    };
+    
+    console.log('Request config:', config);
+    
+    return (await this.client.post(`/attachments/${entityType}/${entityId}`, formData, config)).data;
   }
 }
 

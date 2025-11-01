@@ -139,3 +139,66 @@ def record_payment(
     db.refresh(invoice)
     
     return invoice
+
+
+@router.get("/{invoice_id}/pdf")
+def download_invoice_pdf(
+    invoice_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate and download TAX INVOICE PDF.
+    """
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy.orm import joinedload
+    from app.services.invoice_pdf_generator import generate_invoice_pdf
+    from app.models.order import Order, OrderItem
+    from app.models.dispatch import Dispatch, DispatchItem
+    
+    # Fetch invoice with relationships
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice not found"
+        )
+    
+    # Fetch order with customer and items
+    order = db.query(Order).options(
+        joinedload(Order.customer),
+        joinedload(Order.items).joinedload(OrderItem.inventory_item)
+    ).filter(Order.id == invoice.order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Fetch dispatch with items (get the first dispatch for this invoice)
+    dispatch = db.query(Dispatch).options(
+        joinedload(Dispatch.items).joinedload(DispatchItem.inventory_item),
+        joinedload(Dispatch.items).joinedload(DispatchItem.order_item)
+    ).filter(Dispatch.invoice_id == invoice_id).first()
+    
+    if not dispatch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dispatch not found for this invoice"
+        )
+    
+    # Generate PDF
+    pdf_buffer = generate_invoice_pdf(order, invoice, dispatch)
+    
+    # Return as downloadable file
+    filename = f"Invoice_{invoice.invoice_number}.pdf"
+    
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )

@@ -215,7 +215,7 @@ export default function DispatchModal({
                         </p>
                         <div className="flex gap-4 text-sm text-gray-600">
                           <span>
-                            Outstanding: <span className="font-medium text-orange-600">{item.outstanding_quantity}</span>
+                            Pending: <span className="font-medium text-orange-600">{item.outstanding_quantity}</span>
                           </span>
                           <span>
                             Available Stock: <span className={`font-medium ${item.available_stock > 0 ? 'text-green-600' : 'text-red-600'}`}>

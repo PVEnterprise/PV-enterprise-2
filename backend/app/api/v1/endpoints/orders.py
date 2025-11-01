@@ -287,7 +287,7 @@ def update_decoded_items(
         
         new_item = OrderItem(
             order_id=order_id,
-            item_description=f"Decoded: {inventory.item_name}",
+            item_description=f"Decoded: {inventory.sku} - {inventory.description or 'No description'}",
             quantity=decode_item.quantity or 1,
             inventory_id=decode_item.inventory_id,
             decoded_by=current_user.id,
@@ -298,7 +298,7 @@ def update_decoded_items(
         db.add(new_item)
     
     # Track decoding action
-    item_list = "\n".join([f"- {db.query(Inventory).get(item.inventory_id).item_name} (Qty: {item.quantity})" 
+    item_list = "\n".join([f"- {db.query(Inventory).get(item.inventory_id).sku} (Qty: {item.quantity})" 
                            for item in decode_data.items])
     add_order_action(
         order=order,
@@ -352,6 +352,19 @@ def decode_order_item_multiple(
     original_description = original_item.item_description
     original_notes = original_item.notes
     
+    # Helper function to get unit price with price list support
+    def get_unit_price(decode_item, inventory):
+        unit_price = decode_item.unit_price
+        if not unit_price and order.price_list_id:
+            from app.models.price_list import PriceListItem
+            price_list_item = db.query(PriceListItem).filter(
+                PriceListItem.price_list_id == order.price_list_id,
+                PriceListItem.inventory_id == decode_item.inventory_id
+            ).first()
+            if price_list_item:
+                unit_price = price_list_item.unit_price
+        return unit_price or inventory.unit_price
+    
     # Process first item - update the original
     first_decode = decode_data.items[0]
     inventory = db.query(Inventory).filter(Inventory.id == first_decode.inventory_id).first()
@@ -361,7 +374,7 @@ def decode_order_item_multiple(
     original_item.inventory_id = first_decode.inventory_id
     original_item.decoded_by = current_user.id
     original_item.quantity = first_decode.quantity or 1
-    original_item.unit_price = first_decode.unit_price or inventory.unit_price
+    original_item.unit_price = get_unit_price(first_decode, inventory)
     original_item.gst_percentage = first_decode.gst_percentage or 18.00
     original_item.status = "decoded"
     original_item.updated_at = datetime.utcnow()
@@ -378,7 +391,7 @@ def decode_order_item_multiple(
             quantity=decode_item.quantity or 1,
             inventory_id=decode_item.inventory_id,
             decoded_by=current_user.id,
-            unit_price=decode_item.unit_price or inventory.unit_price,
+            unit_price=get_unit_price(decode_item, inventory),
             gst_percentage=decode_item.gst_percentage or 18.00,
             status="decoded",
             notes=original_notes
@@ -438,11 +451,28 @@ def decode_order_item(
             detail="Inventory item not found"
         )
     
+    # Determine unit price: use provided price, or price list price, or standard inventory price
+    unit_price = decode_data.unit_price
+    
+    if not unit_price and order.price_list_id:
+        # Check if there's a price list item for this inventory
+        from app.models.price_list import PriceListItem
+        price_list_item = db.query(PriceListItem).filter(
+            PriceListItem.price_list_id == order.price_list_id,
+            PriceListItem.inventory_id == decode_data.inventory_id
+        ).first()
+        if price_list_item:
+            unit_price = price_list_item.unit_price
+    
+    # Fall back to standard inventory price if no price list price found
+    if not unit_price:
+        unit_price = inventory.unit_price
+    
     # Update order item
     item.inventory_id = decode_data.inventory_id
     item.decoded_by = current_user.id
     item.quantity = decode_data.quantity if decode_data.quantity is not None else item.quantity
-    item.unit_price = decode_data.unit_price or inventory.unit_price
+    item.unit_price = unit_price
     item.gst_percentage = decode_data.gst_percentage or 18.00
     item.status = "decoded"
     item.updated_at = datetime.utcnow()
@@ -547,6 +577,10 @@ def approve_order(
         order.workflow_stage = "quotation"
         order.status = "approved"
         stage_name = "Decoding"
+    elif order.workflow_stage == "quotation_generated":
+        order.workflow_stage = "waiting_purchase_order"
+        order.status = "quote_sent"
+        stage_name = "Quotation"
     elif order.workflow_stage == "po_approval":
         order.workflow_stage = "inventory_check"
         order.status = "approved"
@@ -577,7 +611,9 @@ def reject_order(
     
     Only executives can reject orders.
     """
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = db.query(Order).options(
+        joinedload(Order.items)
+    ).filter(Order.id == order_id).first()
     
     if not order:
         raise HTTPException(
@@ -598,16 +634,36 @@ def reject_order(
         approval.comments = reject_data.reason
         approval.approved_at = datetime.utcnow()
     
-    # Update order status - send back to draft for decoder to update
-    order.status = "draft"
-    order.workflow_stage = "decoding"
+    # Update order status based on current stage
+    if order.workflow_stage == "quotation_generated":
+        # Reject quotation - send back to quotation stage
+        order.status = "approved"
+        order.workflow_stage = "quotation"
+        # Clear saved price list and discount so user can select new ones
+        order.price_list_id = None
+        order.discount_percentage = 0
+        
+        # Reset order item prices back to standard inventory prices
+        from app.models.inventory import Inventory
+        for item in order.items:
+            if item.inventory_id:
+                inventory = db.query(Inventory).filter(Inventory.id == item.inventory_id).first()
+                if inventory:
+                    item.unit_price = inventory.unit_price
+        
+        action_detail = f"Reason: {reject_data.reason}\nSent back to quotation stage for regeneration"
+    else:
+        # Reject decoding - send back to draft for decoder to update
+        order.status = "draft"
+        order.workflow_stage = "decoding"
+        action_detail = f"Reason: {reject_data.reason}\nSent back to draft for decoder to update"
     
     # Track rejection (this will add to notes automatically)
     add_order_action(
         order=order,
         action="Order Rejected",
         user=current_user,
-        details=f"Reason: {reject_data.reason}\nSent back to draft for decoder to update"
+        details=action_detail
     )
     
     db.commit()
@@ -641,11 +697,11 @@ def generate_quotation_pdf(
             detail="Order not found"
         )
     
-    # Check if order is approved
-    if order.status != "approved":
+    # Check if order is approved or quotation is generated
+    if order.status not in ["approved", "pending_quotation_approval"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Order must be approved before generating quotation"
+            detail="Order must be approved or have quotation generated before downloading PDF"
         )
     
     # Generate PDF
@@ -653,6 +709,86 @@ def generate_quotation_pdf(
     
     # Return as downloadable file
     filename = f"Quotation_{order.order_number}.pdf"
+    
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+@router.get("/{order_id}/estimate-pdf")
+def generate_estimate_pdf_with_discount(
+    order_id: UUID,
+    discount: Optional[float] = Query(None, ge=0, le=100, description="Discount percentage (uses saved value if not provided)"),
+    price_list_id: Optional[UUID] = Query(None, description="Price list ID to use for pricing (uses saved value if not provided)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate and download ESTIMATE PDF for order with optional discount and price list.
+    If discount or price_list_id are not provided, uses the saved values from the order.
+    
+    Available for quoters and executives.
+    """
+    from fastapi.responses import StreamingResponse
+    from app.services.estimate_pdf_generator import generate_estimate_pdf
+    from app.models.price_list import PriceList, PriceListItem
+    
+    # Fetch order with all relationships
+    order = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.inventory_item),
+        joinedload(Order.customer)
+    ).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Use saved values if not provided as parameters
+    final_discount = discount if discount is not None else float(order.discount_percentage or 0)
+    final_price_list_id = price_list_id if price_list_id is not None else order.price_list_id
+    
+    # Save price list and discount to order if they were provided as parameters
+    if discount is not None or price_list_id is not None:
+        if discount is not None:
+            order.discount_percentage = discount
+        if price_list_id is not None:
+            order.price_list_id = price_list_id
+        db.commit()
+        db.refresh(order)
+    
+    # If price list is specified, update order items with price list prices
+    if final_price_list_id:
+        price_list_items = db.query(PriceListItem).filter(
+            PriceListItem.price_list_id == final_price_list_id
+        ).all()
+        
+        # Create a map of inventory_id to price list item
+        price_map = {pli.inventory_id: pli for pli in price_list_items}
+        
+        # Update order items with price list prices (temporarily for PDF, permanently saved to DB)
+        for item in order.items:
+            if item.inventory_id in price_map:
+                pli = price_map[item.inventory_id]
+                item.unit_price = pli.unit_price
+                item.gst_percentage = pli.tax_percentage or item.gst_percentage
+        
+        # Save the updated prices to database
+        db.commit()
+    
+    # Set discount on order for PDF generation
+    order.discount_percentage = final_discount
+    
+    # Generate PDF
+    pdf_buffer = generate_estimate_pdf(order)
+    
+    # Return as downloadable file
+    filename = f"Estimate_{order.order_number}.pdf"
     
     return StreamingResponse(
         pdf_buffer,
@@ -787,6 +923,63 @@ def request_po_approval(
     return {"message": "PO approval requested successfully"}
 
 
+@router.post("/{order_id}/quotation-generated", response_model=dict)
+def mark_quotation_generated(
+    order_id: UUID,
+    quotation_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Mark quotation as generated.
+    Changes workflow_stage to 'quotation_generated' and status to 'pending_quotation_approval'.
+    Available for quoter and executive roles.
+    """
+    # Check if user is quoter or executive
+    if current_user.role_name not in ['quoter', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only quoters and executives can generate quotations"
+        )
+    
+    order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Check if order is in quotation stage
+    if order.workflow_stage != "quotation":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order must be in quotation stage"
+        )
+    
+    # Save quotation details (price list and discount)
+    if 'price_list_id' in quotation_data:
+        order.price_list_id = quotation_data['price_list_id']
+    if 'discount_percent' in quotation_data:
+        order.discount_percentage = quotation_data['discount_percent']
+    
+    # Update order workflow
+    order.workflow_stage = "quotation_generated"
+    order.status = "pending_quotation_approval"
+    
+    # Track quotation generation
+    add_order_action(
+        order=order,
+        action="Quotation Generated",
+        user=current_user,
+        details=f"Quotation generated with discount: {quotation_data.get('discount_percent', 0)}%, Grand Total: ₹{quotation_data.get('grand_total', 0)}"
+    )
+    
+    db.commit()
+    
+    return {"message": "Quotation generated and submitted for approval"}
+
+
 @router.post("/{order_id}/approve-po", response_model=dict)
 def approve_purchase_order(
     order_id: UUID,
@@ -909,3 +1102,46 @@ def reject_purchase_order(
     db.commit()
     
     return {"message": "Purchase order rejected. Sales can re-upload and request approval again."}
+
+
+@router.post("/{order_id}/payment-received", response_model=dict)
+def mark_payment_received(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(Permission.APPROVAL_EXECUTE))
+):
+    """
+    Mark payment as received and complete the order.
+    Changes workflow_stage to 'completed' and status to 'completed'.
+    Available for executive role only.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Check if order is in payment_pending stage
+    if order.workflow_stage != "payment_pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order must be in payment_pending stage"
+        )
+    
+    # Update order to completed
+    order.workflow_stage = "completed"
+    order.status = "completed"
+    
+    # Track payment received
+    add_order_action(
+        order=order,
+        action="Payment Received",
+        user=current_user,
+        details="Payment confirmed. Order completed successfully."
+    )
+    
+    db.commit()
+    
+    return {"message": "Payment received. Order completed successfully."}

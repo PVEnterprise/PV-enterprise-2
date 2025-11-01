@@ -91,16 +91,12 @@ export interface OrderItem {
 export interface Inventory {
   id: string;
   sku: string;
-  item_name: string;
   description?: string;
-  category?: string;
-  manufacturer?: string;
-  model_number?: string;
+  batch_no?: string;
   unit_price: number;
   stock_quantity: number;
-  reserved_quantity: number;
-  reorder_level: number;
-  unit_of_measure: string;
+  hsn_code: string;
+  tax: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;

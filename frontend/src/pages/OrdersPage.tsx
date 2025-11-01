@@ -32,6 +32,7 @@ export default function OrdersPage() {
       return customers.map((c: any) => ({
         value: c.id,
         label: c.hospital_name,
+        subtitle: c.address || undefined,
       }));
     } catch (error) {
       console.error('Error fetching customers:', error);
@@ -75,6 +76,14 @@ export default function OrdersPage() {
       type: 'textarea',
       placeholder: 'Any special requirements, delivery instructions, or other notes...',
     },
+    {
+      name: 'attachments',
+      label: 'Attachments',
+      type: 'file',
+      multiple: true,
+      accept: '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png',
+      placeholder: 'Upload supporting documents (PDF, Word, Excel, Images)',
+    },
   ];
 
   const queryClient = useQueryClient();
@@ -91,15 +100,67 @@ export default function OrdersPage() {
   });
 
   const handleSubmit = async (data: Record<string, any>) => {
-    // Transform form data to match backend schema
-    // Sales describes requirements in words, decoder will create items later
-    const orderData = {
-      customer_id: data.customer_id,
-      priority: data.priority,
-      sales_rep_description: data.requirements, // Store requirements at order level
-      notes: data.notes,
-    };
-    await createMutation.mutateAsync(orderData);
+    try {
+      console.log('Form data received:', data);
+      console.log('Attachments:', data.attachments);
+      console.log('Attachments type:', typeof data.attachments);
+      console.log('Attachments length:', data.attachments?.length);
+      
+      // Transform form data to match backend schema
+      // Sales describes requirements in words, decoder will create items later
+      const orderData = {
+        customer_id: data.customer_id,
+        priority: data.priority,
+        sales_rep_description: data.requirements, // Store requirements at order level
+        notes: data.notes,
+      };
+      
+      // Create the order first
+      const newOrder = await createMutation.mutateAsync(orderData);
+      
+      console.log('Order created:', newOrder);
+      console.log('Checking attachments...');
+      
+      // Upload attachments if any
+      if (data.attachments && data.attachments.length > 0) {
+        console.log('Attachments found, starting upload...');
+        // data.attachments is already an array of File objects
+        for (const file of data.attachments) {
+          console.log('Uploading file:', file);
+          console.log('File type:', file instanceof File);
+          console.log('File name:', file.name);
+          console.log('File size:', file.size, 'bytes');
+          console.log('File last modified:', file.lastModified);
+          
+          if (file.size === 0 || file.size < 10) {
+            console.error('ERROR: File is empty or too small!', file);
+            alert(`File "${file.name}" appears to be empty or corrupted (${file.size} bytes). Please select a valid file.`);
+            continue; // Skip this file
+          }
+          
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('description', file.name);
+          
+          // Debug: Log FormData contents
+          for (let pair of formData.entries()) {
+            console.log(pair[0], pair[1]);
+            if (pair[1] instanceof File) {
+              console.log('  -> File size in FormData:', pair[1].size);
+            }
+          }
+          
+          await api.uploadAttachment('order', newOrder.id, formData);
+        }
+      }
+      
+      // Refresh and close
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      setShowForm(false);
+    } catch (error: any) {
+      console.error('Error creating order:', error);
+      alert(`Error creating order: ${error.message || 'Unknown error'}`);
+    }
   };
 
   const columns: Column<Order>[] = [

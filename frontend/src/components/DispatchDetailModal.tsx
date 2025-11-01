@@ -2,8 +2,9 @@
  * Dispatch Detail Modal Component
  * Shows read-only dispatch information including items and tracking details
  */
-import { X, Truck, Package, Calendar, MapPin } from 'lucide-react';
+import { X, Truck, Package, Calendar, MapPin, FileText, Download } from 'lucide-react';
 import { Dispatch } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 
 interface DispatchDetailModalProps {
   dispatch: Dispatch;
@@ -14,6 +15,65 @@ export default function DispatchDetailModal({
   dispatch,
   onClose
 }: DispatchDetailModalProps) {
+  const { user } = useAuth();
+  
+  // Check if user can download documents
+  const canDownload = user?.role_name === 'quoter' || user?.role_name === 'executive';
+
+  const handleDownloadInvoice = async () => {
+    try {
+      const response = await fetch(`/api/v1/dispatches/${dispatch.id}/invoice/pdf`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download invoice');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Invoice_${dispatch.dispatch_number}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading invoice:', error);
+      alert('Failed to download invoice. Please try again.');
+    }
+  };
+
+  const handleDownloadDC = async () => {
+    try {
+      const response = await fetch(`/api/v1/dispatches/${dispatch.id}/dc/pdf`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download delivery challan');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `DC_${dispatch.dispatch_number}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading DC:', error);
+      alert('Failed to download delivery challan. Please try again.');
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
@@ -152,7 +212,25 @@ export default function DispatchDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end flex-shrink-0">
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center flex-shrink-0">
+          {canDownload && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleDownloadInvoice}
+                className="btn btn-primary btn-sm"
+              >
+                <FileText size={16} className="mr-2" />
+                Download Invoice
+              </button>
+              <button
+                onClick={handleDownloadDC}
+                className="btn btn-secondary btn-sm"
+              >
+                <Download size={16} className="mr-2" />
+                Download DC
+              </button>
+            </div>
+          )}
           <button
             onClick={onClose}
             className="btn btn-secondary"
