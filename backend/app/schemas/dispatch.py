@@ -22,8 +22,9 @@ class InventoryBasic(BaseModel):
     """Basic inventory info for dispatch items."""
     id: UUID
     sku: str
-    item_name: str
+    description: Optional[str] = None
     unit_price: Decimal
+    tax: Decimal
 
     model_config = ConfigDict(from_attributes=True)
 

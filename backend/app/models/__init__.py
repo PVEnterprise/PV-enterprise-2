@@ -13,6 +13,7 @@ from app.models.audit import AuditLog
 from app.models.notification import Notification
 from app.models.dispatch import Dispatch, DispatchItem
 from app.models.attachment import Attachment
+from app.models.price_list import PriceList, PriceListItem
 
 __all__ = [
     "User",
@@ -31,4 +32,6 @@ __all__ = [
     "Dispatch",
     "DispatchItem",
     "Attachment",
+    "PriceList",
+    "PriceListItem",
 ]

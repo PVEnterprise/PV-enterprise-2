@@ -3,13 +3,13 @@
  * Reusable form component for creating and updating records with validation
  */
 import { useState, FormEvent } from 'react';
-import { X } from 'lucide-react';
+import { X, Paperclip, Trash2 } from 'lucide-react';
 import AutocompleteField from './AutocompleteField';
 
 export interface FormField {
   name: string;
   label: string;
-  type: 'text' | 'email' | 'number' | 'textarea' | 'select' | 'date' | 'checkbox' | 'autocomplete';
+  type: 'text' | 'email' | 'number' | 'textarea' | 'select' | 'date' | 'checkbox' | 'autocomplete' | 'file';
   required?: boolean;
   placeholder?: string;
   options?: { value: string | number; label: string }[]; // For select fields
@@ -22,6 +22,8 @@ export interface FormField {
   };
   defaultValue?: any;
   disabled?: boolean;
+  multiple?: boolean; // For file fields
+  accept?: string; // For file fields
 }
 
 export interface DynamicFormProps {
@@ -49,7 +51,7 @@ export default function DynamicForm({
 }: DynamicFormProps) {
   const [formData, setFormData] = useState<Record<string, any>>(
     fields.reduce((acc, field) => {
-      acc[field.name] = initialData[field.name] ?? field.defaultValue ?? '';
+      acc[field.name] = initialData[field.name] ?? field.defaultValue ?? (field.type === 'file' ? [] : '');
       return acc;
     }, {} as Record<string, any>)
   );
@@ -95,6 +97,9 @@ export default function DynamicForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    console.log('DynamicForm handleSubmit called');
+    console.log('Current formData:', formData);
+    setErrors({});
 
     // Validate all fields
     const newErrors: Record<string, string> = {};
@@ -102,14 +107,17 @@ export default function DynamicForm({
       const error = validateField(field, formData[field.name]);
       if (error) {
         newErrors[field.name] = error;
+        console.log(`Validation error for ${field.name}:`, error);
       }
     });
 
     if (Object.keys(newErrors).length > 0) {
+      console.log('Validation errors found:', newErrors);
       setErrors(newErrors);
       return;
     }
 
+    console.log('Validation passed, calling onSubmit with:', formData);
     // Submit form
     await onSubmit(formData);
   };
@@ -210,6 +218,104 @@ export default function DynamicForm({
             disabled={field.disabled}
             error={error}
           />
+        );
+
+      case 'file':
+        const files = value || [];
+        const handleFileAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+          const newFiles = e.target.files;
+          if (newFiles && newFiles.length > 0) {
+            const fileArray = Array.from(newFiles);
+            console.log('Files selected:', fileArray.map(f => ({ name: f.name, size: f.size, type: f.type })));
+            
+            // Warn about small files
+            fileArray.forEach(f => {
+              if (f.size < 100) {
+                console.warn(`Warning: File "${f.name}" is very small (${f.size} bytes). It might be corrupted.`);
+              }
+            });
+            
+            const updatedFiles = [...files, ...fileArray];
+            handleChange(field.name, updatedFiles);
+            // Reset input to allow adding the same file again
+            e.target.value = '';
+          }
+        };
+        
+        const handleFileRemove = (index: number) => {
+          const updatedFiles = files.filter((_: any, i: number) => i !== index);
+          handleChange(field.name, updatedFiles);
+        };
+        
+        const formatFileSize = (bytes: number) => {
+          if (bytes < 1024) return bytes + ' B';
+          if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+          return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        };
+        
+        return (
+          <div className="space-y-2">
+            <div>
+              <label
+                htmlFor={field.name}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+              >
+                <Paperclip size={16} className="mr-2" />
+                Add Files
+              </label>
+              <input
+                type="file"
+                id={field.name}
+                name={field.name}
+                onChange={handleFileAdd}
+                accept={field.accept}
+                multiple={field.multiple}
+                disabled={field.disabled}
+                className="hidden"
+              />
+              {field.placeholder && (
+                <p className="mt-1 text-xs text-gray-500">{field.placeholder}</p>
+              )}
+            </div>
+            
+            {/* File List */}
+            {files.length > 0 && (
+              <div className="border border-gray-200 rounded-md divide-y divide-gray-200 max-h-48 overflow-y-auto">
+                {files.map((file: File, index: number) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 hover:bg-gray-50"
+                  >
+                    <div className="flex items-center flex-1 min-w-0">
+                      <Paperclip size={14} className="text-gray-400 mr-2 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {file.name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatFileSize(file.size)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleFileRemove(index)}
+                      className="ml-3 text-red-600 hover:text-red-800 flex-shrink-0"
+                      title="Remove file"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {files.length > 0 && (
+              <p className="text-xs text-gray-600">
+                {files.length} file{files.length !== 1 ? 's' : ''} selected
+              </p>
+            )}
+          </div>
         );
 
       default:

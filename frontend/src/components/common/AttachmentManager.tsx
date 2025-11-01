@@ -109,14 +109,44 @@ export default function AttachmentManager({
     }
   };
 
-  // Download handler
-  const handleDownload = (attachmentId: string, filename: string) => {
-    const token = localStorage.getItem('access_token');
-    const url = `/api/v1/attachments/download/${attachmentId}?token=${token}`;
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
+  // Download handler - use fetch with Authorization header and arrayBuffer
+  const handleDownload = async (attachmentId: string, filename: string) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`/api/v1/attachments/download/${attachmentId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+      }
+      
+      // Use arrayBuffer instead of blob to avoid any encoding issues
+      const arrayBuffer = await response.arrayBuffer();
+      const contentType = response.headers.get('content-type') || 'application/octet-stream';
+      
+      // Create blob from arrayBuffer with correct type
+      const blob = new Blob([arrayBuffer], { type: contentType });
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   // Get file icon

@@ -12,7 +12,8 @@ import {
   LogOut,
   Menu,
   X,
-  TrendingUp
+  TrendingUp,
+  DollarSign
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -37,7 +38,7 @@ export default function Layout() {
       permission: 'order:read'
     },
     { 
-      name: 'Outstanding', 
+      name: 'Pending', 
       href: '/outstanding', 
       icon: TrendingUp,
       roleOnly: 'executive'
@@ -47,6 +48,12 @@ export default function Layout() {
       href: '/inventory', 
       icon: Package,
       permission: 'inventory:read'
+    },
+    { 
+      name: 'Price Lists', 
+      href: '/price-lists', 
+      icon: DollarSign,
+      roles: ['executive', 'quoter']
     },
     { 
       name: 'Customers', 
@@ -67,6 +74,10 @@ export default function Layout() {
     // Handle role-only items (like Outstanding for executives)
     if (item.roleOnly) {
       return user?.role_name === item.roleOnly;
+    }
+    // Handle role-based items (like Price Lists for executive/quoter)
+    if (item.roles) {
+      return item.roles.includes(user?.role_name);
     }
     
     if (!user?.role?.permissions) return false;

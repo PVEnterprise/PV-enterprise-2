@@ -309,8 +309,8 @@ export default function OrderDetailPage() {
 
   const handleGetQuotation = async () => {
     try {
-      // Fetch PDF with authentication
-      const response = await fetch(`/api/v1/orders/${orderId}/quotation/pdf`, {
+      // Use estimate-pdf endpoint which automatically uses saved price_list_id and discount_percentage
+      const response = await fetch(`/api/v1/orders/${orderId}/estimate-pdf`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
@@ -324,16 +324,16 @@ export default function OrderDetailPage() {
       const blob = await response.blob();
       
       // Create a download link
-      const url = window.URL.createObjectURL(blob);
+      const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url;
-      link.download = `Quotation_${order?.order_number || 'order'}.pdf`;
+      link.href = downloadUrl;
+      link.download = `Estimate_${order?.order_number || 'order'}.pdf`;
       document.body.appendChild(link);
       link.click();
       
       // Cleanup
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
       console.error('Error downloading quotation:', error);
       alert('Failed to generate quotation. Please try again.');
@@ -394,6 +394,17 @@ export default function OrderDetailPage() {
       rejectPOMutation.mutate(poRejectionReason.trim());
     }
   };
+
+  // Payment Received
+  const paymentReceivedMutation = useMutation({
+    mutationFn: () => api.post(`/orders/${orderId}/payment-received`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.detail || 'Failed to mark payment as received');
+    },
+  });
 
   // Dispatch Management
   const [showDispatchModal, setShowDispatchModal] = useState(false);
@@ -508,15 +519,15 @@ export default function OrderDetailPage() {
                 <h2 className="text-xl font-semibold">Order Items</h2>
                 {isOrderItemsExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
               </button>
-              {canDecode && order.status === 'draft' && (
+              {(canDecode && order.status === 'draft') || (user?.role_name === 'executive' && order.items?.some(item => item.inventory_id) && order.workflow_stage !== 'quotation_generated') ? (
                 <button
-                  onClick={() => navigate(`/orders/${orderId}/decode`)}
+                  onClick={() => navigate(`/decode?order_id=${orderId}`)}
                   className="btn btn-primary btn-sm"
                 >
                   <Edit size={16} className="mr-1" />
-                  {order.items?.some(item => !item.inventory_id) ? 'Decode Items' : 'Edit Decoded Items'}
+                  {order.items?.some(item => !item.inventory_id) ? 'Decode Items' : user?.role_name === 'executive' ? 'Review Decoded Items' : 'Edit Decoded Items'}
                 </button>
-              )}
+              ) : null}
             </div>
 
             {/* Scrollable Table */}
@@ -525,94 +536,38 @@ export default function OrderDetailPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr className="border-b">
-                    <th className="text-left p-3 text-sm font-semibold text-gray-700">Item</th>
-                    <th className="text-center p-3 text-sm font-semibold text-gray-700">Qty</th>
-                    <th className="text-right p-3 text-sm font-semibold text-gray-700">Unit Price</th>
-                    <th className="text-right p-3 text-sm font-semibold text-gray-700">GST %</th>
-                    <th className="text-right p-3 text-sm font-semibold text-gray-700">Subtotal</th>
-                    <th className="text-right p-3 text-sm font-semibold text-gray-700">GST Amt</th>
-                    <th className="text-right p-3 text-sm font-semibold text-gray-700">Total</th>
-                    <th className="text-center p-3 text-sm font-semibold text-gray-700">Status</th>
+                    <th className="text-center p-3 text-sm font-semibold text-gray-700 w-16">Sr No</th>
+                    <th className="text-left p-3 text-sm font-semibold text-gray-700">Catalog No</th>
+                    <th className="text-left p-3 text-sm font-semibold text-gray-700">Description</th>
+                    <th className="text-center p-3 text-sm font-semibold text-gray-700 w-24">Quantity</th>
+                    <th className="text-center p-3 text-sm font-semibold text-gray-700 w-32">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {order.items?.map((item: OrderItem) => {
-                    const unitPrice = item.unit_price ? Number(item.unit_price) : 0;
-                    const gstPercentage = item.gst_percentage ? Number(item.gst_percentage) : 0;
-                    const subtotal = item.quantity * unitPrice;
-                    const gstAmount = (subtotal * gstPercentage) / 100;
-                    const total = subtotal + gstAmount;
-
-                    return (
-                      <tr key={item.id} className="border-b hover:bg-gray-50">
-                        <td className="p-3">
-                          <div>
-                            <p className="font-medium text-gray-900">{item.inventory?.item_name || item.item_description}</p>
-                            <p className="text-xs text-gray-500">{item.inventory?.sku || 'Not decoded'}</p>
-                          </div>
-                        </td>
-                        <td className="p-3 text-center text-sm text-gray-900">{item.quantity}</td>
-                        <td className="p-3 text-right text-sm text-gray-900">₹{unitPrice.toFixed(2)}</td>
-                        <td className="p-3 text-right text-sm text-gray-900">{gstPercentage.toFixed(2)}%</td>
-                        <td className="p-3 text-right text-sm text-gray-900">₹{subtotal.toFixed(2)}</td>
-                        <td className="p-3 text-right text-sm text-gray-900">₹{gstAmount.toFixed(2)}</td>
-                        <td className="p-3 text-right text-sm font-semibold text-gray-900">₹{total.toFixed(2)}</td>
-                        <td className="p-3 text-center">
-                          {item.inventory_id ? (
-                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Decoded</span>
-                          ) : (
-                            <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Not Decoded</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {order.items?.map((item: OrderItem, index: number) => (
+                    <tr key={item.id} className="border-b hover:bg-gray-50">
+                      <td className="p-3 text-center text-sm text-gray-600">{index + 1}</td>
+                      <td className="p-3">
+                        <span className="font-mono text-sm font-medium text-gray-900">
+                          {item.inventory?.sku || '-'}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <p className="text-sm text-gray-900">{item.inventory?.description || item.item_description}</p>
+                      </td>
+                      <td className="p-3 text-center text-sm font-medium text-gray-900">{item.quantity}</td>
+                      <td className="p-3 text-center">
+                        {item.inventory_id ? (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Decoded</span>
+                        ) : (
+                          <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Not Decoded</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-            )}
-
-            {/* Fixed Footer - Order Total */}
-            {isOrderItemsExpanded && order.items?.some(item => item.inventory_id) && (
-              <div className="border-t-2 border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 flex-shrink-0">
-                <div className="flex justify-end space-x-8">
-                {(() => {
-                  let orderSubtotal = 0;
-                  let orderGstAmount = 0;
-                  
-                  order.items?.forEach(item => {
-                    if (item.inventory_id) {
-                      const unitPrice = item.unit_price ? Number(item.unit_price) : 0;
-                      const gstPercentage = item.gst_percentage ? Number(item.gst_percentage) : 0;
-                      const itemSubtotal = item.quantity * unitPrice;
-                      const itemGst = (itemSubtotal * gstPercentage) / 100;
-                      
-                      orderSubtotal += itemSubtotal;
-                      orderGstAmount += itemGst;
-                    }
-                  });
-                  
-                  const orderTotal = orderSubtotal + orderGstAmount;
-                  
-                  return (
-                    <>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-600">Subtotal</p>
-                        <p className="text-sm font-semibold text-gray-900">₹{orderSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-600">Total GST</p>
-                        <p className="text-sm font-semibold text-gray-900">₹{orderGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-600">Grand Total</p>
-                        <p className="text-lg font-bold text-blue-600">₹{orderTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      </div>
-                    </>
-                  );
-                })()}
-                </div>
-              </div>
             )}
           </div>
 
@@ -669,7 +624,7 @@ export default function OrderDetailPage() {
                 </div>
               )}
 
-              {/* Outstanding Items */}
+              {/* Pending Items */}
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
                   <button
@@ -677,14 +632,14 @@ export default function OrderDetailPage() {
                     className="flex items-center gap-2 hover:text-blue-600 transition-colors"
                   >
                     <Package size={24} className="text-orange-600" />
-                    <h2 className="text-xl font-semibold">Outstanding Items</h2>
+                    <h2 className="text-xl font-semibold">Pending Items</h2>
                     {isOutstandingExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                   </button>
-                  {(user?.role_name === 'inventory_admin' || user?.role_name === 'executive') && (
+                  {(user?.role_name === 'inventory_admin' || user?.role_name === 'executive') && 
+                   (order.items?.filter(item => item.inventory_id && (item.outstanding_quantity || item.quantity) > 0).length || 0) > 0 && (
                     <button
                       onClick={() => setShowDispatchModal(true)}
                       className="btn btn-primary btn-sm flex items-center gap-1"
-                      disabled={order.items?.filter(item => item.inventory_id && (item.outstanding_quantity || item.quantity) > 0).length === 0}
                     >
                       <Package size={16} />
                       Create Dispatch
@@ -705,7 +660,7 @@ export default function OrderDetailPage() {
                         const outstanding = item.outstanding_quantity ?? item.quantity;
                         const dispatched = item.dispatched_quantity ?? 0;
                         const status = item.status || 'pending';
-                        const displayName = item.inventory?.item_name || item.item_description;
+                        const displayName = item.inventory?.description || item.item_description;
                         const sku = item.inventory?.sku;
                         
                         return (
@@ -724,7 +679,7 @@ export default function OrderDetailPage() {
                                     Dispatched: <span className="font-medium text-blue-600">{dispatched}</span>
                                   </span>
                                   <span className="text-gray-600">
-                                    Outstanding: <span className="font-medium text-orange-600">{outstanding}</span>
+                                    Pending: <span className="font-medium text-orange-600">{outstanding}</span>
                                   </span>
                                 </div>
                               </div>
@@ -755,7 +710,7 @@ export default function OrderDetailPage() {
             <h2 className="text-sm font-semibold mb-2">Actions</h2>
             
             {/* Decoder Actions */}
-            {canDecode && order.status === 'draft' && (
+            {canDecode && order.status === 'draft' && order.items?.some(item => item.inventory_id) && (
               <div className="space-y-2">
                 <p className="text-xs text-gray-600 mb-2">
                   Decode all items and submit
@@ -772,7 +727,7 @@ export default function OrderDetailPage() {
             )}
 
             {/* Executive Submit for Approval (if order is still draft) */}
-            {canApprove && order.status === 'draft' && !canDecode && (
+            {canApprove && order.status === 'draft' && !canDecode && order.items?.some(item => item.inventory_id) && (
               <div className="space-y-2">
                 <p className="text-xs text-gray-600 mb-2">
                   Submit order for approval
@@ -823,23 +778,53 @@ export default function OrderDetailPage() {
                   <p className="text-sm text-green-600 font-medium">Approved</p>
                   <p className="text-xs text-gray-600">Ready for quotation</p>
                 </div>
-                {(user?.role_name === 'executive' || (user?.role_name === 'sales_rep' && order.sales_rep_id === user?.id)) && (
+                {(user?.role_name === 'executive' || user?.role_name === 'quoter') && (
+                  <button
+                    onClick={() => navigate(`/generate-quotation?order_id=${orderId}`)}
+                    className="btn btn-primary btn-sm w-full text-xs"
+                  >
+                    <FileText size={14} className="mr-1" />
+                    Generate Quotation
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Quotation Generated - Pending Approval */}
+            {(order.status === 'pending_quotation_approval' && order.workflow_stage === 'quotation_generated') && (
+              <div className="space-y-2">
+                <div className="text-center py-2">
+                  <FileText size={32} className="mx-auto text-orange-600 mb-1" />
+                  <p className="text-sm text-orange-600 font-medium">Quotation Generated</p>
+                  <p className="text-xs text-gray-600">Pending executive approval</p>
+                </div>
+                {user?.role_name === 'executive' && (
                   <>
                     <button
                       onClick={handleGetQuotation}
                       className="btn btn-primary btn-sm w-full text-xs"
                     >
                       <FileText size={14} className="mr-1" />
-                      Get Quotation
+                      Get Quotation PDF
                     </button>
-                    <button
-                      onClick={() => quoteSentMutation.mutate()}
-                      disabled={quoteSentMutation.isPending}
-                      className="btn btn-sm w-full text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
-                    >
-                      <Check size={14} className="mr-1" />
-                      {quoteSentMutation.isPending ? 'Processing...' : 'Quote Sent to Customer'}
-                    </button>
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={handleApprove}
+                        className="btn btn-sm btn-primary flex-1 text-xs"
+                        disabled={approveMutation.isPending}
+                      >
+                        <Check size={12} className="mr-1" />
+                        {approveMutation.isPending ? 'Approving...' : 'Approve'}
+                      </button>
+                      <button
+                        onClick={handleReject}
+                        className="btn btn-sm btn-danger flex-1 text-xs"
+                        disabled={rejectMutation.isPending}
+                      >
+                        <X size={12} className="mr-1" />
+                        {rejectMutation.isPending ? 'Rejecting...' : 'Reject'}
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
@@ -929,6 +914,24 @@ export default function OrderDetailPage() {
                     </button>
                   </>
                 )}
+              </div>
+            )}
+
+            {/* Payment Pending - Executive Action */}
+            {user?.role_name === 'executive' && order.workflow_stage === 'payment_pending' && (
+              <div className="space-y-2">
+                <div className="bg-blue-50 border border-blue-200 rounded p-2">
+                  <p className="text-sm text-blue-600 font-medium">Payment Pending</p>
+                  <p className="text-xs text-gray-600">All items dispatched. Confirm payment receipt.</p>
+                </div>
+                <button
+                  onClick={() => paymentReceivedMutation.mutate()}
+                  disabled={paymentReceivedMutation.isPending}
+                  className="btn btn-success btn-sm w-full text-xs"
+                >
+                  <Check size={14} className="mr-1" />
+                  {paymentReceivedMutation.isPending ? 'Processing...' : 'Confirm Payment Received'}
+                </button>
               </div>
             )}
           </div>
@@ -1037,7 +1040,7 @@ export default function OrderDetailPage() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <p className="font-medium text-gray-900">{item.item_name}</p>
+                            <p className="font-medium text-gray-900">{item.description || item.sku}</p>
                             <p className="text-sm text-gray-500">SKU: {item.sku}</p>
                           </div>
                           <div className="text-right ml-4">
@@ -1066,7 +1069,7 @@ export default function OrderDetailPage() {
                       <div key={index} className="p-3 bg-gray-50 border rounded-lg">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <p className="font-medium text-gray-900">{item.inventory.item_name}</p>
+                            <p className="font-medium text-gray-900">{item.inventory.description || item.inventory.sku}</p>
                             <p className="text-xs text-gray-500">SKU: {item.inventory.sku}</p>
                             <div className="grid grid-cols-3 gap-2 mt-2">
                               <div>

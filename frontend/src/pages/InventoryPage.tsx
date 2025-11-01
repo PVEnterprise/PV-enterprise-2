@@ -32,17 +32,10 @@ export default function InventoryPage() {
   const inventoryFields: FormField[] = [
     {
       name: 'sku',
-      label: 'SKU',
+      label: 'Catalog No',
       type: 'text',
       required: true,
-      placeholder: 'Enter unique SKU code',
-    },
-    {
-      name: 'item_name',
-      label: 'Item Name',
-      type: 'text',
-      required: true,
-      placeholder: 'Enter item name',
+      placeholder: 'Enter unique catalog number',
     },
     {
       name: 'description',
@@ -51,23 +44,10 @@ export default function InventoryPage() {
       placeholder: 'Enter item description',
     },
     {
-      name: 'category',
-      label: 'Category',
+      name: 'batch_no',
+      label: 'Batch No',
       type: 'text',
-      required: true,
-      placeholder: 'e.g., Surgical, Diagnostic, etc.',
-    },
-    {
-      name: 'manufacturer',
-      label: 'Manufacturer',
-      type: 'text',
-      placeholder: 'Enter manufacturer name',
-    },
-    {
-      name: 'model_number',
-      label: 'Model Number',
-      type: 'text',
-      placeholder: 'Enter model number',
+      placeholder: 'Enter batch number',
     },
     {
       name: 'unit_price',
@@ -89,28 +69,26 @@ export default function InventoryPage() {
       defaultValue: 0,
     },
     {
-      name: 'reorder_level',
-      label: 'Reorder Level',
-      type: 'number',
+      name: 'hsn_code',
+      label: 'HSN Code',
+      type: 'text',
       required: true,
+      placeholder: 'Enter 8-digit HSN code',
       validation: {
-        min: 0,
+        pattern: /^[0-9]{8}$/,
+        message: 'HSN code must be exactly 8 digits',
       },
-      defaultValue: 10,
     },
     {
-      name: 'unit_of_measure',
-      label: 'Unit of Measure',
-      type: 'select',
+      name: 'tax',
+      label: 'Tax (%)',
+      type: 'number',
       required: true,
-      options: [
-        { value: 'piece', label: 'Piece' },
-        { value: 'box', label: 'Box' },
-        { value: 'set', label: 'Set' },
-        { value: 'kit', label: 'Kit' },
-        { value: 'pack', label: 'Pack' },
-      ],
-      defaultValue: 'piece',
+      placeholder: 'Enter tax percentage',
+      validation: {
+        min: 0,
+        max: 100,
+      },
     },
   ];
 
@@ -166,7 +144,7 @@ export default function InventoryPage() {
   };
 
   const handleDelete = (item: Inventory) => {
-    if (confirm(`Are you sure you want to delete ${item.item_name}?`)) {
+    if (confirm(`Are you sure you want to delete ${item.sku}${item.description ? ` - ${item.description}` : ''}?`)) {
       deleteMutation.mutate(item.id);
     }
   };
@@ -187,56 +165,49 @@ export default function InventoryPage() {
   const columns: Column<Inventory>[] = [
     {
       key: 'sku',
-      label: 'SKU',
-      width: '12%',
+      label: 'Catalog No',
+      width: '8%',
     },
     {
-      key: 'item_name',
-      label: 'Item Name',
-      width: '25%',
+      key: 'description',
+      label: 'Description',
+      width: '29%',
+      render: (value) => (
+        <div className="break-words whitespace-normal line-clamp-2">
+          {value || '-'}
+        </div>
+      ),
     },
     {
-      key: 'category',
-      label: 'Category',
-      width: '15%',
+      key: 'batch_no',
+      label: 'Batch No',
+      width: '10%',
       render: (value) => value || '-',
+    },
+    {
+      key: 'hsn_code',
+      label: 'HSN Code',
+      width: '9%',
     },
     {
       key: 'stock_quantity',
       label: 'Stock',
-      width: '12%',
-      render: (value: number, row: Inventory) => {
-        const isLowStock = value <= row.reorder_level;
-        return (
-          <span className={isLowStock ? 'text-red-600 font-semibold' : 'text-gray-900'}>
-            {value}
-          </span>
-        );
-      },
+      width: '8%',
+      render: (value: number) => (
+        <span className="text-gray-900">{value}</span>
+      ),
     },
     {
       key: 'unit_price',
       label: 'Unit Price',
-      width: '12%',
+      width: '10%',
       render: (value: number) => `₹${value.toLocaleString()}`,
     },
     {
-      key: 'unit_of_measure',
-      label: 'Unit',
-      width: '10%',
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      width: '14%',
-      render: (_value: any, row: Inventory) => {
-        const isLowStock = row.stock_quantity <= row.reorder_level;
-        return isLowStock ? (
-          <span className="badge badge-danger">Low Stock</span>
-        ) : (
-          <span className="badge badge-success">In Stock</span>
-        );
-      },
+      key: 'tax',
+      label: 'Tax',
+      width: '2%',
+      render: (value: number) => `${value}%`,
     },
   ];
 
@@ -252,7 +223,7 @@ export default function InventoryPage() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
             <input
               type="text"
-              placeholder="Search SKU, name, description..."
+              placeholder="Search catalog no, description..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input input-sm pl-9 w-full"
@@ -290,7 +261,7 @@ export default function InventoryPage() {
           columns={columns}
           isLoading={isLoading}
           emptyMessage="No inventory items found. Add your first item to get started."
-          showAuditInfo={true}
+          showAuditInfo={false}
           actions={[
             commonActions.edit(
               handleEdit,

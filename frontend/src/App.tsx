@@ -8,6 +8,9 @@ import DashboardPage from '@/pages/DashboardPage';
 import OrdersPage from '@/pages/OrdersPage';
 import OrderDetailPage from '@/pages/OrderDetailPage';
 import DecodeOrderPage from '@/pages/DecodeOrderPage';
+import DecodePage from '@/pages/DecodePage';
+import GenerateQuotationPage from '@/pages/GenerateQuotationPage';
+import PriceListsPage from '@/pages/PriceListsPage';
 import InventoryPage from '@/pages/InventoryPage';
 import CustomersPage from '@/pages/CustomersPage';
 import EmployeesPage from '@/pages/EmployeesPage';
@@ -162,6 +165,22 @@ function AppRoutes() {
           } 
         />
         <Route 
+          path="decode" 
+          element={
+            <PermissionRoute permission="order:update">
+              <DecodePage />
+            </PermissionRoute>
+          } 
+        />
+        <Route 
+          path="generate-quotation" 
+          element={
+            <RoleRoute allowedRoles={['executive', 'quoter']}>
+              <GenerateQuotationPage />
+            </RoleRoute>
+          } 
+        />
+        <Route 
           path="inventory" 
           element={
             <PermissionRoute permission="inventory:read">
@@ -190,6 +209,14 @@ function AppRoutes() {
           element={
             <RoleRoute allowedRoles={['executive']}>
               <OutstandingPage />
+            </RoleRoute>
+          } 
+        />
+        <Route 
+          path="price-lists" 
+          element={
+            <RoleRoute allowedRoles={['executive', 'quoter']}>
+              <PriceListsPage />
             </RoleRoute>
           } 
         />

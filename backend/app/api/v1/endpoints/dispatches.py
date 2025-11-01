@@ -13,7 +13,8 @@ from app.models.order import Order, OrderItem
 from app.models.inventory import Inventory
 from app.models.user import User
 from app.schemas.dispatch import DispatchCreate, DispatchResponse
-from app.api.deps import get_current_user
+from app.api.deps import get_db, get_current_user
+from app.utils.order_tracking import add_order_action
 
 router = APIRouter()
 
@@ -42,7 +43,7 @@ def create_dispatch(
     Available for inventory_admin and executive roles.
     """
     # Check role
-    if current_user.role.name not in ['inventory_admin', 'executive']:
+    if current_user.role_name not in ['inventory_admin', 'executive']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only inventory admins and executives can create dispatches"
@@ -98,7 +99,7 @@ def create_dispatch(
         if item_data.quantity > inventory.stock_quantity:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient stock for {inventory.item_name}. Available: {inventory.stock_quantity}, Requested: {item_data.quantity}"
+                detail=f"Insufficient stock for {inventory.sku} - {inventory.description or 'No description'}. Available: {inventory.stock_quantity}, Requested: {item_data.quantity}"
             )
     
     # Create dispatch
@@ -146,8 +147,30 @@ def create_dispatch(
     all_completed = all(item.status == "completed" for item in all_order_items)
     any_partial = any(item.status in ["partial", "completed"] for item in all_order_items)
     
+    # Track dispatch action
+    dispatched_items = []
+    for item_data in dispatch_data.items:
+        order_item = db.query(OrderItem).filter(OrderItem.id == item_data.order_item_id).first()
+        inventory = db.query(Inventory).filter(Inventory.id == item_data.inventory_id).first()
+        dispatched_items.append(f"- {inventory.sku} - {inventory.description or 'No description'} (Qty: {item_data.quantity})")
+    
+    item_list = "\n".join(dispatched_items)
+    add_order_action(
+        order=order,
+        action="Dispatch Created",
+        user=current_user,
+        details=f"Dispatch #{dispatch.dispatch_number}\nCourier: {dispatch_data.courier_name}\nTracking: {dispatch_data.tracking_number}\nItems dispatched:\n{item_list}"
+    )
+    
     if all_completed:
-        order.status = "completed"
+        order.status = "payment_pending"
+        order.workflow_stage = "payment_pending"
+        add_order_action(
+            order=order,
+            action="All Items Dispatched",
+            user=current_user,
+            details="All order items have been dispatched. Waiting for payment confirmation."
+        )
     elif any_partial:
         order.status = "partially_dispatched"
     
@@ -194,3 +217,111 @@ def get_order_dispatches(
     ).filter(Dispatch.order_id == order_id).order_by(Dispatch.created_at.desc()).all()
     
     return dispatches
+
+
+@router.get("/{dispatch_id}/invoice/pdf")
+def download_dispatch_invoice_pdf(
+    dispatch_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate and download TAX INVOICE PDF for a dispatch.
+    """
+    from fastapi.responses import StreamingResponse
+    from app.services.invoice_pdf_generator import generate_invoice_pdf
+    from app.models.invoice import Invoice
+    
+    # Fetch dispatch with all relationships
+    dispatch = db.query(Dispatch).options(
+        joinedload(Dispatch.items).joinedload(DispatchItem.inventory_item),
+        joinedload(Dispatch.items).joinedload(DispatchItem.order_item)
+    ).filter(Dispatch.id == dispatch_id).first()
+    
+    if not dispatch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dispatch not found"
+        )
+    
+    # Check if dispatch has an invoice, if not create a temporary one for PDF generation
+    if dispatch.invoice_id:
+        # Fetch existing invoice
+        invoice = db.query(Invoice).filter(Invoice.id == dispatch.invoice_id).first()
+        if not invoice:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Invoice not found"
+            )
+    else:
+        # Create a temporary invoice object for PDF generation (not saved to DB)
+        from datetime import date, timedelta
+        from decimal import Decimal
+        
+        # Calculate totals from dispatch items
+        subtotal = Decimal('0.00')
+        total_igst = Decimal('0.00')
+        
+        for dispatch_item in dispatch.items:
+            order_item = dispatch_item.order_item
+            qty = dispatch_item.quantity
+            rate = float(order_item.unit_price or 0)
+            
+            # Get discount from order
+            order = db.query(Order).filter(Order.id == dispatch.order_id).first()
+            discount_percentage = float(getattr(order, 'discount_percentage', 0) or 0)
+            
+            # Apply discount
+            item_discount = rate * (discount_percentage / 100)
+            discounted_rate = rate - item_discount
+            amount = qty * discounted_rate
+            
+            igst_pct = float(order_item.gst_percentage or 0)
+            igst_amt = amount * (igst_pct / 100)
+            
+            subtotal += Decimal(str(amount))
+            total_igst += Decimal(str(igst_amt))
+        
+        grand_total = subtotal + total_igst
+        
+        # Create temporary invoice object
+        class TempInvoice:
+            def __init__(self):
+                self.invoice_number = f"TEMP-{dispatch.dispatch_number}"
+                self.invoice_date = dispatch.dispatch_date or date.today()
+                self.due_date = self.invoice_date + timedelta(days=30)
+                self.payment_terms = "Net 30 days"
+                self.notes = ""
+                self.subtotal = subtotal
+                self.gst_amount = total_igst
+                self.total_amount = grand_total
+        
+        invoice = TempInvoice()
+    
+    # Fetch order with customer, items, and quotations
+    from app.models.quotation import Quotation, QuotationItem
+    order = db.query(Order).options(
+        joinedload(Order.customer),
+        joinedload(Order.items).joinedload(OrderItem.inventory_item),
+        joinedload(Order.quotations).joinedload(Quotation.items)
+    ).filter(Order.id == dispatch.order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Generate PDF
+    pdf_buffer = generate_invoice_pdf(order, invoice, dispatch)
+    
+    # Return as downloadable file
+    filename = f"Invoice_{invoice.invoice_number}.pdf"
+    
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Users, FileText, DollarSign, ExternalLink } from 'lucide-react';
+import { Package, Users, FileText, DollarSign, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import DataTable, { Column } from '../components/common/DataTable';
@@ -36,6 +36,7 @@ const OutstandingPage: React.FC = () => {
   const [summary, setSummary] = useState<OutstandingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
 
   useEffect(() => {
     fetchData();
@@ -103,7 +104,7 @@ const OutstandingPage: React.FC = () => {
     },
     {
       key: 'outstanding',
-      label: 'Outstanding',
+      label: 'Pending',
       sortable: true,
       width: '10%',
       render: (value) => (
@@ -185,17 +186,28 @@ const OutstandingPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Outstanding Items</h1>
-          <p className="text-gray-600 mt-1">Track pending deliveries across all orders</p>
-        </div>
-      </div>
+      {/* Header with Collapse Toggle */}
+      <div className="card p-4">
+        <button
+          onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
+          className="w-full flex items-center justify-between hover:bg-gray-50 transition-colors rounded p-2 -m-2"
+        >
+          <div className="text-left">
+            <h1 className="text-2xl font-bold text-gray-900">Pending Items</h1>
+            <p className="text-gray-600 mt-1">Track pending deliveries across all orders</p>
+          </div>
+          <div className="ml-4">
+            {isSummaryExpanded ? (
+              <ChevronUp size={24} className="text-gray-600" />
+            ) : (
+              <ChevronDown size={24} className="text-gray-600" />
+            )}
+          </div>
+        </button>
 
-      {/* Summary Cards */}
-      {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Summary Cards - Collapseable */}
+        {isSummaryExpanded && summary && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
           <div className="card p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -246,10 +258,18 @@ const OutstandingPage: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+        )}
+      </div>
 
-      {/* Outstanding Items Table */}
-      <div className="overflow-auto max-h-[calc(100vh-300px)]">
+      {/* Pending Items Table */}
+      <div 
+        className="overflow-auto transition-all duration-300"
+        style={{ 
+          maxHeight: isSummaryExpanded 
+            ? 'calc(100vh - 320px)' 
+            : 'calc(100vh - 210px)' 
+        }}
+      >
         <DataTable
           data={byCustomer}
           columns={columns}

@@ -87,33 +87,33 @@ const customerFields: FormField[] = [
 
 const columns: Column<Customer>[] = [
   {
-    key: 'name',
-    label: 'Customer Name',
-    width: '20%',
-  },
-  {
     key: 'hospital_name',
     label: 'Hospital Name',
-    width: '20%',
+    width: '25%',
   },
   {
     key: 'contact_person',
     label: 'Contact Person',
-    width: '15%',
+    width: '20%',
   },
   {
     key: 'email',
     label: 'Email',
-    width: '15%',
+    width: '20%',
   },
   {
     key: 'phone',
     label: 'Phone',
-    width: '12%',
+    width: '15%',
   },
   {
     key: 'city',
     label: 'City',
+    width: '10%',
+  },
+  {
+    key: 'state',
+    label: 'State',
     width: '10%',
   },
 ];
@@ -158,10 +158,16 @@ export default function CustomersPage() {
   const canDelete = user?.role?.permissions?.['customer:delete'] === true;
 
   const handleSubmit = async (data: Record<string, any>) => {
+    // Backend expects 'name' field - use hospital_name as customer name
+    const transformedData = {
+      ...data,
+      name: data.hospital_name, // name and hospital_name are the same (customer name)
+    };
+    
     if (editingCustomer) {
-      await updateMutation.mutateAsync({ id: editingCustomer.id, data });
+      await updateMutation.mutateAsync({ id: editingCustomer.id, data: transformedData });
     } else {
-      await createMutation.mutateAsync(data);
+      await createMutation.mutateAsync(transformedData);
     }
   };
 
@@ -206,7 +212,7 @@ export default function CustomersPage() {
           columns={columns}
           isLoading={isLoading}
           emptyMessage="No customers found. Add your first customer to get started."
-          showAuditInfo={true}
+          showAuditInfo={false}
           actions={[
             commonActions.edit(
               handleEdit,
