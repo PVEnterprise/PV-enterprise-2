@@ -550,7 +550,9 @@ def approve_order(
     
     Only executives can approve orders.
     """
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = db.query(Order).options(
+        joinedload(Order.items)
+    ).filter(Order.id == order_id).first()
     
     if not order:
         raise HTTPException(
@@ -573,14 +575,31 @@ def approve_order(
     
     # Update order workflow
     stage_name = ""
+    approval_details = f"Comments: {comments}" if comments else None
+    
     if order.workflow_stage == "decoding_approval":
         order.workflow_stage = "quotation"
         order.status = "approved"
         stage_name = "Decoding"
     elif order.workflow_stage == "quotation_generated":
+        # Quotation approval - ensure price list and discount are locked in
         order.workflow_stage = "waiting_purchase_order"
         order.status = "quote_sent"
         stage_name = "Quotation"
+        
+        # Build approval details with price list and discount info
+        from app.models.price_list import PriceList
+        approval_details_parts = []
+        if order.price_list_id:
+            price_list = db.query(PriceList).filter(PriceList.id == order.price_list_id).first()
+            if price_list:
+                approval_details_parts.append(f"Price List: {price_list.name}")
+        if order.discount_percentage:
+            approval_details_parts.append(f"Discount: {order.discount_percentage}%")
+        if comments:
+            approval_details_parts.append(f"Comments: {comments}")
+        approval_details = "\n".join(approval_details_parts) if approval_details_parts else None
+        
     elif order.workflow_stage == "po_approval":
         order.workflow_stage = "inventory_check"
         order.status = "approved"
@@ -591,7 +610,7 @@ def approve_order(
         order=order,
         action=f"{stage_name} Approved",
         user=current_user,
-        details=f"Comments: {comments}" if comments else None
+        details=approval_details
     )
     
     db.commit()
@@ -942,7 +961,9 @@ def mark_quotation_generated(
             detail="Only quoters and executives can generate quotations"
         )
     
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = db.query(Order).options(
+        joinedload(Order.items)
+    ).filter(Order.id == order_id).first()
     
     if not order:
         raise HTTPException(
@@ -960,6 +981,25 @@ def mark_quotation_generated(
     # Save quotation details (price list and discount)
     if 'price_list_id' in quotation_data:
         order.price_list_id = quotation_data['price_list_id']
+        
+        # Update order items with price list prices
+        from app.models.price_list import PriceListItem
+        from app.models.inventory import Inventory
+        
+        price_list_items = db.query(PriceListItem).filter(
+            PriceListItem.price_list_id == quotation_data['price_list_id']
+        ).all()
+        
+        # Create a map of inventory_id to price list item
+        price_map = {pli.inventory_id: pli for pli in price_list_items}
+        
+        # Update order items with price list prices
+        for item in order.items:
+            if item.inventory_id in price_map:
+                pli = price_map[item.inventory_id]
+                item.unit_price = pli.unit_price
+                item.gst_percentage = pli.tax_percentage or item.gst_percentage
+    
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
     
