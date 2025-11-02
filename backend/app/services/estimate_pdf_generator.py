@@ -91,14 +91,6 @@ def number_to_words(num):
 class EstimatePDFGenerator:
     """Generate ESTIMATE PDFs in Sreedevi Medtrade format."""
     
-    # Company Information
-    COMPANY_NAME = "Sreedevi Medtrade"
-    COMPANY_PLOT = "Plot No: 173 Road No: 14"
-    COMPANY_AREA = "Alkapuri Township"
-    COMPANY_CITY = "Hyderabad Telangana 500089"
-    COMPANY_COUNTRY = "India"
-    COMPANY_GSTIN = "GSTIN 36AABCS2596E1Z8"
-    
     # Bank Details
     BANK_ACCOUNT_NAME = "SREEDEVI MEDTRADE"
     BANK_ACCOUNT_NUMBER = "50200079949944"
@@ -107,11 +99,21 @@ class EstimatePDFGenerator:
     BANK_BRANCH = "ALKAPURI TOWNSHIP"
     
     def __init__(self, order: Order):
+        from app.core.config import settings
+        
         self.order = order
         self.customer: Customer = order.customer
         self.buffer = BytesIO()
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
+        
+        # Load company info from settings
+        self.COMPANY_NAME = settings.COMPANY_NAME
+        self.COMPANY_PLOT = settings.COMPANY_PLOT
+        self.COMPANY_AREA = settings.COMPANY_AREA
+        self.COMPANY_CITY = settings.COMPANY_CITY
+        self.COMPANY_COUNTRY = settings.COMPANY_COUNTRY
+        self.COMPANY_GSTIN = settings.COMPANY_GSTIN
     
     def _setup_custom_styles(self):
         """Setup custom paragraph styles."""
@@ -128,7 +130,7 @@ class EstimatePDFGenerator:
             name='CompanyDetails',
             parent=self.styles['Normal'],
             fontSize=9,
-            alignment=TA_LEFT,
+            alignment=TA_RIGHT,
             leading=11
         ))
         
@@ -230,9 +232,10 @@ class EstimatePDFGenerator:
             # Fallback to text placeholder
             logo_element = Paragraph('<b>SREEDEVI<br/>MEDTRADE</b>', self.styles['CompanyName'])
         
-        # Create header table: [Logo | Company Details | ESTIMATE]
+        # Create header table: [Logo | ESTIMATE | Company Details]
         header_data = [[
             logo_element,
+            Paragraph('<b>ESTIMATE</b>', self.styles['EstimateTitle']),
             Paragraph(
                 f'<b>{self.COMPANY_NAME}</b><br/>'
                 f'{self.COMPANY_PLOT}<br/>'
@@ -241,16 +244,17 @@ class EstimatePDFGenerator:
                 f'{self.COMPANY_COUNTRY}<br/>'
                 f'{self.COMPANY_GSTIN}',
                 self.styles['CompanyDetails']
-            ),
-            Paragraph('<b>ESTIMATE</b>', self.styles['EstimateTitle'])
+            )
         ]]
         
-        # Adjust column widths: wider logo column to prevent company info overlap
-        header_table = Table(header_data, colWidths=[70*mm, 65*mm, 45*mm])
+        # Adjust column widths: Logo, Title (center), Company Info (right)
+        header_table = Table(header_data, colWidths=[70*mm, 45*mm, 65*mm])
         header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('VALIGN', (0, 0), (0, 0), 'TOP'),
+            ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
+            ('VALIGN', (2, 0), (2, 0), 'TOP'),
             ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-            ('ALIGN', (1, 0), (1, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
             ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
         ]))
         
@@ -604,7 +608,7 @@ class EstimatePDFGenerator:
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
             ('VALIGN', (0, 0), (0, 0), 'TOP'),
             ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
-            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
         ]))
         
         elements.append(table)

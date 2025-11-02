@@ -65,8 +65,9 @@ def get_dashboard_stats(
     ).scalar() or Decimal(0)
     
     # Inventory statistics
+    # Count items with stock quantity <= 10 as low stock
     low_stock_items = db.query(Inventory).filter(
-        Inventory.stock_quantity <= Inventory.reorder_level,
+        Inventory.stock_quantity <= 10,
         Inventory.is_active == True
     ).count()
     

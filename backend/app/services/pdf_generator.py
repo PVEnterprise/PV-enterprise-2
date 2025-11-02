@@ -23,14 +23,6 @@ from app.models.customer import Customer
 class QuotationPDFGenerator:
     """Generate professional quotation PDFs in Sreedevi Medtrade format."""
     
-    # Company Information - Sreedevi Medtrade
-    COMPANY_NAME = "Sreedevi Medtrade"
-    COMPANY_PLOT = "Plot No: 173 Road No: 14"
-    COMPANY_AREA = "Alkapuri Township"
-    COMPANY_CITY = "Hyderabad Telangana 500089"
-    COMPANY_COUNTRY = "India"
-    COMPANY_GSTIN = "36AABCS2596E1Z8"
-    
     # Bank Details
     BANK_ACCOUNT_NAME = "SREEDEVI MEDTRADE"
     BANK_ACCOUNT_NUMBER = "50200079949944"
@@ -39,12 +31,22 @@ class QuotationPDFGenerator:
     BANK_BRANCH = "ALKAPURI TOWNSHIP"
     
     def __init__(self, quotation: Quotation):
+        from app.core.config import settings
+        
         self.quotation = quotation
         self.order: Order = quotation.order
         self.customer: Customer = self.order.customer
         self.buffer = BytesIO()
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
+        
+        # Load company info from settings
+        self.COMPANY_NAME = settings.COMPANY_NAME
+        self.COMPANY_PLOT = settings.COMPANY_PLOT
+        self.COMPANY_AREA = settings.COMPANY_AREA
+        self.COMPANY_CITY = settings.COMPANY_CITY
+        self.COMPANY_COUNTRY = settings.COMPANY_COUNTRY
+        self.COMPANY_GSTIN = settings.COMPANY_GSTIN
     
     def _setup_custom_styles(self):
         """Setup custom paragraph styles."""

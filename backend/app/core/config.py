@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB
     UPLOAD_DIR: str = "./uploads"
     
+    # Company Information (for PDFs)
+    COMPANY_NAME: str = "Sreedevi Life Sciences"
+    COMPANY_PLOT: str = "Plot No: 173 Road No: 14"
+    COMPANY_AREA: str = "Alkapuri Township"
+    COMPANY_CITY: str = "Hyderabad Telangana 500089"
+    COMPANY_COUNTRY: str = "India"
+    COMPANY_GSTIN: str = "GSTIN 36ACGFS4458L1ZK"
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

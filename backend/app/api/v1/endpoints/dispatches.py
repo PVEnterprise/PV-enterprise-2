@@ -325,3 +325,56 @@ def download_dispatch_invoice_pdf(
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+
+@router.get("/{dispatch_id}/delivery-challan/pdf")
+@router.get("/{dispatch_id}/dc/pdf")
+def download_delivery_challan_pdf(
+    dispatch_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate and download Delivery Challan PDF for a dispatch.
+    Available at both /delivery-challan/pdf and /dc/pdf
+    """
+    from fastapi.responses import StreamingResponse
+    from app.services.delivery_challan_pdf_generator import generate_delivery_challan_pdf
+    from sqlalchemy.orm import joinedload
+    
+    # Fetch dispatch with all relationships
+    dispatch = db.query(Dispatch).options(
+        joinedload(Dispatch.items).joinedload(DispatchItem.inventory_item),
+        joinedload(Dispatch.order)
+    ).filter(Dispatch.id == dispatch_id).first()
+    
+    if not dispatch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dispatch not found"
+        )
+    
+    # Fetch order with customer
+    order = db.query(Order).options(
+        joinedload(Order.customer)
+    ).filter(Order.id == dispatch.order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Generate PDF
+    pdf_buffer = generate_delivery_challan_pdf(dispatch, order, order.customer)
+    
+    # Return as downloadable file
+    filename = f"DC_{dispatch.dispatch_number}.pdf"
+    
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
