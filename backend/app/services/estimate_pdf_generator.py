@@ -3,6 +3,7 @@ PDF generation service for estimates/quotations.
 Generates PDFs in Sreedevi Medtrade ESTIMATE format.
 """
 import os
+import math
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from io import BytesIO
@@ -13,9 +14,43 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, KeepTogether, Image
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 from app.models.order import Order
 from app.models.customer import Customer
+
+
+# ---------- Register font with ₹ symbol ----------
+def _register_unicode_font():
+    """Register Unicode font for rupee symbol. Tries bundled font first, then system fonts."""
+    # Get the directory where this file is located
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.dirname(os.path.dirname(current_dir))  # Go up to backend/
+    
+    paths = [
+        # Bundled font (highest priority)
+        os.path.join(backend_dir, "fonts", "DejaVuSans.ttf"),
+        # System fonts (fallback)
+        "/Library/Fonts/DejaVuSans.ttf",
+        "/Library/Fonts/DejaVu Sans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/local/share/fonts/DejaVuSans.ttf",
+    ]
+    
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                pdfmetrics.registerFont(TTFont("DejaVuSans", p))
+                return "DejaVuSans"
+            except Exception:
+                continue
+    
+    # Fallback to Helvetica (won't show ₹ symbol correctly)
+    return "Helvetica"
+
+_FONT = _register_unicode_font()
+RUPEE = "₹"
 
 
 def format_indian_number(num):
@@ -44,55 +79,17 @@ def format_indian_number(num):
     return f"{formatted}.{decimal_part}"
 
 
-def number_to_words(num):
-    """Convert number to Indian Rupees words."""
-    ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine']
-    tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
-    teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
-    
-    def convert_below_thousand(n):
-        if n == 0:
-            return ''
-        elif n < 10:
-            return ones[n]
-        elif n < 20:
-            return teens[n - 10]
-        elif n < 100:
-            return tens[n // 10] + (' ' + ones[n % 10] if n % 10 != 0 else '')
-        else:
-            return ones[n // 100] + ' Hundred' + (' ' + convert_below_thousand(n % 100) if n % 100 != 0 else '')
-    
-    if num == 0:
-        return 'Zero'
-    
-    # Handle decimals
-    num = int(num)
-    
-    crore = num // 10000000
-    num %= 10000000
-    lakh = num // 100000
-    num %= 100000
-    thousand = num // 1000
-    num %= 1000
-    
-    result = []
-    if crore:
-        result.append(convert_below_thousand(crore) + ' Crore')
-    if lakh:
-        result.append(convert_below_thousand(lakh) + ' Lakh')
-    if thousand:
-        result.append(convert_below_thousand(thousand) + ' Thousand')
-    if num:
-        result.append(convert_below_thousand(num))
-    
-    return ' '.join(result)
 
 
 class EstimatePDFGenerator:
     """Generate ESTIMATE PDFs in Sreedevi Medtrade format."""
     
+    # Brand Colors
+    BRAND_COLOR = colors.HexColor("#1B4F72")
+    ACCENT_COLOR = colors.HexColor("#DCECF8")
+    
     # Bank Details
-    BANK_ACCOUNT_NAME = "SREEDEVI MEDTRADE"
+    BANK_ACCOUNT_NAME = "SREEDEVI LIFE SCIENCES"
     BANK_ACCOUNT_NUMBER = "50200079949944"
     BANK_NAME = "ICICI Bank"
     BANK_IFSC = "ICIC0007286"
@@ -119,49 +116,65 @@ class EstimatePDFGenerator:
         """Setup custom paragraph styles."""
         self.styles.add(ParagraphStyle(
             name='CompanyName',
-            parent=self.styles['Heading1'],
-            fontSize=16,
-            fontName='Helvetica-Bold',
-            alignment=TA_LEFT,
-            spaceAfter=2
+            fontSize=18,
+            textColor=self.BRAND_COLOR,
+            fontName=_FONT,
+            leading=20
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='EstimateTitle',
+            fontSize=18,
+            textColor=self.BRAND_COLOR,
+            fontName=_FONT,
+            alignment=TA_CENTER,
+            leading=20
         ))
         
         self.styles.add(ParagraphStyle(
             name='CompanyDetails',
-            parent=self.styles['Normal'],
             fontSize=9,
+            fontName=_FONT,
             alignment=TA_RIGHT,
             leading=11
         ))
         
         self.styles.add(ParagraphStyle(
-            name='EstimateTitle',
-            parent=self.styles['Heading1'],
-            fontSize=18,
-            fontName='Helvetica-Bold',
+            name='NormalText',
+            fontSize=9,
+            fontName=_FONT,
+            leading=11
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='RightText',
+            fontSize=9,
+            fontName=_FONT,
             alignment=TA_RIGHT,
-            spaceAfter=0
+            leading=11
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='SectionHeader',
+            fontSize=9,
+            fontName=_FONT,
+            textColor=colors.white,
+            backColor=self.BRAND_COLOR,
+            leftIndent=4,
+            leading=11
         ))
         
         self.styles.add(ParagraphStyle(
             name='SectionLabel',
-            parent=self.styles['Normal'],
             fontSize=9,
-            fontName='Helvetica-Bold',
-            spaceAfter=3
-        ))
-        
-        self.styles.add(ParagraphStyle(
-            name='NormalText',
-            parent=self.styles['Normal'],
-            fontSize=9,
+            fontName=_FONT,
             leading=11
         ))
         
         self.styles.add(ParagraphStyle(
             name='SmallText',
-            parent=self.styles['Normal'],
             fontSize=8,
+            fontName=_FONT,
             leading=10
         ))
     
@@ -195,10 +208,6 @@ class EstimatePDFGenerator:
         
         # Items table
         content.extend(self._build_items_table())
-        content.append(Spacer(1, 3*mm))
-        
-        # Total in words
-        content.extend(self._build_total_in_words())
         content.append(Spacer(1, 3*mm))
         
         # Bank details
@@ -248,11 +257,9 @@ class EstimatePDFGenerator:
         ]]
         
         # Adjust column widths: Logo, Title (center), Company Info (right)
-        header_table = Table(header_data, colWidths=[70*mm, 45*mm, 65*mm])
+        header_table = Table(header_data, colWidths=[65*mm, 50*mm, 65*mm], rowHeights=[26*mm])
         header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (0, 0), 'TOP'),
-            ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
-            ('VALIGN', (2, 0), (2, 0), 'TOP'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN', (0, 0), (0, 0), 'LEFT'),
             ('ALIGN', (1, 0), (1, 0), 'CENTER'),
             ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
@@ -277,15 +284,11 @@ class EstimatePDFGenerator:
         
         table = Table(data, colWidths=[30*mm, 60*mm, 35*mm, 55*mm])
         table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTNAME', (2, 0), (2, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 0), (-1, -1), _FONT),
             ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.lightgrey),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
         ]))
         
         elements.append(table)
@@ -295,41 +298,28 @@ class EstimatePDFGenerator:
         """Build Bill To section."""
         elements = []
         
-        # Bill To label
-        bill_to_label = [[Paragraph('<b>Bill To</b>', self.styles['SectionLabel'])]]
-        label_table = Table(bill_to_label, colWidths=[180*mm])
-        label_table.setStyle(TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-        ]))
-        elements.append(label_table)
-        
-        # Customer details
+        # Build Bill To with section header
         customer_text = f'<b>{self.customer.hospital_name or self.customer.name}</b><br/>'
         if self.customer.address:
             customer_text += f'{self.customer.address}<br/>'
         if self.customer.city:
             customer_text += f'{self.customer.city}'
         if self.customer.pincode:
-            customer_text += f' {self.customer.pincode}'
+            customer_text += f' - {self.customer.pincode}'
         if self.customer.state:
-            customer_text += f' {self.customer.state}'
-        if self.customer.city or self.customer.pincode or self.customer.state:
-            customer_text += '<br/>'
-        customer_text += 'India'
+            customer_text += f'<br/>{self.customer.state}, India'
         
-        customer_data = [[Paragraph(customer_text, self.styles['NormalText'])]]
-        customer_table = Table(customer_data, colWidths=[180*mm])
-        customer_table.setStyle(TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        data = [
+            [Paragraph('Bill To', self.styles['SectionHeader'])],
+            [Paragraph(customer_text, self.styles['NormalText'])]
+        ]
+        
+        table = Table(data, colWidths=[180*mm])
+        table.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.25, colors.lightgrey),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
         ]))
-        elements.append(customer_table)
+        elements.append(table)
         
         return elements
     
@@ -351,7 +341,7 @@ class EstimatePDFGenerator:
         
         if show_discount_col:
             header = [
-                ['Sr No', 'Item Description', 'HSN/SAC', 'Unit Price', 'Qty', 'Discount%', 'Amount', 'IGST', '', 'Total'],
+                ['Sr No', 'Item Description', 'HSN/SAC', 'Unit Price', 'Qty', 'Discount\n%', 'Amount', 'IGST', '', 'Total'],
                 ['', '', '', '', '', '', '', 'Tax%', 'Amt', '']
             ]
         else:
@@ -460,13 +450,13 @@ class EstimatePDFGenerator:
         
         # Build style list dynamically
         style_commands = [
-            # Header rows (2 rows)
-            ('BACKGROUND', (0, 0), (-1, 1), colors.white),
-            ('FONTNAME', (0, 0), (-1, 1), 'Helvetica-Bold'),
+            # Header rows (2 rows) - modern styling with accent color
+            ('BACKGROUND', (0, 0), (-1, 1), self.ACCENT_COLOR),
+            ('FONTNAME', (0, 0), (-1, 1), _FONT),
             ('FONTSIZE', (0, 0), (-1, 1), 7),
             ('ALIGN', (0, 0), (-1, 1), 'CENTER'),
-            ('GRID', (0, 0), (-1, 1), 0.5, colors.black),
-            ('VALIGN', (0, 0), (-1, 1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]
         
         # Add column-specific spans based on whether discount column is shown
@@ -538,47 +528,6 @@ class EstimatePDFGenerator:
         elements.append(table)
         return elements
     
-    def _build_total_in_words(self):
-        """Build total in words section."""
-        elements = []
-        
-        # Calculate grand total with discount
-        subtotal = sum(
-            item.quantity * float(item.unit_price or 0)
-            for item in self.order.items
-            if item.inventory_id
-        )
-        
-        # Apply discount
-        discount_percentage = float(getattr(self.order, 'discount_percentage', 0) or 0)
-        discount_amount = subtotal * (discount_percentage / 100)
-        subtotal_after_discount = subtotal - discount_amount
-        
-        total_igst = sum(
-            item.quantity * float(item.unit_price or 0) * (float(item.gst_percentage or 0) / 100)
-            for item in self.order.items
-            if item.inventory_id
-        )
-        
-        rounding = 0.00  # Can be calculated if needed
-        grand_total = subtotal_after_discount + total_igst + rounding
-        
-        words = number_to_words(grand_total)
-        
-        data = [[
-            Paragraph(f'<b>Total In Words</b><br/><i>Indian Rupee {words} Only</i>', self.styles['NormalText'])
-        ]]
-        
-        table = Table(data, colWidths=[180*mm])
-        table.setStyle(TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ]))
-        
-        elements.append(table)
-        return elements
     
     def _build_bank_details(self):
         """Build bank details section."""
@@ -593,22 +542,20 @@ class EstimatePDFGenerator:
             f'Branch Name : {self.BANK_BRANCH}'
         )
         
-        signature_text = '<br/><br/><br/>Authorized Signature'
+        signature_text = '<br/><br/>Authorized Signature'
         
         data = [[
             Paragraph(bank_text, self.styles['SmallText']),
             Paragraph(signature_text, self.styles['NormalText'])
         ]]
         
-        table = Table(data, colWidths=[90*mm, 90*mm])
+        table = Table(data, colWidths=[125*mm, 55*mm], rowHeights=[35*mm])
         table.setStyle(TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.lightgrey),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
             ('VALIGN', (0, 0), (0, 0), 'TOP'),
             ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
-            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
         ]))
         
         elements.append(table)
@@ -619,22 +566,22 @@ class EstimatePDFGenerator:
         elements = []
         
         terms_text = (
-            '<b>Terms & Conditions</b><br/><br/>'
-            '1)Delivery within 12-16 weeks after receiving the confirmed Purchase Order and payment.<br/>'
-            '2)Prices are mentioned in the Quote.<br/>'
-            '3)Payment shall be made 100% in advance along with Purchase Order.<br/>'
-            '4)3 years warranty.<br/>'
-            '5)Freight Included.'
+            '1) Delivery within 12-16 weeks after receiving the confirmed Purchase Order and payment.<br/>'
+            '2) Prices are mentioned in the Quote.<br/>'
+            '3) Payment shall be made 100% in advance along with Purchase Order.<br/>'
+            '4) 3 years warranty.<br/>'
+            '5) Freight Included.'
         )
         
-        data = [[Paragraph(terms_text, self.styles['SmallText'])]]
+        data = [
+            [Paragraph('Terms & Conditions', self.styles['SectionHeader'])],
+            [Paragraph(terms_text, self.styles['NormalText'])]
+        ]
         
         table = Table(data, colWidths=[180*mm])
         table.setStyle(TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('BOX', (0, 0), (-1, -1), 0.25, colors.lightgrey),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
         ]))
         
         elements.append(table)
