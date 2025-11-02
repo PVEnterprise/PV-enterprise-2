@@ -279,6 +279,7 @@ export default function EmployeesPage() {
           submitLabel={editingEmployee ? 'Update Employee' : 'Add Employee'}
           initialData={editingEmployee ? {
             ...editingEmployee,
+            role_id: editingEmployee.role_id, // Use role_id instead of role_name
             is_active: editingEmployee.is_active ? 'true' : 'false',
             password: '', // Don't show existing password
           } : {}}

@@ -117,7 +117,10 @@ class InvoicePDFGenerator:
 
     # ---------- Header ----------
     def _header(self):
-        logo_path = "/Users/praneeth/Documents/PV_enterprise_2/backend/uploads/logo.png"
+        # Get dynamic logo path
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        backend_dir = os.path.dirname(os.path.dirname(current_dir))
+        logo_path = os.path.join(backend_dir, "uploads", "logo.png")
         logo = Image(logo_path, width=60 * mm, height=20 * mm) if os.path.exists(logo_path) else Paragraph("<b>Sreedevi Life Sciences</b>", self.styles["CompanyName"])
         info = (
             f"<b>{self.settings.COMPANY_NAME}</b><br/>"

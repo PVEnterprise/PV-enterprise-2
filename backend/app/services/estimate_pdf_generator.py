@@ -227,8 +227,10 @@ class EstimatePDFGenerator:
         """Build header with logo and company details + ESTIMATE title."""
         elements = []
         
-        # Try to load logo from attachments
-        logo_path = '/Users/praneeth/Documents/PV_enterprise_2/backend/uploads/logo.png'
+        # Get dynamic logo path
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        backend_dir = os.path.dirname(os.path.dirname(current_dir))
+        logo_path = os.path.join(backend_dir, "uploads", "logo.png")
         logo_element = None
         
         if os.path.exists(logo_path):
