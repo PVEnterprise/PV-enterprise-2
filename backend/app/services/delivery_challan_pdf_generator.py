@@ -8,13 +8,51 @@ from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
 from datetime import datetime
 import os
 
 
+# ---------- Register font with ₹ symbol ----------
+def _register_unicode_font():
+    """Register Unicode font for rupee symbol. Tries bundled font first, then system fonts."""
+    # Get the directory where this file is located
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.dirname(os.path.dirname(current_dir))  # Go up to backend/
+    
+    paths = [
+        # Bundled font (highest priority)
+        os.path.join(backend_dir, "fonts", "DejaVuSans.ttf"),
+        # System fonts (fallback)
+        "/Library/Fonts/DejaVuSans.ttf",
+        "/Library/Fonts/DejaVu Sans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/local/share/fonts/DejaVuSans.ttf",
+    ]
+    
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                pdfmetrics.registerFont(TTFont("DejaVuSans", p))
+                return "DejaVuSans"
+            except Exception:
+                continue
+    
+    # Fallback to Helvetica (won't show ₹ symbol correctly)
+    return "Helvetica"
+
+_FONT = _register_unicode_font()
+RUPEE = "₹"
+
+
 class DeliveryChallanPDFGenerator:
     """Generate Delivery Challan PDF for dispatch."""
+    
+    # Brand Colors
+    BRAND_COLOR = colors.HexColor("#1B4F72")
+    ACCENT_COLOR = colors.HexColor("#DCECF8")
     
     def __init__(self, dispatch, order, customer):
         from app.core.config import settings
@@ -47,57 +85,58 @@ class DeliveryChallanPDFGenerator:
         """Setup custom paragraph styles."""
         self.styles.add(ParagraphStyle(
             name='CompanyName',
-            parent=self.styles['Heading1'],
-            fontSize=16,
-            textColor=colors.HexColor('#2C5F2D'),
-            spaceAfter=2
+            fontSize=18,
+            textColor=self.BRAND_COLOR,
+            fontName=_FONT,
+            leading=20
         ))
         
         self.styles.add(ParagraphStyle(
             name='DCTitle',
-            parent=self.styles['Heading1'],
             fontSize=18,
-            alignment=TA_RIGHT,
-            textColor=colors.black
+            textColor=self.BRAND_COLOR,
+            fontName=_FONT,
+            alignment=TA_CENTER,
+            leading=20
         ))
         
         self.styles.add(ParagraphStyle(
             name='CompanyDetails',
-            parent=self.styles['Normal'],
             fontSize=9,
-            textColor=colors.HexColor('#666666'),
-            alignment=TA_CENTER,
-            leading=11
-        ))
-        
-        self.styles.add(ParagraphStyle(
-            name='SectionTitle',
-            parent=self.styles['Heading2'],
-            fontSize=12,
-            textColor=colors.HexColor('#1a1a1a'),
-            spaceAfter=6,
-            spaceBefore=12
-        ))
-        
-        self.styles.add(ParagraphStyle(
-            name='SmallText',
-            parent=self.styles['Normal'],
-            fontSize=9,
+            fontName=_FONT,
+            alignment=TA_RIGHT,
             leading=11
         ))
         
         self.styles.add(ParagraphStyle(
             name='NormalText',
-            parent=self.styles['Normal'],
-            fontSize=10,
-            leading=12
+            fontSize=9,
+            fontName=_FONT,
+            leading=11
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='SectionHeader',
+            fontSize=9,
+            fontName=_FONT,
+            textColor=colors.white,
+            backColor=self.BRAND_COLOR,
+            leftIndent=4,
+            leading=11
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='SmallText',
+            fontSize=8,
+            fontName=_FONT,
+            leading=10
         ))
         
         self.styles.add(ParagraphStyle(
             name='BoldText',
-            parent=self.styles['Normal'],
             fontSize=10,
-            fontName='Helvetica-Bold'
+            fontName=_FONT,
+            leading=12
         ))
     
     def _build_header(self):
@@ -129,14 +168,12 @@ class DeliveryChallanPDFGenerator:
             )
         ]]
         
-        header_table = Table(header_data, colWidths=[55*mm, 55*mm, 70*mm])
+        header_table = Table(header_data, colWidths=[65*mm, 50*mm, 65*mm], rowHeights=[26*mm])
         header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN', (0, 0), (0, 0), 'LEFT'),
             ('ALIGN', (1, 0), (1, 0), 'CENTER'),
             ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ]))
         
         self.elements.append(header_table)
@@ -155,49 +192,37 @@ class DeliveryChallanPDFGenerator:
             ['Date', f': {dc_date}', '', ''],
         ]
         
-        dc_info_table = Table(dc_info_data, colWidths=[20*mm, 70*mm, 40*mm, 50*mm])
+        dc_info_table = Table(dc_info_data, colWidths=[30*mm, 60*mm, 40*mm, 50*mm])
         dc_info_table.setStyle(TableStyle([
             ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTNAME', (2, 0), (2, 0), 'Helvetica-Bold'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('FONTNAME', (0, 0), (-1, -1), _FONT),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.lightgrey),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 5),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
         ]))
         
         self.elements.append(dc_info_table)
         
-        # Customer details - Bill To section
-        customer_address = f"{self.customer.name}\n"
+        # Customer details - Bill To section (formatted like invoice/estimate)
+        customer_text = f'<b>{self.customer.hospital_name or self.customer.name}</b><br/>'
         if self.customer.address:
-            customer_address += f"{self.customer.address}\n"
+            customer_text += f'{self.customer.address}<br/>'
         if self.customer.city:
-            customer_address += f"{self.customer.city} "
-        if self.customer.state:
-            customer_address += f"{self.customer.state}\n"
+            customer_text += f'{self.customer.city}'
         if self.customer.pincode:
-            customer_address += f"{self.customer.pincode} "
-        customer_address += f"{self.COMPANY_COUNTRY}"
+            customer_text += f' - {self.customer.pincode}'
+        if self.customer.state:
+            customer_text += f'<br/>{self.customer.state}, India'
         
         customer_info_data = [
-            ['Bill To'],
-            [customer_address],
+            [Paragraph('Bill To', self.styles['SectionHeader'])],
+            [Paragraph(customer_text, self.styles['NormalText'])],
         ]
-        
         
         customer_table = Table(customer_info_data, colWidths=[180*mm])
         customer_table.setStyle(TableStyle([
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 5),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('BOX', (0, 0), (-1, -1), 0.25, colors.lightgrey),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
         ]))
         
         self.elements.append(customer_table)
@@ -226,8 +251,8 @@ class DeliveryChallanPDFGenerator:
                 f'{qty:.2f}\npcs'
             ])
         
-        # Add total row (merge columns 1-3 for Total Items label)
-        total_row = ['Total Items', f'{total_quantity:.2f}\npcs']
+        # Add total row (merge columns 0-2 for Total Items label, quantity in column 3)
+        total_row = ['Total Items', '', '', f'{total_quantity:.2f}\npcs']
         
         # Combine header, items, and total
         table_data = header + items_data + [total_row]
@@ -237,33 +262,29 @@ class DeliveryChallanPDFGenerator:
         
         items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
         
-        # Styling
+        # Styling - modern layout with accent color header
         table_style = [
-            # Header row
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            # Header row - accent color background
+            ('BACKGROUND', (0, 0), (-1, 0), self.ACCENT_COLOR),
+            ('FONTNAME', (0, 0), (-1, 0), _FONT),
             ('FONTSIZE', (0, 0), (-1, 0), 9),
             ('ALIGN', (0, 0), (0, 0), 'CENTER'),
             ('ALIGN', (2, 0), (-1, 0), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
             
             # Item rows
+            ('FONTNAME', (0, 1), (-1, -1), _FONT),
             ('FONTSIZE', (0, 1), (-1, -2), 9),
             ('ALIGN', (0, 1), (0, -2), 'CENTER'),  # # center
             ('ALIGN', (2, 1), (-1, -2), 'CENTER'),  # HSN and Qty center
-            ('VALIGN', (0, 1), (-1, -2), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 5),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
             
             # Total row - merge first 3 columns
             ('SPAN', (0, -1), (2, -1)),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
             ('FONTSIZE', (0, -1), (-1, -1), 9),
             ('ALIGN', (0, -1), (0, -1), 'RIGHT'),
-            ('ALIGN', (1, -1), (1, -1), 'CENTER'),
-            ('VALIGN', (0, -1), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (3, -1), (3, -1), 'CENTER'),
         ]
         
         items_table.setStyle(TableStyle(table_style))
@@ -277,8 +298,7 @@ class DeliveryChallanPDFGenerator:
         signature_text = Paragraph('Authorized Signature', self.styles['NormalText'])
         signature_table = Table([[signature_text]], colWidths=[180*mm])
         signature_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (0, 0), 'RIGHT'),
-            ('FONTSIZE', (0, 0), (0, 0), 10),
+            ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
         ]))
         
         self.elements.append(signature_table)
