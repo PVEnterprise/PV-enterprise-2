@@ -141,8 +141,10 @@ class DeliveryChallanPDFGenerator:
     
     def _build_header(self):
         """Build header with logo and company details + DELIVERY NOTE title."""
-        # Try to load logo
-        logo_path = '/Users/praneeth/Documents/PV_enterprise_2/backend/uploads/logo.png'
+        # Get dynamic logo path
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        backend_dir = os.path.dirname(os.path.dirname(current_dir))
+        logo_path = os.path.join(backend_dir, "uploads", "logo.png")
         logo_element = None
         
         if os.path.exists(logo_path):
