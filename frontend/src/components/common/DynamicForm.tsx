@@ -145,8 +145,8 @@ export default function DynamicForm({
         );
 
       case 'select':
-        // Add search functionality for selects with more than 5 options
-        const hasSearch = (field.options?.length || 0) > 5;
+        // Add search functionality for selects with more than 10 options
+        const hasSearch = (field.options?.length || 0) > 10;
         const [searchTerm, setSearchTerm] = useState('');
         const filteredOptions = hasSearch
           ? field.options?.filter(opt => 
