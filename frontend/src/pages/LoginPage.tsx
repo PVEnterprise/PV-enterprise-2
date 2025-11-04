@@ -84,14 +84,6 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <div className="text-sm text-gray-600 mt-4">
-            <p className="font-semibold mb-2">Demo Credentials:</p>
-            <ul className="space-y-1 text-xs">
-              <li>Admin: admin@medicalequipment.com / admin123</li>
-              <li>Sales: sales@medicalequipment.com / sales123</li>
-              <li>Decoder: decoder@medicalequipment.com / decoder123</li>
-            </ul>
-          </div>
         </form>
       </div>
     </div>
