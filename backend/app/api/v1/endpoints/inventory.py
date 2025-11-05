@@ -90,7 +90,7 @@ def create_inventory_item(
 @router.get("/", response_model=List[InventoryResponse])
 def list_inventory(
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(10000, ge=1, le=100000),
     search: Optional[str] = None,
     low_stock: bool = False,
     active_only: bool = True,
