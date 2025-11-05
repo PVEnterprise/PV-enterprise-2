@@ -173,7 +173,8 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         # Read inventory for pricing
         Permission.INVENTORY_READ,
         
-        # Read customers
+        # Customer management - can create and read
+        Permission.CUSTOMER_CREATE,
         Permission.CUSTOMER_READ,
         
         # Dashboard access
