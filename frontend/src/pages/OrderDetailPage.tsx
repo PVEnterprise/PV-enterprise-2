@@ -264,6 +264,7 @@ export default function OrderDetailPage() {
       alert(`Error: ${error.response?.data?.detail || error.message}`);
     },
   });
+  
 
   const approveMutation = useMutation({
     mutationFn: (comments?: string) => api.approveOrder(orderId!, comments),
@@ -284,6 +285,7 @@ export default function OrderDetailPage() {
       alert(`Error: ${error.response?.data?.detail || error.message}`);
     },
   });
+
 
   const handleApprove = () => {
     approveMutation.mutate(undefined);
@@ -838,6 +840,18 @@ export default function OrderDetailPage() {
                   <p className="text-sm text-blue-600 font-medium">Waiting for PO</p>
                   <p className="text-xs text-gray-600">Upload purchase order in attachments</p>
                 </div>
+                
+                {/* Get Quotation button for quoter, sales, and executive */}
+                {(user?.role_name === 'quoter' || user?.role_name === 'sales_rep' || user?.role_name === 'executive') && (
+                  <button
+                    onClick={handleGetQuotation}
+                    className="btn btn-secondary btn-sm w-full text-xs"
+                  >
+                    <FileText size={14} className="mr-1" />
+                    Get Quotation PDF
+                  </button>
+                )}
+                
                 {(user?.role_name === 'sales_rep' && order.sales_rep_id === user?.id) && (
                   <>
                     <button
