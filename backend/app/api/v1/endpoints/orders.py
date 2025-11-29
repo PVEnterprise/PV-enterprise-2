@@ -3,7 +3,7 @@ Order management endpoints with workflow support.
 """
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
 
@@ -250,6 +250,75 @@ def delete_order(
     db.commit()
     
     return None
+
+
+@router.patch("/{order_id}/order-number", response_model=dict)
+def update_order_number(
+    order_id: UUID,
+    new_order_number: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update order number.
+    Available for quoters and executives.
+    """
+    # Check if user is quoter or executive
+    if current_user.role_name not in ['quoter', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only quoters and executives can update order numbers"
+        )
+    
+    # Verify order exists
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Validate order number format (optional - adjust as needed)
+    if not new_order_number or len(new_order_number.strip()) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order number cannot be empty"
+        )
+    
+    # Check if order number already exists
+    existing_order = db.query(Order).filter(
+        Order.order_number == new_order_number.strip(),
+        Order.id != order_id
+    ).first()
+    
+    if existing_order:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order number '{new_order_number}' already exists"
+        )
+    
+    # Store old order number for audit trail
+    old_order_number = order.order_number
+    
+    # Update order number
+    order.order_number = new_order_number.strip()
+    order.updated_at = datetime.utcnow()
+    
+    # Track order number change in audit trail
+    add_order_action(
+        order=order,
+        action="Order Number Updated",
+        user=current_user,
+        details=f"Changed from '{old_order_number}' to '{new_order_number.strip()}'"
+    )
+    
+    db.commit()
+    
+    return {
+        "message": "Order number updated successfully",
+        "old_order_number": old_order_number,
+        "new_order_number": new_order_number.strip()
+    }
 
 
 @router.put("/{order_id}/decoded-items", response_model=dict)

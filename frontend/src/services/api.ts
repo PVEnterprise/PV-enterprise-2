@@ -67,6 +67,9 @@ class ApiService {
   async approveOrder(orderId: string, comments?: string) {
     return (await this.client.post(`/orders/${orderId}/approve`, { comments })).data;
   }
+  async updateOrderNumber(orderId: string, newOrderNumber: string) {
+    return (await this.client.patch(`/orders/${orderId}/order-number`, { new_order_number: newOrderNumber })).data;
+  }
 
   // Inventory
   getInventory = async (params?: any) => {

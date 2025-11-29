@@ -4,7 +4,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { ArrowLeft, FileText, Edit2, X, Check } from 'lucide-react';
 import api from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 
@@ -68,6 +68,8 @@ export default function GenerateQuotationPage() {
 
   const [selectedPriceListId, setSelectedPriceListId] = useState<string>('');
   const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [isEditingOrderNumber, setIsEditingOrderNumber] = useState(false);
+  const [editedOrderNumber, setEditedOrderNumber] = useState('');
 
   // Check role access
   const canAccess = user?.role_name === 'quoter' || user?.role_name === 'executive';
@@ -174,6 +176,41 @@ export default function GenerateQuotationPage() {
     },
   });
 
+  // Update order number mutation
+  const updateOrderNumberMutation = useMutation({
+    mutationFn: ({ orderId, newOrderNumber }: { orderId: string; newOrderNumber: string }) =>
+      api.updateOrderNumber(orderId, newOrderNumber),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      setIsEditingOrderNumber(false);
+      setEditedOrderNumber('');
+    },
+    onError: (error: any) => {
+      alert(`Error updating order number: ${error.response?.data?.detail || error.message || 'Unknown error'}`);
+    },
+  });
+
+  const handleEditOrderNumber = () => {
+    setEditedOrderNumber(order?.order_number || '');
+    setIsEditingOrderNumber(true);
+  };
+
+  const handleSaveOrderNumber = () => {
+    if (!editedOrderNumber.trim()) {
+      alert('Order number cannot be empty');
+      return;
+    }
+    updateOrderNumberMutation.mutate({
+      orderId: orderId!,
+      newOrderNumber: editedOrderNumber.trim(),
+    });
+  };
+
+  const handleCancelEditOrderNumber = () => {
+    setIsEditingOrderNumber(false);
+    setEditedOrderNumber('');
+  };
+
   const handleSaveAndSubmit = () => {
     if (quotationItems.length === 0) {
       alert('No items to quote');
@@ -230,8 +267,50 @@ export default function GenerateQuotationPage() {
           <div className="flex items-center gap-4">
             {/* Order Info */}
             <div className="flex gap-4 text-xs">
-              <span className="text-gray-600">
-                Order: <span className="font-semibold text-gray-900">{order.order_number}</span>
+              <span className="text-gray-600 flex items-center gap-2">
+                Order: 
+                {isEditingOrderNumber ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={editedOrderNumber}
+                      onChange={(e) => setEditedOrderNumber(e.target.value)}
+                      className="input input-sm w-40 text-xs font-semibold"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveOrderNumber();
+                        if (e.key === 'Escape') handleCancelEditOrderNumber();
+                      }}
+                    />
+                    <button
+                      onClick={handleSaveOrderNumber}
+                      disabled={updateOrderNumberMutation.isPending}
+                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                      title="Save"
+                    >
+                      <Check size={14} className="text-green-600" />
+                    </button>
+                    <button
+                      onClick={handleCancelEditOrderNumber}
+                      disabled={updateOrderNumberMutation.isPending}
+                      className="p-1 hover:bg-red-100 rounded transition-colors"
+                      title="Cancel"
+                    >
+                      <X size={14} className="text-red-600" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="font-semibold text-gray-900">{order.order_number}</span>
+                    <button
+                      onClick={handleEditOrderNumber}
+                      className="p-1 hover:bg-gray-100 rounded transition-colors"
+                      title="Edit order number"
+                    >
+                      <Edit2 size={12} className="text-gray-600 hover:text-blue-600" />
+                    </button>
+                  </>
+                )}
               </span>
               <span className="text-gray-600">
                 Customer: <span className="font-semibold text-gray-900">{order.customer.name}</span>

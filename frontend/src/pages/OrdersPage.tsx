@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Order } from '@/types';
-import { Plus } from 'lucide-react';
+import { Plus, Edit2, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column } from '@/components/common/DataTable';
@@ -14,6 +14,8 @@ import { useNavigate } from 'react-router-dom';
 export default function OrdersPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [newOrderNumber, setNewOrderNumber] = useState('');
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -99,6 +101,45 @@ export default function OrdersPage() {
     },
   });
 
+  // Update order number mutation
+  const updateOrderNumberMutation = useMutation({
+    mutationFn: ({ orderId, newOrderNumber }: { orderId: string; newOrderNumber: string }) =>
+      api.updateOrderNumber(orderId, newOrderNumber),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      setEditingOrder(null);
+      setNewOrderNumber('');
+    },
+    onError: (error: any) => {
+      alert(`Error updating order number: ${error.response?.data?.detail || error.message || 'Unknown error'}`);
+    },
+  });
+
+  // Check if user can edit order numbers (quoter or executive)
+  const canEditOrderNumber = user?.role_name === 'quoter' || user?.role_name === 'executive';
+
+  const handleEditOrderNumber = (order: Order, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent row click
+    setEditingOrder(order);
+    setNewOrderNumber(order.order_number);
+  };
+
+  const handleSaveOrderNumber = () => {
+    if (!editingOrder || !newOrderNumber.trim()) {
+      alert('Order number cannot be empty');
+      return;
+    }
+    updateOrderNumberMutation.mutate({
+      orderId: editingOrder.id,
+      newOrderNumber: newOrderNumber.trim(),
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingOrder(null);
+    setNewOrderNumber('');
+  };
+
   const handleSubmit = async (data: Record<string, any>) => {
     try {
       console.log('Form data received:', data);
@@ -167,25 +208,36 @@ export default function OrdersPage() {
     {
       key: 'order_number',
       label: 'Order #',
-      width: '15%',
+      width: '20%',
       render: (value: string, row: Order) => (
-        <a
-          href={`/orders/${row.id}`}
-          onClick={(e) => {
-            e.preventDefault();
-            window.location.href = `/orders/${row.id}`;
-          }}
-          className="text-primary-600 hover:text-primary-800 font-medium hover:underline"
-        >
-          {value}
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/orders/${row.id}`}
+            onClick={(e) => {
+              e.preventDefault();
+              window.location.href = `/orders/${row.id}`;
+            }}
+            className="text-primary-600 hover:text-primary-800 font-medium hover:underline"
+          >
+            {value}
+          </a>
+          {canEditOrderNumber && (
+            <button
+              onClick={(e) => handleEditOrderNumber(row, e)}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              title="Edit order number"
+            >
+              <Edit2 size={14} className="text-gray-600 hover:text-primary-600" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
       key: 'customer.name',
       label: 'Customer Name',
       width: '25%',
-      render: (value: any, row: Order) => row.customer?.name || row.customer?.hospital_name || '-',
+      render: (_value: any, row: Order) => row.customer?.name || row.customer?.hospital_name || '-',
     },
     {
       key: 'status',
@@ -292,6 +344,78 @@ export default function OrdersPage() {
           submitLabel="Create Order"
           isLoading={createMutation.isPending}
         />
+      )}
+
+      {/* Edit Order Number Modal */}
+      {editingOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Edit Order Number</h2>
+              <button
+                onClick={handleCancelEdit}
+                className="text-gray-400 hover:text-gray-600"
+                disabled={updateOrderNumberMutation.isPending}
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="px-6 py-4">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Order Number
+                </label>
+                <p className="text-gray-600 font-mono bg-gray-50 p-2 rounded">
+                  {editingOrder.order_number}
+                </p>
+              </div>
+              <div>
+                <label htmlFor="newOrderNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                  New Order Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="newOrderNumber"
+                  type="text"
+                  value={newOrderNumber}
+                  onChange={(e) => setNewOrderNumber(e.target.value)}
+                  className="input w-full"
+                  placeholder="Enter new order number"
+                  disabled={updateOrderNumberMutation.isPending}
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This will update the order number in the database and audit trail.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+              <button
+                onClick={handleCancelEdit}
+                className="btn btn-secondary"
+                disabled={updateOrderNumberMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveOrderNumber}
+                className="btn btn-primary flex items-center"
+                disabled={updateOrderNumberMutation.isPending || !newOrderNumber.trim()}
+              >
+                {updateOrderNumberMutation.isPending ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Updating...
+                  </>
+                ) : (
+                  'Update Order Number'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
