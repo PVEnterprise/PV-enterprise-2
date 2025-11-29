@@ -367,58 +367,6 @@ def generate_order_quotation_pdf(order: Order) -> BytesIO:
     """
     Generate a quotation PDF directly from an order (without Quotation model).
     Used for quick quotation generation from approved orders.
-    
-    Args:
-        order: Order model instance with loaded relationships
-        
-    Returns:
-        BytesIO buffer containing the PDF
     """
-    from datetime import date, timedelta
-    
-    # Create a temporary quotation-like object for PDF generation
-    class TempQuotation:
-        def __init__(self, order):
-            self.order = order
-            self.quote_number = f"QUOTE-{order.order_number}"
-            self.created_at = order.created_at
-            self.valid_until = date.today() + timedelta(days=30)
-            self.payment_terms = "Net 30 days"
-            self.delivery_terms = "Ex-warehouse"
-            self.notes = order.notes
-            self.gst_rate = 18.00  # Default GST rate
-            self.discount_percentage = 0.00
-            self.discount_amount = 0.00
-            
-            # Calculate totals from order items
-            self.subtotal = sum(
-                item.quantity * (item.unit_price or 0)
-                for item in order.items
-                if item.unit_price
-            )
-            
-            # Calculate GST (weighted average from items)
-            total_gst = sum(
-                item.quantity * (item.unit_price or 0) * (item.gst_percentage or 18) / 100
-                for item in order.items
-                if item.unit_price
-            )
-            self.gst_amount = total_gst
-            self.total_amount = self.subtotal + self.gst_amount
-            
-            # Convert order items to quotation items format
-            self.items = []
-            for item in order.items:
-                if item.inventory_item and item.unit_price:
-                    temp_item = type('obj', (object,), {
-                        'description': item.item_description or item.inventory_item.description or item.inventory_item.sku,
-                        'quantity': item.quantity,
-                        'unit_price': item.unit_price,
-                        'line_total': item.quantity * item.unit_price,
-                        'gst_percentage': item.gst_percentage or 18.00  # Include GST percentage
-                    })()
-                    self.items.append(temp_item)
-    
-    temp_quotation = TempQuotation(order)
-    generator = QuotationPDFGenerator(temp_quotation)
-    return generator.generate()
+    from app.services.estimate_pdf_generator import generate_estimate_pdf
+    return generate_estimate_pdf(order)

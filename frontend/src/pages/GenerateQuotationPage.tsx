@@ -29,6 +29,7 @@ interface OrderItem {
   inventory: Inventory;
   quantity: number;
   unit_price: number;
+  gst_percentage?: number;
 }
 
 interface Order {
@@ -104,12 +105,14 @@ export default function GenerateQuotationPage() {
     return order.items.map((item) => {
       // Priority: custom price > price list > standard price
       let unitPrice = Number(item.unit_price);
-      let taxPercent = Number(item.inventory.tax || 5); // Default from inventory or 5%
+      // Use order item's GST percentage (already set when item was decoded)
+      let taxPercent = Number(item.gst_percentage || item.inventory.tax || 5);
       
       // Check if there's a custom price for this item
       if (customUnitPrices[item.id] !== undefined) {
         unitPrice = customUnitPrices[item.id];
       } else if (selectedPriceListId && priceListItems.length > 0) {
+        // Use price list price if available
         const priceListItem = priceListItems.find(
           (pli) => pli.inventory_id === item.inventory_id
         );
