@@ -190,6 +190,14 @@ class ApiService {
     return (await this.client.post(`/orders/${orderId}/quotation-generated`, data)).data;
   }
   
+  // Generate quotation preview PDF with custom prices
+  generateQuotationPreviewPDF = async (orderId: string, data: any) => {
+    const response = await this.client.post(`/orders/${orderId}/quotation/preview-pdf`, data, {
+      responseType: 'blob'
+    });
+    return response.data;
+  }
+  
   // Attachments
   uploadAttachment = async (entityType: string, entityId: string, formData: FormData) => {
     console.log('API uploadAttachment called');

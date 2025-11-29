@@ -70,6 +70,8 @@ export default function GenerateQuotationPage() {
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [isEditingOrderNumber, setIsEditingOrderNumber] = useState(false);
   const [editedOrderNumber, setEditedOrderNumber] = useState('');
+  // Store custom unit prices per item (itemId -> custom price)
+  const [customUnitPrices, setCustomUnitPrices] = useState<Record<string, number>>({});
 
   // Check role access
   const canAccess = user?.role_name === 'quoter' || user?.role_name === 'executive';
@@ -95,16 +97,19 @@ export default function GenerateQuotationPage() {
     enabled: !!selectedPriceListId,
   });
 
-  // Calculate quotation items whenever order, price list, or discount changes
+  // Calculate quotation items whenever order, price list, discount, or custom prices change
   const quotationItems = useMemo(() => {
     if (!order?.items) return [];
 
     return order.items.map((item) => {
-      // Get price and tax from selected price list or use standard price/tax
+      // Priority: custom price > price list > standard price
       let unitPrice = Number(item.unit_price);
       let taxPercent = Number(item.inventory.tax || 5); // Default from inventory or 5%
       
-      if (selectedPriceListId && priceListItems.length > 0) {
+      // Check if there's a custom price for this item
+      if (customUnitPrices[item.id] !== undefined) {
+        unitPrice = customUnitPrices[item.id];
+      } else if (selectedPriceListId && priceListItems.length > 0) {
         const priceListItem = priceListItems.find(
           (pli) => pli.inventory_id === item.inventory_id
         );
@@ -131,7 +136,7 @@ export default function GenerateQuotationPage() {
         total_amount: totalAmount,
       };
     });
-  }, [order?.items, selectedPriceListId, priceListItems, discountPercent]);
+  }, [order?.items, selectedPriceListId, priceListItems, discountPercent, customUnitPrices]);
 
   // Calculate totals
   const subTotal = useMemo(() => 
@@ -164,6 +169,7 @@ export default function GenerateQuotationPage() {
         discount_amount: discountAmount,
         tax_amount: totalTaxAmount,
         grand_total: grandTotal,
+        custom_prices: customUnitPrices, // Send custom prices to backend
       });
     },
     onSuccess: () => {
@@ -209,6 +215,24 @@ export default function GenerateQuotationPage() {
   const handleCancelEditOrderNumber = () => {
     setIsEditingOrderNumber(false);
     setEditedOrderNumber('');
+  };
+
+  // Handle unit price change
+  const handleUnitPriceChange = (itemId: string, newPrice: string) => {
+    const price = parseFloat(newPrice);
+    if (!isNaN(price) && price >= 0) {
+      setCustomUnitPrices(prev => ({
+        ...prev,
+        [itemId]: price
+      }));
+    } else if (newPrice === '') {
+      // Remove custom price if input is cleared
+      setCustomUnitPrices(prev => {
+        const updated = { ...prev };
+        delete updated[itemId];
+        return updated;
+      });
+    }
   };
 
   const handleSaveAndSubmit = () => {
@@ -392,7 +416,24 @@ export default function GenerateQuotationPage() {
                       </div>
                     </td>
                     <td className="p-3 text-xs text-gray-600 whitespace-nowrap">{item.hsn_code || '-'}</td>
-                    <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">₹{Number(item.final_unit_price).toFixed(2)}</td>
+                    <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="text-gray-600">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.final_unit_price}
+                          onChange={(e) => handleUnitPriceChange(item.id, e.target.value)}
+                          className={`w-24 text-right border rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            customUnitPrices[item.id] !== undefined 
+                              ? 'border-blue-500 bg-blue-50' 
+                              : 'border-gray-300'
+                          }`}
+                          title={customUnitPrices[item.id] !== undefined ? 'Custom price (edited)' : 'Click to edit price'}
+                        />
+                      </div>
+                    </td>
                     <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">{item.quantity}</td>
                     <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{discountPercent}%</td>
                     <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">₹{Number(item.amount).toFixed(2)}</td>
@@ -451,28 +492,18 @@ export default function GenerateQuotationPage() {
             <button
               onClick={async () => {
                 try {
-                  // Generate PDF by downloading from backend
-                  const token = localStorage.getItem('access_token');
-                  const apiUrl = `/api/v1/orders/${orderId}/estimate-pdf?discount=${discountPercent}${selectedPriceListId ? `&price_list_id=${selectedPriceListId}` : ''}`;
-                  const response = await fetch(
-                    apiUrl,
-                    {
-                      headers: {
-                        'Authorization': `Bearer ${token}`
-                      }
-                    }
-                  );
-                  
-                  if (!response.ok) {
-                    throw new Error('Failed to generate PDF');
-                  }
+                  // Generate PDF preview with custom prices
+                  const blob = await api.generateQuotationPreviewPDF(orderId!, {
+                    price_list_id: selectedPriceListId || null,
+                    discount_percent: discountPercent,
+                    custom_prices: customUnitPrices,
+                  });
                   
                   // Download the PDF
-                  const blob = await response.blob();
                   const blobUrl = window.URL.createObjectURL(blob);
                   const link = document.createElement('a');
                   link.href = blobUrl;
-                  link.download = `Estimate_${order.order_number}.pdf`;
+                  link.download = `Quotation_Preview_${order.order_number}.pdf`;
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);

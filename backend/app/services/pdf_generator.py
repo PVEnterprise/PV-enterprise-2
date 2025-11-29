@@ -47,6 +47,14 @@ class QuotationPDFGenerator:
         self.COMPANY_CITY = settings.COMPANY_CITY
         self.COMPANY_COUNTRY = settings.COMPANY_COUNTRY
         self.COMPANY_GSTIN = settings.COMPANY_GSTIN
+        
+        # Construct full address
+        self.COMPANY_ADDRESS = f"{self.COMPANY_PLOT}, {self.COMPANY_AREA}, {self.COMPANY_CITY}, {self.COMPANY_COUNTRY}"
+        
+        # Add missing contact details (you can move these to settings later)
+        self.COMPANY_PHONE = "+91 9876543210"  # TODO: Add to settings
+        self.COMPANY_EMAIL = "info@sreedevilifesciences.com"  # TODO: Add to settings
+        self.COMPANY_GST = self.COMPANY_GSTIN
     
     def _setup_custom_styles(self):
         """Setup custom paragraph styles."""
@@ -403,7 +411,7 @@ def generate_order_quotation_pdf(order: Order) -> BytesIO:
             for item in order.items:
                 if item.inventory_item and item.unit_price:
                     temp_item = type('obj', (object,), {
-                        'description': item.inventory_item.item_name,
+                        'description': item.item_description or item.inventory_item.description or item.inventory_item.sku,
                         'quantity': item.quantity,
                         'unit_price': item.unit_price,
                         'line_total': item.quantity * item.unit_price,

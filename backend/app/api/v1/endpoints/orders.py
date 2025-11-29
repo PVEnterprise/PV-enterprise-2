@@ -807,6 +807,85 @@ def generate_quotation_pdf(
     )
 
 
+@router.post("/{order_id}/quotation/preview-pdf")
+def generate_quotation_preview_pdf(
+    order_id: UUID,
+    quotation_data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate quotation PDF preview with custom prices before saving.
+    
+    Available for quoters and executives.
+    Accepts custom_prices, discount_percent, and price_list_id.
+    """
+    from fastapi.responses import StreamingResponse
+    from app.services.pdf_generator import generate_order_quotation_pdf
+    from decimal import Decimal
+    
+    # Check if user is quoter or executive
+    if current_user.role_name not in ['quoter', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only quoters and executives can generate quotation previews"
+        )
+    
+    # Fetch order with all relationships
+    order = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.inventory_item),
+        joinedload(Order.customer)
+    ).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+    
+    # Create a temporary copy of order items with custom prices
+    # We'll modify the order object temporarily for PDF generation
+    original_prices = {}
+    original_discount = order.discount_percentage
+    
+    try:
+        # Apply custom prices to order items temporarily
+        if 'custom_prices' in quotation_data and quotation_data['custom_prices']:
+            custom_prices = quotation_data['custom_prices']
+            for item in order.items:
+                item_id_str = str(item.id)
+                if item_id_str in custom_prices:
+                    original_prices[item.id] = item.unit_price
+                    item.unit_price = Decimal(str(custom_prices[item_id_str]))
+        
+        # Apply discount temporarily
+        if 'discount_percent' in quotation_data:
+            order.discount_percentage = Decimal(str(quotation_data['discount_percent']))
+        
+        # Generate PDF with modified prices
+        pdf_buffer = generate_order_quotation_pdf(order)
+        
+        # Return as downloadable file
+        filename = f"Quotation_Preview_{order.order_number}.pdf"
+        
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+    
+    finally:
+        # Restore original prices (important: don't commit changes)
+        for item in order.items:
+            if item.id in original_prices:
+                item.unit_price = original_prices[item.id]
+        order.discount_percentage = original_discount
+        # Explicitly expire the session to prevent accidental commits
+        db.expire_all()
+
+
 @router.get("/{order_id}/estimate-pdf")
 def generate_estimate_pdf_with_discount(
     order_id: UUID,
@@ -1068,6 +1147,14 @@ def mark_quotation_generated(
                 pli = price_map[item.inventory_id]
                 item.unit_price = pli.unit_price
                 item.gst_percentage = pli.tax_percentage or item.gst_percentage
+    
+    # Update custom unit prices if provided (takes priority over price list)
+    if 'custom_prices' in quotation_data and quotation_data['custom_prices']:
+        custom_prices = quotation_data['custom_prices']  # Dict of item_id -> unit_price
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in custom_prices:
+                item.unit_price = custom_prices[item_id_str]
     
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
