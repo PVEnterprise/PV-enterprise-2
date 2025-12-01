@@ -70,6 +70,9 @@ class ApiService {
   async updateOrderNumber(orderId: string, newOrderNumber: string) {
     return (await this.client.patch(`/orders/${orderId}/order-number`, { new_order_number: newOrderNumber })).data;
   }
+  deleteOrder = async (orderId: string) => {
+    return (await this.client.delete(`/orders/${orderId}`)).data;
+  }
 
   // Inventory
   getInventory = async (params?: any) => {

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Order } from '@/types';
-import { Plus, Edit2, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, X, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column } from '@/components/common/DataTable';
@@ -127,8 +127,22 @@ export default function OrdersPage() {
     },
   });
 
+  // Delete order mutation
+  const deleteOrderMutation = useMutation({
+    mutationFn: api.deleteOrder,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (error: any) => {
+      alert(`Error deleting order: ${error.response?.data?.detail || error.message || 'Unknown error'}`);
+    },
+  });
+
   // Check if user can edit order numbers (quoter or executive)
   const canEditOrderNumber = user?.role_name === 'quoter' || user?.role_name === 'executive';
+  
+  // Check if user can delete orders (executive only)
+  const canDeleteOrder = user?.role_name === 'executive';
 
   const handleEditOrderNumber = (order: Order, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent row click
@@ -150,6 +164,16 @@ export default function OrdersPage() {
   const handleCancelEdit = () => {
     setEditingOrder(null);
     setNewOrderNumber('');
+  };
+
+  const handleDeleteOrder = (order: Order, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent row click
+    
+    const confirmMessage = `Are you sure you want to delete order ${order.order_number}?\n\nThis will permanently delete:\n- The order and all its items\n- All quotations and quotation items\n- All invoices and invoice items\n- All dispatches and dispatch items\n- All approvals\n- All attachments\n\nThis action cannot be undone.`;
+    
+    if (window.confirm(confirmMessage)) {
+      deleteOrderMutation.mutate(order.id);
+    }
   };
 
   const handleSubmit = async (data: Record<string, any>) => {
@@ -240,6 +264,15 @@ export default function OrdersPage() {
               title="Edit order number"
             >
               <Edit2 size={14} className="text-gray-600 hover:text-primary-600" />
+            </button>
+          )}
+          {canDeleteOrder && (
+            <button
+              onClick={(e) => handleDeleteOrder(row, e)}
+              className="p-1 hover:bg-red-100 rounded transition-colors"
+              title="Delete order"
+            >
+              <Trash2 size={14} className="text-gray-600 hover:text-red-600" />
             </button>
           )}
         </div>
