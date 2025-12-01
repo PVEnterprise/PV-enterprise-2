@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Order } from '@/types';
-import { Plus, Edit2, X } from 'lucide-react';
+import { Plus, Edit2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column } from '@/components/common/DataTable';
@@ -16,13 +16,25 @@ export default function OrdersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [newOrderNumber, setNewOrderNumber] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(100); // Match backend default
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ['orders', selectedStatus],
-    queryFn: () => api.getOrders({ status: selectedStatus || undefined }),
+    queryKey: ['orders', selectedStatus, currentPage],
+    queryFn: () => api.getOrders({ 
+      status: selectedStatus || undefined,
+      skip: (currentPage - 1) * itemsPerPage,
+      limit: itemsPerPage,
+    }),
   });
+
+  // Reset to page 1 when status filter changes
+  const handleStatusChange = (newStatus: string) => {
+    setSelectedStatus(newStatus);
+    setCurrentPage(1);
+  };
 
   // Check if user has permission to create orders
   const canCreateOrder = user?.role?.permissions?.['order:create'] === true;
@@ -299,7 +311,7 @@ export default function OrdersPage() {
             <label className="text-sm font-medium text-gray-700">Status:</label>
             <select
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => handleStatusChange(e.target.value)}
               className="input input-sm"
             >
               <option value="">All</option>
@@ -324,7 +336,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Scrollable Table Container */}
-      <div className="overflow-auto max-h-[calc(100vh-200px)]">
+      <div className="overflow-auto max-h-[calc(100vh-260px)]">
         <DataTable
           data={orders || []}
           columns={columns}
@@ -333,6 +345,31 @@ export default function OrdersPage() {
           showAuditInfo={true}
           onRowClick={handleRowClick}
         />
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="bg-white p-4 rounded-lg shadow-sm mt-4 flex items-center justify-between">
+        <div className="text-sm text-gray-600">
+          Page {currentPage} • Showing {orders?.length || 0} orders
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1 || isLoading}
+            className="btn btn-secondary btn-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={16} className="mr-1" />
+            Previous
+          </button>
+          <button
+            onClick={() => setCurrentPage(prev => prev + 1)}
+            disabled={!orders || orders.length < itemsPerPage || isLoading}
+            className="btn btn-secondary btn-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+            <ChevronRight size={16} className="ml-1" />
+          </button>
+        </div>
       </div>
 
       {showForm && (
