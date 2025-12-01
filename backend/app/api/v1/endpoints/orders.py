@@ -15,6 +15,10 @@ from app.models.order import Order, OrderItem
 from app.models.customer import Customer
 from app.models.inventory import Inventory
 from app.models.approval import Approval
+from app.models.attachment import Attachment
+from app.models.quotation import Quotation, QuotationItem
+from app.models.invoice import Invoice, InvoiceItem
+from app.models.dispatch import Dispatch, DispatchItem
 from app.utils.order_tracking import add_order_action
 from app.schemas.order import (
     OrderCreate,
@@ -234,7 +238,14 @@ def delete_order(
     current_user: User = Depends(PermissionChecker(Permission.ORDER_DELETE))
 ):
     """
-    Delete an order (soft delete by setting status to cancelled).
+    Delete an order and all its related data (hard delete).
+    Cascades deletion to:
+    - Dispatch items and dispatches
+    - Invoice items and invoices
+    - Quotation items and quotations
+    - Order items
+    - Approvals
+    - Attachments
     """
     order = db.query(Order).filter(Order.id == order_id).first()
     
@@ -244,12 +255,64 @@ def delete_order(
             detail="Order not found"
         )
     
-    # Soft delete
-    order.status = "cancelled"
-    order.updated_at = datetime.utcnow()
-    db.commit()
-    
-    return None
+    try:
+        # Delete in correct order to respect foreign key constraints
+        
+        # 1. Delete dispatch items first (references order_items)
+        dispatch_ids = db.query(Dispatch.id).filter(Dispatch.order_id == order_id).all()
+        dispatch_ids = [d[0] for d in dispatch_ids]
+        if dispatch_ids:
+            db.query(DispatchItem).filter(DispatchItem.dispatch_id.in_(dispatch_ids)).delete(synchronize_session=False)
+        
+        # 2. Delete dispatches
+        db.query(Dispatch).filter(Dispatch.order_id == order_id).delete(synchronize_session=False)
+        
+        # 3. Delete invoice items
+        invoice_ids = db.query(Invoice.id).filter(Invoice.order_id == order_id).all()
+        invoice_ids = [i[0] for i in invoice_ids]
+        if invoice_ids:
+            db.query(InvoiceItem).filter(InvoiceItem.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
+        
+        # 4. Delete invoices
+        db.query(Invoice).filter(Invoice.order_id == order_id).delete(synchronize_session=False)
+        
+        # 5. Delete quotation items
+        quotation_ids = db.query(Quotation.id).filter(Quotation.order_id == order_id).all()
+        quotation_ids = [q[0] for q in quotation_ids]
+        if quotation_ids:
+            db.query(QuotationItem).filter(QuotationItem.quotation_id.in_(quotation_ids)).delete(synchronize_session=False)
+        
+        # 6. Delete quotations
+        db.query(Quotation).filter(Quotation.order_id == order_id).delete(synchronize_session=False)
+        
+        # 7. Delete order items
+        db.query(OrderItem).filter(OrderItem.order_id == order_id).delete(synchronize_session=False)
+        
+        # 8. Delete approvals (polymorphic - entity_type = 'order')
+        db.query(Approval).filter(
+            Approval.entity_type == 'order',
+            Approval.entity_id == order_id
+        ).delete(synchronize_session=False)
+        
+        # 9. Delete attachments (polymorphic - entity_type = 'order')
+        db.query(Attachment).filter(
+            Attachment.entity_type == 'order',
+            Attachment.entity_id == order_id
+        ).delete(synchronize_session=False)
+        
+        # 10. Finally, delete the order itself
+        db.delete(order)
+        
+        db.commit()
+        
+        return None
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting order: {str(e)}"
+        )
 
 
 @router.patch("/{order_id}/order-number", response_model=dict)
