@@ -38,13 +38,25 @@ router = APIRouter()
 
 
 def generate_order_number(db: Session) -> str:
-    """Generate unique order number."""
+    """Generate unique order number with collision handling."""
+    import uuid as uuid_module
     year = datetime.now().year
-    # Get count of orders this year
-    count = db.query(Order).filter(
-        Order.order_number.like(f"ORD-{year}-%")
-    ).count()
-    return f"ORD-{year}-{count + 1:04d}"
+    max_attempts = 10
+    
+    for attempt in range(max_attempts):
+        # Get count of orders this year
+        count = db.query(Order).filter(
+            Order.order_number.like(f"ORD-{year}-%")
+        ).count()
+        order_number = f"ORD-{year}-{count + 1 + attempt:04d}"
+        
+        # Check if this order number already exists
+        exists = db.query(Order).filter(Order.order_number == order_number).first()
+        if not exists:
+            return order_number
+    
+    # Fallback: use UUID suffix to guarantee uniqueness
+    return f"ORD-{year}-{uuid_module.uuid4().hex[:8].upper()}"
 
 
 @router.post("/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
