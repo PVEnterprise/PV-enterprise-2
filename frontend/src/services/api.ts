@@ -87,6 +87,9 @@ class ApiService {
   deleteInventoryItem = async (id: string) => {
     return (await this.client.delete(`/inventory/${id}`)).data;
   }
+  upsertInventoryItem = async (data: any) => {
+    return (await this.client.post('/inventory/upsert', data)).data;
+  }
 
   // Quotations
   getQuotations = async () => {
