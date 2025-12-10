@@ -188,7 +188,8 @@ export default function InventoryPage() {
           console.log('First row keys:', Object.keys(jsonData[0] || {}));
           console.log('First 3 rows from Excel:', jsonData.slice(0, 3));
 
-          let successCount = 0;
+          let createdCount = 0;
+          let updatedCount = 0;
           let errors: string[] = [];
           let skippedCount = 0;
 
@@ -233,7 +234,7 @@ export default function InventoryPage() {
             }
 
             try {
-              await api.createInventoryItem({
+              const result = await api.upsertInventoryItem({
                 sku: String(sku),
                 description: description ? String(description) : undefined,
                 batch_no: batchNo ? String(batchNo) : undefined,
@@ -242,7 +243,11 @@ export default function InventoryPage() {
                 hsn_code: hsnStr,
                 tax: taxNum,
               });
-              successCount++;
+              if (result.created) {
+                createdCount++;
+              } else {
+                updatedCount++;
+              }
             } catch (error: any) {
               const errorMsg = error.response?.data?.detail || error.message;
               errors.push(`Failed to import ${sku}: ${errorMsg}`);
@@ -253,12 +258,12 @@ export default function InventoryPage() {
           queryClient.invalidateQueries({ queryKey: ['inventory'] });
 
           // Show results
-          let message = `Successfully imported ${successCount} item(s).`;
+          let message = `Import complete!\n\n✅ Created: ${createdCount} new item(s)\n🔄 Updated: ${updatedCount} existing item(s)`;
           if (skippedCount > 0) {
-            message += `\nSkipped ${skippedCount} row(s) (empty or missing required fields).`;
+            message += `\n⏭️ Skipped: ${skippedCount} row(s) (empty or missing required fields)`;
           }
           if (errors.length > 0) {
-            message += `\n\nErrors:\n${errors.slice(0, 10).join('\n')}`;
+            message += `\n\n❌ Errors:\n${errors.slice(0, 10).join('\n')}`;
             if (errors.length > 10) {
               message += `\n... and ${errors.length - 10} more`;
             }
@@ -448,7 +453,7 @@ export default function InventoryPage() {
                   <li><strong>Tax %</strong> - Tax percentage 0-100 (required)</li>
                 </ul>
                 <p className="text-xs text-gray-500 italic">
-                  Items with duplicate SKUs will be skipped.
+                  Items with existing SKUs will be updated with the new values.
                 </p>
               </div>
               

@@ -274,3 +274,47 @@ def list_categories(
     ).all()
     
     return [cat[0] for cat in categories if cat[0]]
+
+
+class UpsertResponse(BaseModel):
+    """Response for upsert operation."""
+    item: InventoryResponse
+    created: bool  # True if created, False if updated
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.post("/upsert", response_model=UpsertResponse)
+def upsert_inventory_item(
+    item_data: InventoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(Permission.INVENTORY_CREATE))
+):
+    """
+    Create or update an inventory item by SKU.
+    
+    If SKU exists, updates the existing item.
+    If SKU doesn't exist, creates a new item.
+    
+    Used for bulk import from Excel.
+    """
+    # Check if SKU already exists
+    existing = db.query(Inventory).filter(Inventory.sku == item_data.sku).first()
+    
+    if existing:
+        # Update existing item
+        update_data = item_data.model_dump()
+        for field, value in update_data.items():
+            setattr(existing, field, value)
+        existing.is_active = True  # Reactivate if it was soft-deleted
+        existing.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return UpsertResponse(item=existing, created=False)
+    else:
+        # Create new item
+        inventory = Inventory(**item_data.model_dump())
+        db.add(inventory)
+        db.commit()
+        db.refresh(inventory)
+        return UpsertResponse(item=inventory, created=True)
