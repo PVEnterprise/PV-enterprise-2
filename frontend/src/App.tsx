@@ -15,6 +15,8 @@ import InventoryPage from '@/pages/InventoryPage';
 import CustomersPage from '@/pages/CustomersPage';
 import EmployeesPage from '@/pages/EmployeesPage';
 import OutstandingPage from '@/pages/OutstandingPage';
+import DemosPage from '@/pages/DemosPage';
+import DemoRequestDetailPage from '@/pages/DemoRequestDetailPage';
 import Layout from '@/components/Layout';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -218,6 +220,22 @@ function AppRoutes() {
             <RoleRoute allowedRoles={['executive', 'quoter']}>
               <PriceListsPage />
             </RoleRoute>
+          } 
+        />
+        <Route 
+          path="demos" 
+          element={
+            <PermissionRoute permission="inventory:read">
+              <DemosPage />
+            </PermissionRoute>
+          } 
+        />
+        <Route 
+          path="demos/:demoId" 
+          element={
+            <PermissionRoute permission="inventory:read">
+              <DemoRequestDetailPage />
+            </PermissionRoute>
           } 
         />
       </Route>

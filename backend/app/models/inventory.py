@@ -27,6 +27,7 @@ class Inventory(BaseModel):
     quotation_items = relationship("QuotationItem", back_populates="inventory_item")
     invoice_items = relationship("InvoiceItem", back_populates="inventory_item")
     dispatch_items = relationship("DispatchItem", back_populates="inventory_item")
+    demo_items = relationship("DemoItem", back_populates="inventory_item")
     
     # Constraints
     __table_args__ = (

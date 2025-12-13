@@ -186,6 +186,47 @@ export interface Dispatch {
   updated_at: string;
 }
 
+export interface DemoItem {
+  id: string;
+  demo_request_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  inventory_item: {
+    id: string;
+    sku: string;
+    description?: string;
+    stock_quantity: number;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DemoRequest {
+  id: string;
+  number: string;
+  hospital_id?: string;
+  hospital?: {
+    id: string;
+    name: string;
+    hospital_name: string;
+    city?: string;
+    state?: string;
+    contact_person?: string;
+    phone?: string;
+  };
+  city?: string;
+  state: 'requested' | 'dispatched' | 'returned';
+  notes?: string;
+  items?: DemoItem[];
+  creator: {
+    id: string;
+    full_name: string;
+    email: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DashboardStats {
   total_orders: number;
   pending_orders: number;

@@ -14,6 +14,8 @@ from app.models.notification import Notification
 from app.models.dispatch import Dispatch, DispatchItem
 from app.models.attachment import Attachment
 from app.models.price_list import PriceList, PriceListItem
+from app.models.demo_request import DemoRequest
+from app.models.demo_item import DemoItem
 
 __all__ = [
     "User",
@@ -34,4 +36,6 @@ __all__ = [
     "Attachment",
     "PriceList",
     "PriceListItem",
+    "DemoRequest",
+    "DemoItem",
 ]
