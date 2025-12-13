@@ -224,6 +224,60 @@ class ApiService {
     
     return (await this.client.post(`/attachments/${entityType}/${entityId}`, formData, config)).data;
   }
+
+  // Demo Requests
+  getDemoRequests = async (params?: any) => {
+    return (await this.client.get('/demo-requests/', { params })).data;
+  }
+  getDemoRequest = async (id: string) => {
+    return (await this.client.get(`/demo-requests/${id}`)).data;
+  }
+  createDemoRequest = async (data: any) => {
+    return (await this.client.post('/demo-requests/', data)).data;
+  }
+  updateDemoRequest = async (id: string, data: any) => {
+    return (await this.client.put(`/demo-requests/${id}`, data)).data;
+  }
+  deleteDemoRequest = async (id: string) => {
+    return (await this.client.delete(`/demo-requests/${id}`)).data;
+  }
+
+  // Demo Items
+  getDemoItems = async (demoRequestId: string) => {
+    return (await this.client.get(`/demo-requests/${demoRequestId}/items`)).data;
+  }
+  addDemoItem = async (demoRequestId: string, data: { inventory_item_id: string; quantity: number }) => {
+    return (await this.client.post(`/demo-requests/${demoRequestId}/items`, data)).data;
+  }
+  updateDemoItem = async (demoRequestId: string, itemId: string, data: { quantity: number }) => {
+    return (await this.client.put(`/demo-requests/${demoRequestId}/items/${itemId}`, data)).data;
+  }
+  removeDemoItem = async (demoRequestId: string, itemId: string) => {
+    return (await this.client.delete(`/demo-requests/${demoRequestId}/items/${itemId}`)).data;
+  }
+
+  // Demo Request Actions
+  submitDemoRequest = async (id: string) => {
+    return (await this.client.post(`/demo-requests/${id}/submit`)).data;
+  }
+  approveDemoRequest = async (id: string) => {
+    return (await this.client.post(`/demo-requests/${id}/approve`)).data;
+  }
+  rejectDemoRequest = async (id: string) => {
+    return (await this.client.post(`/demo-requests/${id}/reject`)).data;
+  }
+  dispatchDemoRequest = async (id: string) => {
+    return (await this.client.post(`/demo-requests/${id}/dispatch`)).data;
+  }
+  receiveDemoRequest = async (id: string) => {
+    return (await this.client.post(`/demo-requests/${id}/receive`)).data;
+  }
+  downloadDemoChallan = async (id: string) => {
+    const response = await this.client.get(`/demo-requests/${id}/challan`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  }
 }
 
 export default new ApiService();

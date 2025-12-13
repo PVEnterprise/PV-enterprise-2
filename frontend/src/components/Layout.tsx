@@ -13,7 +13,8 @@ import {
   Menu,
   X,
   TrendingUp,
-  DollarSign
+  DollarSign,
+  Beaker
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -47,6 +48,12 @@ export default function Layout() {
       name: 'Inventory', 
       href: '/inventory', 
       icon: Package,
+      permission: 'inventory:read'
+    },
+    { 
+      name: 'Demos', 
+      href: '/demos', 
+      icon: Beaker,
       permission: 'inventory:read'
     },
     { 

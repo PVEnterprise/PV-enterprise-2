@@ -76,6 +76,11 @@ class User(BaseModel):
         back_populates="creator",
         foreign_keys="Dispatch.created_by"
     )
+    created_demo_requests = relationship(
+        "DemoRequest",
+        back_populates="creator",
+        foreign_keys="DemoRequest.created_by"
+    )
     
     def __repr__(self) -> str:
         return f"<User {self.email}>"

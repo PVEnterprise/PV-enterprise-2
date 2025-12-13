@@ -421,7 +421,7 @@ export default function OrderDetailPage() {
   const { data: dispatches = [] } = useQuery<Dispatch[]>({
     queryKey: ['dispatches', orderId],
     queryFn: () => api.getOrderDispatches(orderId!),
-    enabled: !!orderId && order?.workflow_stage === 'inventory_check',
+    enabled: !!orderId && (order?.workflow_stage === 'inventory_check' || order?.workflow_stage === 'payment_pending'),
   });
 
   // Create dispatch mutation
@@ -573,8 +573,8 @@ export default function OrderDetailPage() {
             )}
           </div>
 
-          {/* Dispatches Section - Only show in inventory_check stage */}
-          {order.workflow_stage === 'inventory_check' && (
+          {/* Dispatches Section - Show in inventory_check and payment_pending stages */}
+          {(order.workflow_stage === 'inventory_check' || order.workflow_stage === 'payment_pending') && (
             <>
               {/* Dispatches */}
               {dispatches.length > 0 && (
