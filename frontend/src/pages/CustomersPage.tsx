@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Customer } from '@/types';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column, commonActions } from '@/components/common/DataTable';
@@ -121,12 +121,17 @@ const columns: Column<Customer>[] = [
 export default function CustomersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(100);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: customers, isLoading } = useQuery<Customer[]>({
-    queryKey: ['customers'],
-    queryFn: () => api.getCustomers({}),
+    queryKey: ['customers', currentPage],
+    queryFn: () => api.getCustomers({
+      skip: (currentPage - 1) * itemsPerPage,
+      limit: itemsPerPage,
+    }),
   });
 
   const createMutation = useMutation({
@@ -134,6 +139,7 @@ export default function CustomersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries(['customers']);
       setShowForm(false);
+      setCurrentPage(1);
     },
   });
 
@@ -206,7 +212,7 @@ export default function CustomersPage() {
       </div>
 
       {/* Scrollable Table Container - Full Width */}
-      <div className="w-full overflow-auto max-h-[calc(100vh-200px)]">
+      <div className="w-full overflow-auto max-h-[calc(100vh-260px)]">
         <DataTable
           data={customers || []}
           columns={columns}
@@ -224,6 +230,31 @@ export default function CustomersPage() {
             ),
           ]}
         />
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="bg-white p-4 rounded-lg shadow-sm mt-4 flex items-center justify-between">
+        <div className="text-sm text-gray-600">
+          Page {currentPage} • Showing {customers?.length || 0} customers
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1 || isLoading}
+            className="btn btn-secondary btn-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={16} className="mr-1" />
+            Previous
+          </button>
+          <button
+            onClick={() => setCurrentPage(prev => prev + 1)}
+            disabled={!customers || customers.length < itemsPerPage || isLoading}
+            className="btn btn-secondary btn-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+            <ChevronRight size={16} className="ml-1" />
+          </button>
+        </div>
       </div>
 
       {showForm && (
