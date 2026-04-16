@@ -45,11 +45,14 @@ class DispatchItem(BaseModel):
     order_item_id = Column(UUID(as_uuid=True), ForeignKey("order_items.id"), nullable=True, index=True)
     inventory_id = Column(UUID(as_uuid=True), ForeignKey("inventory.id"), nullable=False, index=True)
     quantity = Column(Integer, nullable=False)
+    alternate_inventory_id = Column(UUID(as_uuid=True), ForeignKey("inventory.id"), nullable=True, index=True)
+    alternate_quantity = Column(Integer, nullable=True)
     
     # Relationships
     dispatch = relationship("Dispatch", back_populates="items")
     order_item = relationship("OrderItem", back_populates="dispatch_items")
-    inventory_item = relationship("Inventory", back_populates="dispatch_items")
+    inventory_item = relationship("Inventory", back_populates="dispatch_items", foreign_keys=[inventory_id])
+    alternate_inventory_item = relationship("Inventory", foreign_keys=[alternate_inventory_id])
     
     # Constraints
     __table_args__ = (

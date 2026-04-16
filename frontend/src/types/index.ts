@@ -160,10 +160,19 @@ export interface DispatchItem {
   order_item_id: string;
   inventory_id: string;
   quantity: number;
+  alternate_inventory_id?: string;
+  alternate_quantity?: number;
   inventory_item?: {
     id: string;
     sku: string;
+    description?: string;
     item_name: string;
+    unit_price: number;
+  };
+  alternate_inventory_item?: {
+    id: string;
+    sku: string;
+    description?: string;
     unit_price: number;
   };
   created_at: string;
