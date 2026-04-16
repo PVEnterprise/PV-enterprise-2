@@ -52,6 +52,9 @@ class ApiService {
   getOrder = async (id: string) => {
     return (await this.client.get(`/orders/${id}`)).data;
   }
+  getNextOrderNumber = async (): Promise<{ order_number: string }> => {
+    return (await this.client.get('/orders/next-number')).data;
+  }
   createOrder = async (data: any) => {
     return (await this.client.post('/orders/', data)).data;
   }
