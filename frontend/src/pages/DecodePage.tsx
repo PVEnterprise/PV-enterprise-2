@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Search, X, Plus, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, X, Plus, Save, Tag } from 'lucide-react';
 import api from '@/services/api';
 import { Inventory } from '@/types';
 
@@ -15,6 +15,7 @@ interface DecodedItem {
   inventory_id: string;
   unit_price: number;
   tax: number;
+  section_name?: string;
 }
 
 interface Attachment {
@@ -41,6 +42,11 @@ export default function DecodePage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedCatalog, setSelectedCatalog] = useState<Inventory | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
+  
+  // Section state
+  const [currentSection, setCurrentSection] = useState<string>('');
+  const [newSectionName, setNewSectionName] = useState<string>('');
+  const [showNewSectionInput, setShowNewSectionInput] = useState(false);
 
   // Fetch attachments and existing decoded items for the order
   useEffect(() => {
@@ -73,6 +79,7 @@ export default function DecodePage() {
             inventory_id: item.inventory.id,
             unit_price: item.unit_price || item.inventory.unit_price,
             tax: item.gst_percentage || item.inventory.tax,
+            section_name: item.section_name || '',
           }));
         setDecodedItems(existingDecoded);
       }
@@ -87,10 +94,7 @@ export default function DecodePage() {
       if (catalogSearch.length > 0 && !selectedCatalog) {
         try {
           const results = await api.getInventory({ search: catalogSearch });
-          // Filter out items that are already in the decoded list
-          const addedCatalogNos = decodedItems.map((item: DecodedItem) => item.catalog_no);
-          const filteredResults = results.filter((item: Inventory) => !addedCatalogNos.includes(item.sku));
-          setSearchResults(filteredResults);
+          setSearchResults(results);
           setShowDropdown(true);
         } catch (error) {
           console.error('Error searching inventory:', error);
@@ -180,6 +184,19 @@ export default function DecodePage() {
     setSearchResults([]);
   };
 
+  const sections = Array.from(new Set(decodedItems.map(i => i.section_name || '').filter(Boolean)));
+
+  const handleAddSection = () => {
+    const trimmed = newSectionName.trim();
+    if (trimmed && !sections.includes(trimmed)) {
+      setCurrentSection(trimmed);
+    } else if (trimmed) {
+      setCurrentSection(trimmed);
+    }
+    setNewSectionName('');
+    setShowNewSectionInput(false);
+  };
+
   const handleAddItem = () => {
     if (selectedCatalog && quantity > 0) {
       const newItem: DecodedItem = {
@@ -189,6 +206,7 @@ export default function DecodePage() {
         inventory_id: selectedCatalog.id,
         unit_price: selectedCatalog.unit_price,
         tax: selectedCatalog.tax,
+        section_name: currentSection || undefined,
       };
       
       setDecodedItems([newItem, ...decodedItems]);
@@ -209,6 +227,7 @@ export default function DecodePage() {
         quantity: item.quantity,
         unit_price: item.unit_price,
         gst_percentage: item.tax,
+        section_name: item.section_name || null,
       }));
 
       await api.updateDecodedItems(orderId, items);
@@ -311,6 +330,57 @@ export default function DecodePage() {
           <h2 className="text-lg font-semibold text-gray-900">Decoded Items</h2>
         </div>
 
+        {/* Section Picker */}
+        <div className="px-4 pt-3 pb-0">
+          <div className="flex items-center gap-1 mb-1">
+            <Tag size={12} className="text-gray-500" />
+            <span className="text-xs font-medium text-gray-600">Section</span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => setCurrentSection('')}
+              className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                currentSection === '' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:border-blue-400'
+              }`}
+            >
+              None
+            </button>
+            {sections.map(s => (
+              <button
+                key={s}
+                onClick={() => setCurrentSection(s)}
+                className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                  currentSection === s ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:border-blue-400'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+            {showNewSectionInput ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={newSectionName}
+                  onChange={e => setNewSectionName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAddSection()}
+                  placeholder="Section name..."
+                  autoFocus
+                  className="input input-sm w-24 text-xs py-0"
+                />
+                <button onClick={handleAddSection} className="btn btn-primary px-1.5 py-0.5 text-xs">✓</button>
+                <button onClick={() => { setShowNewSectionInput(false); setNewSectionName(''); }} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNewSectionInput(true)}
+                className="px-2 py-0.5 text-xs rounded-full border border-dashed border-gray-400 text-gray-500 hover:border-blue-400 hover:text-blue-500"
+              >
+                + New
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Add Item Form - Compact Single Row */}
         <div className="p-4 border-b">
           <div className="flex items-center gap-1">
@@ -381,42 +451,66 @@ export default function DecodePage() {
           </div>
         </div>
 
-        {/* Items List - Compact Format */}
-        <div className="flex-1 overflow-auto p-4">
+        {/* Items List - Grouped by section */}
+        <div className="flex-1 overflow-auto p-3">
           {decodedItems.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <p className="text-sm">No items added yet</p>
             </div>
-          ) : (
-            <div className="space-y-1">
-              {[...decodedItems].reverse().map((item, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between py-2 px-3 hover:bg-gray-50 rounded border-b border-gray-100"
-                >
-                  <div className="font-mono text-sm font-medium text-gray-900">
-                    {item.catalog_no}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) => handleUpdateQuantity(index, Number(e.target.value))}
-                      min="1"
-                      className="input input-sm w-16 text-center font-medium"
-                    />
-                    <button
-                      onClick={() => handleRemoveItem(index)}
-                      className="p-1 hover:bg-red-100 rounded text-red-600"
-                      title="Remove"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          ) : (() => {
+            const reversed = [...decodedItems].reverse();
+            const allSections = Array.from(new Set(reversed.map(i => i.section_name || '')));
+            const orderedSections = [
+              ...allSections.filter(s => s === ''),
+              ...allSections.filter(s => s !== '')
+            ];
+            return (
+              <div className="space-y-2">
+                {orderedSections.map(sectionKey => {
+                  const sectionItems = reversed.filter(i => (i.section_name || '') === sectionKey);
+                  return (
+                    <div key={sectionKey}>
+                      {sectionKey && (
+                        <div className="flex items-center gap-1 py-1 px-2 bg-blue-50 rounded mb-1">
+                          <Tag size={11} className="text-blue-600" />
+                          <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{sectionKey}</span>
+                        </div>
+                      )}
+                      {sectionItems.map((item) => {
+                        const globalIndex = reversed.indexOf(item);
+                        return (
+                          <div
+                            key={globalIndex}
+                            className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded border-b border-gray-100"
+                          >
+                            <div className="font-mono text-xs font-medium text-gray-900">
+                              {item.catalog_no}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => handleUpdateQuantity(globalIndex, Number(e.target.value))}
+                                min="1"
+                                className="input input-sm w-14 text-center font-medium text-xs"
+                              />
+                              <button
+                                onClick={() => handleRemoveItem(globalIndex)}
+                                className="p-1 hover:bg-red-100 rounded text-red-600"
+                                title="Remove"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Footer Actions */}
