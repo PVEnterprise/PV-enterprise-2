@@ -18,6 +18,14 @@ export default function OrdersPage() {
   const [newOrderNumber, setNewOrderNumber] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(100); // Match backend default
+  const [formError, setFormError] = useState('');
+  const [editOrderError, setEditOrderError] = useState('');
+  const { data: nextOrderNumberData } = useQuery<{ order_number: string }>({
+    queryKey: ['next-order-number'],
+    queryFn: () => api.getNextOrderNumber(),
+    enabled: showForm,
+    staleTime: 0,
+  });
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -57,32 +65,19 @@ export default function OrdersPage() {
   // Generate fields dynamically
   const getOrderFields = (): FormField[] => [
     {
+      name: 'order_number',
+      label: 'Order ID',
+      type: 'text',
+      required: true,
+      placeholder: 'Auto-generated order ID',
+    },
+    {
       name: 'customer_id',
       label: 'Customer',
       type: 'autocomplete',
       required: true,
       fetchOptions: fetchCustomers,
       placeholder: 'Search customer...',
-    },
-    {
-      name: 'requirements',
-      label: 'Requirements',
-      type: 'textarea',
-      required: true,
-      placeholder: 'Describe all items needed in detail:\n\nExample:\n- 100 boxes of surgical gloves (size M)\n- 2 units of X-ray machines\n- 50 pieces of surgical masks\n\nThe decoder will map these to inventory items later.',
-    },
-    {
-      name: 'priority',
-      label: 'Priority',
-      type: 'select',
-      required: true,
-      options: [
-        { value: 'low', label: 'Low' },
-        { value: 'medium', label: 'Medium' },
-        { value: 'high', label: 'High' },
-        { value: 'urgent', label: 'Urgent' },
-      ],
-      defaultValue: 'medium',
     },
     {
       name: 'notes',
@@ -108,9 +103,6 @@ export default function OrdersPage() {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       setShowForm(false);
     },
-    onError: (error: any) => {
-      alert(`Error creating order: ${error.message || 'Unknown error'}`);
-    },
   });
 
   // Update order number mutation
@@ -123,7 +115,7 @@ export default function OrdersPage() {
       setNewOrderNumber('');
     },
     onError: (error: any) => {
-      alert(`Error updating order number: ${error.response?.data?.detail || error.message || 'Unknown error'}`);
+      setEditOrderError(error?.response?.data?.detail || error.message || 'Unknown error');
     },
   });
 
@@ -134,7 +126,7 @@ export default function OrdersPage() {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
     onError: (error: any) => {
-      alert(`Error deleting order: ${error.response?.data?.detail || error.message || 'Unknown error'}`);
+      console.error('Error deleting order:', error?.response?.data?.detail || error.message);
     },
   });
 
@@ -152,7 +144,7 @@ export default function OrdersPage() {
 
   const handleSaveOrderNumber = () => {
     if (!editingOrder || !newOrderNumber.trim()) {
-      alert('Order number cannot be empty');
+      setEditOrderError('Order number cannot be empty');
       return;
     }
     updateOrderNumberMutation.mutate({
@@ -164,6 +156,7 @@ export default function OrdersPage() {
   const handleCancelEdit = () => {
     setEditingOrder(null);
     setNewOrderNumber('');
+    setEditOrderError('');
   };
 
   const handleDeleteOrder = (order: Order, e: React.MouseEvent) => {
@@ -177,66 +170,35 @@ export default function OrdersPage() {
   };
 
   const handleSubmit = async (data: Record<string, any>) => {
+    setFormError('');
     try {
-      console.log('Form data received:', data);
-      console.log('Attachments:', data.attachments);
-      console.log('Attachments type:', typeof data.attachments);
-      console.log('Attachments length:', data.attachments?.length);
-      
-      // Transform form data to match backend schema
-      // Sales describes requirements in words, decoder will create items later
       const orderData = {
+        order_number: data.order_number || undefined,
         customer_id: data.customer_id,
-        priority: data.priority,
-        sales_rep_description: data.requirements, // Store requirements at order level
         notes: data.notes,
       };
       
       // Create the order first
       const newOrder = await createMutation.mutateAsync(orderData);
       
-      console.log('Order created:', newOrder);
-      console.log('Checking attachments...');
-      
       // Upload attachments if any
       if (data.attachments && data.attachments.length > 0) {
-        console.log('Attachments found, starting upload...');
-        // data.attachments is already an array of File objects
         for (const file of data.attachments) {
-          console.log('Uploading file:', file);
-          console.log('File type:', file instanceof File);
-          console.log('File name:', file.name);
-          console.log('File size:', file.size, 'bytes');
-          console.log('File last modified:', file.lastModified);
-          
-          if (file.size === 0 || file.size < 10) {
-            console.error('ERROR: File is empty or too small!', file);
-            alert(`File "${file.name}" appears to be empty or corrupted (${file.size} bytes). Please select a valid file.`);
-            continue; // Skip this file
-          }
-          
+          if (file.size === 0 || file.size < 10) continue;
           const formData = new FormData();
           formData.append('file', file);
           formData.append('description', file.name);
-          
-          // Debug: Log FormData contents
-          for (let pair of formData.entries()) {
-            console.log(pair[0], pair[1]);
-            if (pair[1] instanceof File) {
-              console.log('  -> File size in FormData:', pair[1].size);
-            }
-          }
-          
           await api.uploadAttachment('order', newOrder.id, formData);
         }
       }
       
-      // Refresh and close
+      // Close form and navigate to the new order
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       setShowForm(false);
+      navigate(`/orders/${newOrder.id}`);
     } catch (error: any) {
-      console.error('Error creating order:', error);
-      alert(`Error creating order: ${error.message || 'Unknown error'}`);
+      const detail = error?.response?.data?.detail || error.message || 'Unknown error';
+      setFormError(detail);
     }
   };
 
@@ -410,8 +372,10 @@ export default function OrdersPage() {
           title="Order"
           fields={getOrderFields()}
           onSubmit={handleSubmit}
-          onCancel={() => setShowForm(false)}
+          onCancel={() => { setShowForm(false); setFormError(''); }}
           submitLabel="Create Order"
+          initialData={{ order_number: nextOrderNumberData?.order_number || '' }}
+          error={formError}
           isLoading={createMutation.isPending}
         />
       )}
@@ -447,12 +411,15 @@ export default function OrdersPage() {
                   id="newOrderNumber"
                   type="text"
                   value={newOrderNumber}
-                  onChange={(e) => setNewOrderNumber(e.target.value)}
+                  onChange={(e) => { setNewOrderNumber(e.target.value); setEditOrderError(''); }}
                   className="input w-full"
                   placeholder="Enter new order number"
                   disabled={updateOrderNumberMutation.isPending}
                   autoFocus
                 />
+                {editOrderError && (
+                  <p className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">{editOrderError}</p>
+                )}
                 <p className="text-xs text-gray-500 mt-1">
                   This will update the order number in the database and audit trail.
                 </p>
