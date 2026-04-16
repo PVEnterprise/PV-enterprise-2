@@ -12,6 +12,8 @@ class DispatchItemBase(BaseModel):
     order_item_id: UUID
     inventory_id: UUID
     quantity: int = Field(gt=0, description="Quantity must be greater than 0")
+    alternate_inventory_id: Optional[UUID] = None
+    alternate_quantity: Optional[int] = Field(None, gt=0)
 
 
 class DispatchItemCreate(DispatchItemBase):
@@ -33,6 +35,7 @@ class DispatchItemResponse(DispatchItemBase):
     id: UUID
     dispatch_id: UUID
     inventory_item: Optional[InventoryBasic] = None
+    alternate_inventory_item: Optional[InventoryBasic] = None
     created_at: datetime
     updated_at: datetime
 

@@ -94,13 +94,43 @@ def create_dispatch(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Inventory item {item_data.inventory_id} not found"
             )
-        
-        # Check against total stock quantity (we'll update reserved during dispatch)
-        if item_data.quantity > inventory.stock_quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient stock for {inventory.sku} - {inventory.description or 'No description'}. Available: {inventory.stock_quantity}, Requested: {item_data.quantity}"
-            )
+
+        # Validate alternate item if provided
+        if item_data.alternate_inventory_id:
+            if not item_data.alternate_quantity or item_data.alternate_quantity <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="alternate_quantity is required when alternate_inventory_id is provided"
+                )
+            if item_data.alternate_quantity > item_data.quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Alternate quantity ({item_data.alternate_quantity}) cannot exceed total dispatch quantity ({item_data.quantity})"
+                )
+            alt_inventory = db.query(Inventory).filter(Inventory.id == item_data.alternate_inventory_id).first()
+            if not alt_inventory:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Alternate inventory item {item_data.alternate_inventory_id} not found"
+                )
+            if item_data.alternate_quantity > alt_inventory.stock_quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient stock for alternate item {alt_inventory.sku}. Available: {alt_inventory.stock_quantity}, Requested: {item_data.alternate_quantity}"
+                )
+            main_qty = item_data.quantity - item_data.alternate_quantity
+            if main_qty > 0 and main_qty > inventory.stock_quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient stock for {inventory.sku}. Available: {inventory.stock_quantity}, Requested: {main_qty}"
+                )
+        else:
+            # No alternate — all quantity from main inventory
+            if item_data.quantity > inventory.stock_quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient stock for {inventory.sku} - {inventory.description or 'No description'}. Available: {inventory.stock_quantity}, Requested: {item_data.quantity}"
+                )
     
     # Create dispatch
     dispatch = Dispatch(
@@ -123,13 +153,25 @@ def create_dispatch(
             dispatch_id=dispatch.id,
             order_item_id=item_data.order_item_id,
             inventory_id=item_data.inventory_id,
-            quantity=item_data.quantity
+            quantity=item_data.quantity,
+            alternate_inventory_id=item_data.alternate_inventory_id,
+            alternate_quantity=item_data.alternate_quantity
         )
         db.add(dispatch_item)
         
-        # Update inventory - reduce stock quantity when dispatched
-        inventory = db.query(Inventory).filter(Inventory.id == item_data.inventory_id).first()
-        inventory.stock_quantity -= item_data.quantity
+        # Update inventory stock
+        if item_data.alternate_inventory_id and item_data.alternate_quantity:
+            # Split deduction: main gets (total - alternate), alternate gets alternate_quantity
+            main_qty = item_data.quantity - item_data.alternate_quantity
+            alt_inventory = db.query(Inventory).filter(Inventory.id == item_data.alternate_inventory_id).first()
+            alt_inventory.stock_quantity -= item_data.alternate_quantity
+            if main_qty > 0:
+                inventory = db.query(Inventory).filter(Inventory.id == item_data.inventory_id).first()
+                inventory.stock_quantity -= main_qty
+        else:
+            # All quantity from main inventory
+            inventory = db.query(Inventory).filter(Inventory.id == item_data.inventory_id).first()
+            inventory.stock_quantity -= item_data.quantity
         
         # Update OrderItem status based on dispatch
         order_item = db.query(OrderItem).filter(OrderItem.id == item_data.order_item_id).first()
