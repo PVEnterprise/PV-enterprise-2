@@ -115,6 +115,14 @@ class ApiService {
     return (await this.client.get('/dashboard/stats')).data;
   }
 
+  getMonthlyTrend = async (months = 6) => {
+    return (await this.client.get(`/dashboard/monthly-trend?months=${months}`)).data;
+  }
+
+  getFyTrend = async () => {
+    return (await this.client.get('/dashboard/fy-trend')).data;
+  }
+
   // Employees
   getEmployees = async (params?: any) => {
     return (await this.client.get('/users/', { params })).data;

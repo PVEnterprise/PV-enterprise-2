@@ -241,11 +241,35 @@ export interface DashboardStats {
   total_orders: number;
   pending_orders: number;
   completed_orders: number;
+  orders_this_month: number;
+  orders_last_month: number;
+  pending_approval_orders: number;
+  orders_by_stage: Record<string, number>;
   total_revenue: number;
+  revenue_this_month: number;
+  revenue_last_month: number;
+  total_invoiced: number;
   pending_invoices: number;
   outstanding_amount: number;
-  low_stock_items: number;
+  total_customers: number;
   active_customers: number;
+  new_customers_this_month: number;
+  total_inventory_items: number;
+  low_stock_items: number;
+  total_dispatches: number;
+  dispatches_this_month: number;
+  total_quotations: number;
+  pending_quotations: number;
+  pending_quotation_value: number;
+  invoiced_this_month: number;
+  total_pending_order_value: number;
+  active_demo_requests: number;
+}
+
+export interface MonthlyTrend {
+  month: string;
+  orders: number;
+  revenue: number;
 }
 
 export interface LoginRequest {
