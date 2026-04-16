@@ -80,6 +80,7 @@ export interface OrderItem {
   unit_price?: number;
   gst_percentage?: number;
   status: string;
+  section_name?: string;
   notes?: string;
   created_at: string;
   updated_at: string;

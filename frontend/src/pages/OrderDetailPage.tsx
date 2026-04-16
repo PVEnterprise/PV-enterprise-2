@@ -2,7 +2,7 @@
  * Order Detail Page
  * Shows order details with role-based workflow actions
  */
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
@@ -546,27 +546,50 @@ export default function OrderDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {order.items?.map((item: OrderItem, index: number) => (
-                    <tr key={item.id} className="border-b hover:bg-gray-50">
-                      <td className="p-3 text-center text-sm text-gray-600">{index + 1}</td>
-                      <td className="p-3">
-                        <span className="font-mono text-sm font-medium text-gray-900">
-                          {item.inventory?.sku || '-'}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <p className="text-sm text-gray-900">{item.inventory?.description || item.item_description}</p>
-                      </td>
-                      <td className="p-3 text-center text-sm font-medium text-gray-900">{item.quantity}</td>
-                      <td className="p-3 text-center">
-                        {item.inventory_id ? (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Decoded</span>
-                        ) : (
-                          <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Not Decoded</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    const items = order.items || [];
+                    const sectionKeys = Array.from(new Set(items.map((i: OrderItem) => i.section_name || '')));
+                    const ordered = [...sectionKeys.filter(s => s === ''), ...sectionKeys.filter(s => s !== '')];
+                    let srNo = 0;
+                    return ordered.flatMap(sectionKey => {
+                      const sectionItems = items.filter((i: OrderItem) => (i.section_name || '') === sectionKey);
+                      const rows: React.ReactNode[] = [];
+                      if (sectionKey) {
+                        rows.push(
+                          <tr key={`section-${sectionKey}`} className="bg-blue-50">
+                            <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                              {sectionKey}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      sectionItems.forEach((item: OrderItem) => {
+                        srNo++;
+                        rows.push(
+                          <tr key={item.id} className="border-b hover:bg-gray-50">
+                            <td className="p-3 text-center text-sm text-gray-600">{srNo}</td>
+                            <td className="p-3">
+                              <span className="font-mono text-sm font-medium text-gray-900">
+                                {item.inventory?.sku || '-'}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <p className="text-sm text-gray-900">{item.inventory?.description || item.item_description}</p>
+                            </td>
+                            <td className="p-3 text-center text-sm font-medium text-gray-900">{item.quantity}</td>
+                            <td className="p-3 text-center">
+                              {item.inventory_id ? (
+                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Decoded</span>
+                              ) : (
+                                <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Not Decoded</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      });
+                      return rows;
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>

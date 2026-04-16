@@ -91,6 +91,7 @@ class OrderItem(BaseModel):
     gst_percentage = Column(Numeric(5, 2), default=5.00)  # GST percentage (default 5%)
     status = Column(String(50), default="pending", nullable=False, index=True)
     notes = Column(Text)
+    section_name = Column(String(100), nullable=True)
     
     # Relationships
     order = relationship("Order", back_populates="items")

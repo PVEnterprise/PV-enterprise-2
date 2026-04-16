@@ -458,7 +458,8 @@ def update_decoded_items(
             decoded_by=current_user.id,
             unit_price=decode_item.unit_price or inventory.unit_price,
             gst_percentage=decode_item.gst_percentage or 5.00,
-            status="decoded"
+            status="decoded",
+            section_name=decode_item.section_name or None
         )
         db.add(new_item)
     
