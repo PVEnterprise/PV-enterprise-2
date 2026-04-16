@@ -160,31 +160,64 @@ export default function DispatchDetailModal({
             </div>
             
             <div className="space-y-2">
-              {dispatch.items.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="border border-gray-200 rounded-lg p-4 bg-gray-50"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-gray-500">#{index + 1}</span>
-                        <p className="font-medium text-gray-900">
-                          {item.inventory_item?.item_name || 'Item'}
+              {dispatch.items.map((item, index) => {
+                const mainQty = item.alternate_quantity ? item.quantity - item.alternate_quantity : item.quantity;
+                return (
+                  <div
+                    key={item.id}
+                    className="border border-gray-200 rounded-lg p-4 bg-gray-50"
+                  >
+                    {/* Main item row */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium text-gray-500">#{index + 1}</span>
+                          <p className="font-medium text-gray-900">
+                            {item.inventory_item?.description || item.inventory_item?.item_name || 'Item'}
+                          </p>
+                        </div>
+                        {item.inventory_item?.sku && (
+                          <p className="text-sm text-gray-600">
+                            SKU: <span className="font-mono">{item.inventory_item.sku}</span>
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-600">Quantity</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          {item.alternate_quantity ? mainQty : item.quantity}
                         </p>
                       </div>
-                      {item.inventory_item?.sku && (
-                        <p className="text-sm text-gray-600">SKU: {item.inventory_item.sku}</p>
-                      )}
                     </div>
-                    
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">Quantity</p>
-                      <p className="text-2xl font-bold text-blue-600">{item.quantity}</p>
-                    </div>
+
+                    {/* Alternate item row */}
+                    {item.alternate_inventory_item && item.alternate_quantity ? (
+                      <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
+                        <div className="flex items-start justify-between bg-purple-50 border border-purple-200 rounded-lg p-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Alternate Catalog ID</span>
+                            </div>
+                            <p className="text-sm font-medium text-purple-800">
+                              <span className="font-mono">{item.alternate_inventory_item.sku}</span>
+                              {item.alternate_inventory_item.description && (
+                                <span className="text-purple-600 ml-2">— {item.alternate_inventory_item.description}</span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="text-right ml-4">
+                            <p className="text-xs text-gray-500">Alt Qty</p>
+                            <p className="text-xl font-bold text-purple-600">{item.alternate_quantity}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1.5 pl-1">
+                          Main: {mainQty} · Alternate: {item.alternate_quantity} · Total dispatched: {item.quantity}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
