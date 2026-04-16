@@ -169,49 +169,69 @@ class InvoicePDFGenerator:
         headers = ["#", "Item & Description", "HSN/SAC", "Qty", "Rate", "IGST%", "IGST Amt", "Amount"]
         data = [headers]
         subtotal, total_igst = Decimal("0.00"), Decimal("0.00")
-
-        # Get discount from order level
+        num_cols = 8
         discount_percentage = float(getattr(self.order, 'discount_percentage', 0) or 0)
 
-        for i, item in enumerate(self.dispatch.items, 1):
-            # Use order_item.unit_price (price list price)
-            rate = Decimal(item.order_item.unit_price or 0)
-            qty = Decimal(item.quantity or 0)
-            gst = Decimal(item.order_item.gst_percentage or 0)
-            
-            # Apply discount to get the final rate
-            item_discount = rate * Decimal(str(discount_percentage / 100))
-            discounted_rate = rate - item_discount
-            
-            # Calculate amounts with discounted rate
-            amt = discounted_rate * qty
-            igst = amt * gst / Decimal("100")
-            subtotal += amt
-            total_igst += igst
+        # Group items by section_name
+        sections_order = []
+        sections_items = {}
+        for item in self.dispatch.items:
+            sec = getattr(item.order_item, 'section_name', None) or ''
+            if sec not in sections_items:
+                sections_items[sec] = []
+                sections_order.append(sec)
+            sections_items[sec].append(item)
 
-            data.append([
-                str(i),
-                Paragraph(f"<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}", self.styles["NormalText"]),
-                item.inventory_item.hsn_code or "",
-                f"{qty}",
-                format_indian_number(discounted_rate),
-                f"{gst:.0f}%",
-                format_indian_number(igst),
-                format_indian_number(amt + igst)
-            ])
+        ordered_sections = [s for s in sections_order if s == ''] + [s for s in sections_order if s != '']
+        has_named_sections = any(s != '' for s in ordered_sections)
+
+        section_header_rows = []
+        section_subtotal_rows = []
+        i = 0
+
+        for sec in ordered_sections:
+            if sec:
+                section_header_rows.append(len(data))
+                data.append([Paragraph(f"<b>{sec}</b>", self.styles["SectionHeader"])] + [''] * (num_cols - 1))
+
+            sec_subtotal = Decimal("0.00")
+            for item in sections_items[sec]:
+                i += 1
+                rate = Decimal(item.order_item.unit_price or 0)
+                qty = Decimal(item.quantity or 0)
+                gst = Decimal(item.order_item.gst_percentage or 0)
+                item_discount = rate * Decimal(str(discount_percentage / 100))
+                discounted_rate = rate - item_discount
+                amt = discounted_rate * qty
+                igst = amt * gst / Decimal("100")
+                sec_subtotal += amt
+                subtotal += amt
+                total_igst += igst
+                data.append([
+                    str(i),
+                    Paragraph(f"<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}", self.styles["NormalText"]),
+                    item.inventory_item.hsn_code or "",
+                    f"{qty}",
+                    format_indian_number(discounted_rate),
+                    f"{gst:.0f}%",
+                    format_indian_number(igst),
+                    format_indian_number(amt + igst)
+                ])
+            if has_named_sections and sec:
+                section_subtotal_rows.append(len(data))
+                data.append(["Sub Total"] + [''] * (num_cols - 2) + [format_indian_number(sec_subtotal)])
+
+        if not has_named_sections:
+            data.append(["Sub Total"] + [''] * (num_cols - 2) + [format_indian_number(subtotal)])
 
         grand = subtotal + total_igst
-        data += [
-            ["Sub Total", "", "", "", "", "", "", format_indian_number(subtotal)],
-            ["IGST", "", "", "", "", "", "", format_indian_number(total_igst)],
-            ["Grand Total", "", "", "", "", "", "", f"{RUPEE}{format_indian_number(grand)}"]
-        ]
+        igst_row = len(data)
+        data.append(["IGST"] + [''] * (num_cols - 2) + [format_indian_number(total_igst)])
+        data.append(["Grand Total"] + [''] * (num_cols - 2) + [f"{RUPEE}{format_indian_number(grand)}"])
+        final_totals_rows = list(range(igst_row - (0 if has_named_sections else 1), len(data)))
 
-        # ✅ Adjusted column widths: Qty narrower, Rate wider
         col_widths = [8*mm, 55*mm, 18*mm, 10*mm, 27*mm, 14*mm, 22*mm, 30*mm]
-
         t = Table(data, colWidths=col_widths)
-        totals_start = len(data) - 3
 
         style = [
             ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),
@@ -220,13 +240,20 @@ class InvoicePDFGenerator:
             ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
         ]
 
-        # Merge totals rows (cols 0–6)
-        for r in range(totals_start, len(data)):
+        for r in section_header_rows:
             style += [
-                ("SPAN", (0, r), (6, r)),
-                ("ALIGN", (0, r), (6, r), "RIGHT"),
-                ("FONTNAME", (0, r), (7, r), _FONT),
-                ("FONTNAME", (7, r), (7, r), _FONT),
+                ("SPAN", (0, r), (num_cols - 1, r)),
+                ("BACKGROUND", (0, r), (num_cols - 1, r), self.BRAND_COLOR),
+                ("TEXTCOLOR", (0, r), (num_cols - 1, r), colors.white),
+                ("FONTNAME", (0, r), (num_cols - 1, r), _FONT),
+                ("LEFTPADDING", (0, r), (num_cols - 1, r), 4),
+            ]
+
+        for r in section_subtotal_rows + final_totals_rows:
+            style += [
+                ("SPAN", (0, r), (num_cols - 2, r)),
+                ("ALIGN", (0, r), (num_cols - 2, r), "RIGHT"),
+                ("FONTNAME", (0, r), (num_cols - 1, r), _FONT),
             ]
 
         t.setStyle(TableStyle(style))

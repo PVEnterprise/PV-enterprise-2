@@ -326,21 +326,15 @@ class EstimatePDFGenerator:
         return elements
     
     def _build_items_table(self):
-        """Build items table."""
+        """Build items table grouped by section_name."""
         elements = []
-        
-        # Calculate totals
+
         subtotal = Decimal('0.00')
         total_igst = Decimal('0.00')
-        
-        # Get discount from order first to calculate tax correctly
         discount_percentage = float(getattr(self.order, 'discount_percentage', 0) or 0)
-        
-        # Header - New structure with Discount% column
-        # Columns: Sr No, Item Description, HSN/SAC, Unit Price, Qty, Discount%, Amount, IGST (Tax%, Amt), Total
-        # Show Discount% column only if discount > 0
         show_discount_col = discount_percentage > 0
-        
+        num_cols = 10 if show_discount_col else 9
+
         if show_discount_col:
             header = [
                 ['Sr No', 'Item Description', 'HSN/SAC', 'Unit Price', 'Qty', 'Discount\n%', 'Amount', 'IGST', '', 'Total'],
@@ -351,182 +345,136 @@ class EstimatePDFGenerator:
                 ['Sr No', 'Item Description', 'HSN/SAC', 'Unit Price', 'Qty', 'Amount', 'IGST', '', 'Total'],
                 ['', '', '', '', '', '', 'Tax%', 'Amt', '']
             ]
-        
-        # Items
-        items_data = []
-        for idx, item in enumerate(self.order.items, 1):
-            if not item.inventory_id:
-                continue  # Skip non-decoded items
-            
-            qty = item.quantity
-            rate = float(item.unit_price or 0)
-            amount = qty * rate
-            igst_pct = float(item.gst_percentage or 0)
-            
-            # Apply discount to item amount first, then calculate tax
-            item_discount = amount * (discount_percentage / 100)
-            amount_after_discount = amount - item_discount
-            igst_amt = amount_after_discount * (igst_pct / 100)
-            total_amt = amount_after_discount + igst_amt
-            
-            subtotal += Decimal(str(amount))
-            total_igst += Decimal(str(igst_amt))
-            
-            # Get HSN/SAC from inventory
-            hsn_sac = item.inventory_item.hsn_code if hasattr(item.inventory_item, 'hsn_code') and item.inventory_item.hsn_code else ''
-            
-            # Build row based on whether discount column is shown
-            if show_discount_col:
-                items_data.append([
-                    str(idx),  # Sr No
-                    Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}', self.styles['SmallText']),  # Item Description
-                    hsn_sac,  # HSN/SAC
-                    format_indian_number(rate),  # Unit Price
-                    f'{qty}',  # Qty
-                    f'{discount_percentage:.0f}%',  # Discount%
-                    format_indian_number(amount_after_discount),  # Amount (after discount)
-                    f'{igst_pct:.0f}%',  # IGST Tax%
-                    format_indian_number(igst_amt),  # IGST Amt
-                    format_indian_number(total_amt)  # Total
-                ])
-            else:
-                items_data.append([
-                    str(idx),  # Sr No
-                    Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}', self.styles['SmallText']),  # Item Description
-                    hsn_sac,  # HSN/SAC
-                    format_indian_number(rate),  # Unit Price
-                    f'{qty}',  # Qty
-                    format_indian_number(amount_after_discount),  # Amount (after discount)
-                    f'{igst_pct:.0f}%',  # IGST Tax%
-                    format_indian_number(igst_amt),  # IGST Amt
-                    format_indian_number(total_amt)  # Total
-                ])
-        
-        # Combine header and items
-        table_data = header + items_data
-        
-        # Add totals rows with discount
+
+        # Group decoded items by section_name
+        decoded_items = [item for item in self.order.items if item.inventory_id]
+        sections_order = []
+        sections_items = {}
+        for item in decoded_items:
+            sec = getattr(item, 'section_name', None) or ''
+            if sec not in sections_items:
+                sections_items[sec] = []
+                sections_order.append(sec)
+            sections_items[sec].append(item)
+
+        ordered_sections = [s for s in sections_order if s == ''] + [s for s in sections_order if s != '']
+        has_named_sections = any(s != '' for s in ordered_sections)
+
+        table_data = list(header)
+        section_header_rows = []
+        section_subtotal_rows = []
+        idx = 0
+
+        for sec in ordered_sections:
+            if sec:
+                section_header_rows.append(len(table_data))
+                table_data.append([sec] + [''] * (num_cols - 1))
+
+            sec_subtotal = Decimal('0.00')
+            sec_igst = Decimal('0.00')
+            for item in sections_items[sec]:
+                idx += 1
+                qty = item.quantity
+                rate = float(item.unit_price or 0)
+                amount = qty * rate
+                igst_pct = float(item.gst_percentage or 0)
+                item_discount = amount * (discount_percentage / 100)
+                amount_after_discount = amount - item_discount
+                igst_amt = amount_after_discount * (igst_pct / 100)
+                total_amt = amount_after_discount + igst_amt
+                sec_subtotal += Decimal(str(amount_after_discount))
+                sec_igst += Decimal(str(igst_amt))
+                subtotal += Decimal(str(amount))
+                total_igst += Decimal(str(igst_amt))
+                hsn_sac = item.inventory_item.hsn_code if hasattr(item.inventory_item, 'hsn_code') and item.inventory_item.hsn_code else ''
+                if show_discount_col:
+                    table_data.append([
+                        str(idx),
+                        Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}', self.styles['SmallText']),
+                        hsn_sac, format_indian_number(rate), f'{qty}',
+                        f'{discount_percentage:.0f}%', format_indian_number(amount_after_discount),
+                        f'{igst_pct:.0f}%', format_indian_number(igst_amt), format_indian_number(total_amt)
+                    ])
+                else:
+                    table_data.append([
+                        str(idx),
+                        Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}', self.styles['SmallText']),
+                        hsn_sac, format_indian_number(rate), f'{qty}',
+                        format_indian_number(amount_after_discount),
+                        f'{igst_pct:.0f}%', format_indian_number(igst_amt), format_indian_number(total_amt)
+                    ])
+
+            if has_named_sections and sec:
+                section_subtotal_rows.append(len(table_data))
+                table_data.append([f'Sub Total — {sec}'] + [''] * (num_cols - 2) + [format_indian_number(float(sec_subtotal))])
+
         discount_amount = subtotal * (Decimal(str(discount_percentage)) / 100)
         subtotal_after_discount = subtotal - discount_amount
-        rounding = Decimal('0.00')  # Can be calculated if needed
-        grand_total = subtotal_after_discount + total_igst + rounding
-        
-        # Totals rows - adjust based on whether discount column is shown
-        num_cols = 10 if show_discount_col else 9
-        merge_to_col = num_cols - 2  # Merge all columns except last one
-        
-        # Build totals rows
-        if show_discount_col:
+        grand_total = subtotal_after_discount + total_igst
+
+        igst_label = f'IGST ({float(total_igst / subtotal * 100) if subtotal > 0 else 0:.0f}%)'
+        final_rows_start = len(table_data)
+
+        if not has_named_sections:
             table_data.append(['Sub Total'] + [''] * (num_cols - 2) + [format_indian_number(float(subtotal))])
             if discount_percentage > 0:
                 table_data.append([f'Discount({discount_percentage:.2f}%)'] + [''] * (num_cols - 2) + [f'(-){format_indian_number(float(discount_amount))}'])
-            table_data.append([f'IGST ({float(total_igst/subtotal*100) if subtotal > 0 else 0:.0f}%)'] + [''] * (num_cols - 2) + [format_indian_number(float(total_igst))])
-            if rounding != 0:
-                table_data.append(['Rounding'] + [''] * (num_cols - 2) + [format_indian_number(float(rounding))])
-            table_data.append(['Total'] + [''] * (num_cols - 2) + [f'Rs.{format_indian_number(float(grand_total))}'])
-        else:
-            table_data.append(['Sub Total'] + [''] * (num_cols - 2) + [format_indian_number(float(subtotal))])
-            if discount_percentage > 0:
-                table_data.append([f'Discount({discount_percentage:.2f}%)'] + [''] * (num_cols - 2) + [f'(-){format_indian_number(float(discount_amount))}'])
-            table_data.append([f'IGST ({float(total_igst/subtotal*100) if subtotal > 0 else 0:.0f}%)'] + [''] * (num_cols - 2) + [format_indian_number(float(total_igst))])
-            if rounding != 0:
-                table_data.append(['Rounding'] + [''] * (num_cols - 2) + [format_indian_number(float(rounding))])
-            table_data.append(['Total'] + [''] * (num_cols - 2) + [f'Rs.{format_indian_number(float(grand_total))}'])
-        
-        # Calculate number of item rows (total rows - 2 header rows - totals rows)
-        num_items = len(items_data)
-        totals_start_row = 2 + num_items  # After 2 header rows and items
-        
-        # Column widths should total 180mm to match other sections
-        # Adjust widths based on whether discount column is shown
+        table_data.append([igst_label] + [''] * (num_cols - 2) + [format_indian_number(float(total_igst))])
+        table_data.append(['Total'] + [''] * (num_cols - 2) + [f'Rs.{format_indian_number(float(grand_total))}'])
+
         if show_discount_col:
-            # Sr No, Item Desc, HSN/SAC, Unit Price, Qty, Discount%, Amount, IGST%, IGST Amt, Total
-            # Total: 8+42+15+16+10+12+19+13+19+26 = 180mm
             colWidths = [8*mm, 42*mm, 15*mm, 16*mm, 10*mm, 12*mm, 19*mm, 13*mm, 19*mm, 26*mm]
         else:
-            # Sr No, Item Desc, HSN/SAC, Unit Price, Qty, Amount, IGST%, IGST Amt, Total
-            # Total: 8+45+16+18+12+20+12+20+29 = 180mm
             colWidths = [8*mm, 45*mm, 16*mm, 18*mm, 12*mm, 20*mm, 12*mm, 20*mm, 29*mm]
-        
+
         table = Table(table_data, colWidths=colWidths)
-        
-        # Build style list dynamically
+
         style_commands = [
-            # Header rows (2 rows) - modern styling with accent color
             ('BACKGROUND', (0, 0), (-1, 1), self.ACCENT_COLOR),
             ('FONTNAME', (0, 0), (-1, 1), _FONT),
-            ('FONTSIZE', (0, 0), (-1, 1), 7),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
             ('ALIGN', (0, 0), (-1, 1), 'CENTER'),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ]
-        
-        # Add column-specific spans based on whether discount column is shown
-        if show_discount_col:
-            # Merge columns vertically (rows 0-1) for all columns except IGST (7-8)
-            style_commands.extend([
-                ('SPAN', (0, 0), (0, 1)),  # Sr No
-                ('SPAN', (1, 0), (1, 1)),  # Item Description
-                ('SPAN', (2, 0), (2, 1)),  # HSN/SAC
-                ('SPAN', (3, 0), (3, 1)),  # Unit Price
-                ('SPAN', (4, 0), (4, 1)),  # Qty
-                ('SPAN', (5, 0), (5, 1)),  # Discount%
-                ('SPAN', (6, 0), (6, 1)),  # Amount
-                ('SPAN', (9, 0), (9, 1)),  # Total
-                # Merge IGST parent header across columns 7 and 8 in row 0
-                ('SPAN', (7, 0), (8, 0)),
-            ])
-        else:
-            # Merge columns vertically (rows 0-1) for all columns except IGST (6-7)
-            style_commands.extend([
-                ('SPAN', (0, 0), (0, 1)),  # Sr No
-                ('SPAN', (1, 0), (1, 1)),  # Item Description
-                ('SPAN', (2, 0), (2, 1)),  # HSN/SAC
-                ('SPAN', (3, 0), (3, 1)),  # Unit Price
-                ('SPAN', (4, 0), (4, 1)),  # Qty
-                ('SPAN', (5, 0), (5, 1)),  # Amount
-                ('SPAN', (8, 0), (8, 1)),  # Total
-                # Merge IGST parent header across columns 6 and 7 in row 0
-                ('SPAN', (6, 0), (7, 0)),
-            ])
-        
-        # Data rows (items only) - start from row 2
-        style_commands.extend([
-            ('FONTSIZE', (0, 2), (-1, num_items + 1), 7),
-            ('ALIGN', (0, 2), (0, num_items + 1), 'CENTER'),  # Sr No
-            ('ALIGN', (1, 2), (1, num_items + 1), 'LEFT'),    # Description
-            ('ALIGN', (2, 2), (2, num_items + 1), 'CENTER'),  # HSN/SAC
-            ('ALIGN', (3, 2), (-1, num_items + 1), 'RIGHT'),  # All remaining columns right-aligned
-            ('GRID', (0, 2), (-1, num_items + 1), 0.5, colors.black),
-            ('VALIGN', (0, 2), (-1, num_items + 1), 'TOP'),
-            
-            # Totals rows
-            ('FONTSIZE', (0, totals_start_row), (-1, -1), 7),
-            ('ALIGN', (0, totals_start_row), (-1, -1), 'RIGHT'),
-            ('GRID', (0, totals_start_row), (-1, -1), 0.5, colors.black),
-            
-            # Make totals labels bold and darker for better contrast
-            ('FONTNAME', (0, totals_start_row), (0, -1), 'Helvetica-Bold'),
-            ('TEXTCOLOR', (0, totals_start_row), (0, -1), colors.black),
-            
-            # Make Total row (last row) bold for both label and amount
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-            
-            # Padding
             ('LEFTPADDING', (0, 0), (-1, -1), 2),
             ('RIGHTPADDING', (0, 0), (-1, -1), 2),
             ('TOPPADDING', (0, 0), (-1, -1), 2),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-        ])
-        
-        # Add span commands for each totals row (merge all columns except last one)
-        for i in range(totals_start_row, len(table_data)):
-            style_commands.append(('SPAN', (0, i), (num_cols - 2, i)))
-            # Labels in merged cell are right-aligned
-            style_commands.append(('ALIGN', (0, i), (0, i), 'RIGHT'))
-        
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]
+
+        if show_discount_col:
+            style_commands.extend([
+                ('SPAN', (0, 0), (0, 1)), ('SPAN', (1, 0), (1, 1)), ('SPAN', (2, 0), (2, 1)),
+                ('SPAN', (3, 0), (3, 1)), ('SPAN', (4, 0), (4, 1)), ('SPAN', (5, 0), (5, 1)),
+                ('SPAN', (6, 0), (6, 1)), ('SPAN', (9, 0), (9, 1)), ('SPAN', (7, 0), (8, 0)),
+            ])
+        else:
+            style_commands.extend([
+                ('SPAN', (0, 0), (0, 1)), ('SPAN', (1, 0), (1, 1)), ('SPAN', (2, 0), (2, 1)),
+                ('SPAN', (3, 0), (3, 1)), ('SPAN', (4, 0), (4, 1)), ('SPAN', (5, 0), (5, 1)),
+                ('SPAN', (8, 0), (8, 1)), ('SPAN', (6, 0), (7, 0)),
+            ])
+
+        # Section header rows (dark blue background)
+        for r in section_header_rows:
+            style_commands.extend([
+                ('SPAN', (0, r), (num_cols - 1, r)),
+                ('BACKGROUND', (0, r), (num_cols - 1, r), self.BRAND_COLOR),
+                ('TEXTCOLOR', (0, r), (num_cols - 1, r), colors.white),
+                ('FONTNAME', (0, r), (num_cols - 1, r), 'Helvetica-Bold'),
+                ('ALIGN', (0, r), (num_cols - 1, r), 'LEFT'),
+            ])
+
+        # Section subtotal rows + final totals rows: merge all except last col
+        for r in section_subtotal_rows + list(range(final_rows_start, len(table_data))):
+            style_commands.extend([
+                ('SPAN', (0, r), (num_cols - 2, r)),
+                ('ALIGN', (0, r), (0, r), 'RIGHT'),
+                ('FONTNAME', (0, r), (num_cols - 1, r), _FONT),
+            ])
+
         table.setStyle(TableStyle(style_commands))
-        
         elements.append(table)
         return elements
     
