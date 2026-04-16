@@ -98,7 +98,7 @@ class OrderBase(BaseModel):
 
 class OrderCreate(OrderBase):
     """Schema for creating an order."""
-    pass  # No items required at creation - will be added during decoding
+    order_number: Optional[str] = None  # If provided, use it; otherwise auto-generate
 
 
 class OrderUpdate(BaseModel):

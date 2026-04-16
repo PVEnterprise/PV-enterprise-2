@@ -59,6 +59,15 @@ def generate_order_number(db: Session) -> str:
     return f"ORD-{year}-{uuid_module.uuid4().hex[:8].upper()}"
 
 
+@router.get("/next-number")
+def get_next_order_number(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get the next auto-generated order number preview."""
+    return {"order_number": generate_order_number(db)}
+
+
 @router.post("/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 def create_order(
     order_data: OrderCreate,
@@ -78,9 +87,21 @@ def create_order(
             detail="Customer not found"
         )
     
+    # Determine order number
+    if order_data.order_number and order_data.order_number.strip():
+        final_order_number = order_data.order_number.strip()
+        existing = db.query(Order).filter(Order.order_number == final_order_number).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Order number '{final_order_number}' already exists"
+            )
+    else:
+        final_order_number = generate_order_number(db)
+
     # Create order
     order = Order(
-        order_number=generate_order_number(db),
+        order_number=final_order_number,
         customer_id=order_data.customer_id,
         sales_rep_id=current_user.id,
         status="draft",
