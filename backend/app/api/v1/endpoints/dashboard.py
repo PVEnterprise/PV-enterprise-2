@@ -131,16 +131,24 @@ def get_dashboard_stats(
 
     # --- Quotations ---
     total_quotations = db.query(Quotation).count()
-    # Pending = orders with priced items in quotation_generated or waiting_purchase_order stages
-    _pending_q_stages = ["quotation_generated", "waiting_purchase_order"]
-    pending_quotations = db.query(Order).filter(
-        Order.workflow_stage.in_(_pending_q_stages)
-    ).count()
-    pending_quotation_value = db.query(
-        func.sum(OrderItem.unit_price * OrderItem.quantity)
-    ).join(Order, Order.id == OrderItem.order_id).filter(
-        Order.workflow_stage.in_(_pending_q_stages),
+    # Quotation value = full order value for orders awaiting PO from customer
+    pending_quotations = db.query(func.count(func.distinct(Order.id))).join(
+        OrderItem, OrderItem.order_id == Order.id
+    ).filter(
+        Order.workflow_stage == "waiting_purchase_order",
         OrderItem.unit_price.isnot(None)
+    ).scalar() or 0
+    pending_quotation_value = db.query(
+        func.sum(
+            OrderItem.unit_price
+            * OrderItem.quantity
+            * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+            * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+        )
+    ).join(Order, Order.id == OrderItem.order_id).filter(
+        Order.workflow_stage == "waiting_purchase_order",
+        OrderItem.unit_price.isnot(None),
+        OrderItem.inventory_id.isnot(None)
     ).scalar() or Decimal(0)
 
     # --- Finance extras ---
@@ -161,11 +169,26 @@ def get_dashboard_stats(
         OrderItem.unit_price.isnot(None)
     ).scalar() or Decimal(0)
 
+    # Pending order value = outstanding (undelivered) qty for PO-approved orders
+    # stages: inventory_check (PO approved) + payment_pending (partially dispatched)
+    _dispatched_subq = db.query(
+        DispatchItem.order_item_id,
+        func.sum(DispatchItem.quantity).label('dispatched_qty')
+    ).group_by(DispatchItem.order_item_id).subquery()
+
     total_pending_order_value = db.query(
-        func.sum(OrderItem.unit_price * OrderItem.quantity)
-    ).join(Order, Order.id == OrderItem.order_id).filter(
-        Order.status.notin_(['completed', 'cancelled']),
-        OrderItem.unit_price.isnot(None)
+        func.sum(
+            (OrderItem.quantity - func.coalesce(_dispatched_subq.c.dispatched_qty, 0))
+            * OrderItem.unit_price
+            * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+            * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+        )
+    ).join(Order, Order.id == OrderItem.order_id
+    ).outerjoin(_dispatched_subq, _dispatched_subq.c.order_item_id == OrderItem.id
+    ).filter(
+        Order.workflow_stage.in_(['inventory_check', 'payment_pending']),
+        OrderItem.unit_price.isnot(None),
+        OrderItem.inventory_id.isnot(None)
     ).scalar() or Decimal(0)
 
     # --- Demo Requests ---
@@ -241,17 +264,23 @@ def get_fy_trend(
         OrderItem.unit_price.isnot(None)
     ).group_by('year', 'month').all()
 
-    # Pending order value per month: orders in that month that are not completed/cancelled,
-    # sum of unit_price * quantity for decoded items
+    # Pending order value per month: orders received that month, not completed/cancelled
+    # price = unit_price * qty * (1 - discount%/100) * (1 + gst%/100)
     order_value_rows = db.query(
         extract('year', Order.created_at).label('year'),
         extract('month', Order.created_at).label('month'),
-        func.sum(OrderItem.unit_price * OrderItem.quantity).label('order_value')
+        func.sum(
+            OrderItem.unit_price
+            * OrderItem.quantity
+            * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+            * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+        ).label('order_value')
     ).join(OrderItem, OrderItem.order_id == Order.id).filter(
         Order.created_at >= fy_start,
         Order.created_at <= fy_end,
         Order.status.notin_(['completed', 'cancelled']),
-        OrderItem.unit_price.isnot(None)
+        OrderItem.unit_price.isnot(None),
+        OrderItem.inventory_id.isnot(None)
     ).group_by('year', 'month').all()
 
     invoice_map = {(int(r.year), int(r.month)): float(r.invoice_value) for r in invoice_rows}
