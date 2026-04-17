@@ -83,7 +83,7 @@ export default function DashboardPage() {
         <KpiCard
           title="Quotation Value (Pending)"
           value={fmt(Number(s.pending_quotation_value))}
-          sub={`${s.pending_quotations} order${s.pending_quotations !== 1 ? 's' : ''} awaiting PO`}
+          sub={`${s.pending_quotations} open quotation${s.pending_quotations !== 1 ? 's' : ''}`}
           icon={DollarSign}
           iconBg="bg-orange-500"
         />
