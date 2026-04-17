@@ -135,6 +135,7 @@ def list_orders(
     status: Optional[str] = None,
     workflow_stage: Optional[str] = None,
     customer_id: Optional[UUID] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -166,6 +167,13 @@ def list_orders(
         query = query.filter(Order.workflow_stage == workflow_stage)
     if customer_id:
         query = query.filter(Order.customer_id == customer_id)
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.join(Customer, Customer.id == Order.customer_id, isouter=True).filter(
+            Order.order_number.ilike(s) |
+            Customer.hospital_name.ilike(s) |
+            Customer.name.ilike(s)
+        )
     
     # Order by creation date (newest first)
     query = query.order_by(Order.created_at.desc())

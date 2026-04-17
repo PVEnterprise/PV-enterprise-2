@@ -1,11 +1,11 @@
 /**
  * Customers page for managing hospital clients.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Customer } from '@/types';
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column, commonActions } from '@/components/common/DataTable';
@@ -123,14 +123,25 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(100);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   const { data: customers, isLoading } = useQuery<Customer[]>({
-    queryKey: ['customers', currentPage],
+    queryKey: ['customers', currentPage, debouncedSearch],
     queryFn: () => api.getCustomers({
       skip: (currentPage - 1) * itemsPerPage,
       limit: itemsPerPage,
+      search: debouncedSearch || undefined,
     }),
   });
 
@@ -196,14 +207,34 @@ export default function CustomersPage() {
   return (
     <div className="w-full">
       {/* Compact Header - Single Line */}
-      <div className="flex items-center justify-between mb-4 bg-white p-4 rounded-lg shadow-sm">
-        <h1 className="text-xl font-bold text-gray-900">Customers</h1>
-        
+      <div className="flex items-center gap-3 mb-4 bg-white p-4 rounded-lg shadow-sm">
+        <h1 className="text-xl font-bold text-gray-900 whitespace-nowrap">Customers</h1>
+
+        {/* Search */}
+        <div className="relative flex-1">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search hospital name or GST…"
+            className="input input-md pl-9 w-full"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
         {/* Add Button - Always Right */}
         {canCreate && (
-          <button 
+          <button
             onClick={() => setShowForm(true)}
-            className="btn btn-primary btn-sm flex items-center whitespace-nowrap ml-4"
+            className="btn btn-primary btn-sm flex items-center whitespace-nowrap"
           >
             <Plus size={16} className="mr-1" />
             Add Customer

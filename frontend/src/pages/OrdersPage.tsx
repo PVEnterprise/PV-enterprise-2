@@ -1,11 +1,11 @@
 /**
  * Orders page for managing orders.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Order } from '@/types';
-import { Plus, Edit2, X, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, Edit2, X, ChevronLeft, ChevronRight, Trash2, Search } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column } from '@/components/common/DataTable';
@@ -13,6 +13,16 @@ import { useNavigate } from 'react-router-dom';
 
 export default function OrdersPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   const [showForm, setShowForm] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [newOrderNumber, setNewOrderNumber] = useState('');
@@ -30,9 +40,10 @@ export default function OrdersPage() {
   const navigate = useNavigate();
 
   const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ['orders', selectedStatus, currentPage],
-    queryFn: () => api.getOrders({ 
+    queryKey: ['orders', selectedStatus, currentPage, debouncedSearch],
+    queryFn: () => api.getOrders({
       status: selectedStatus || undefined,
+      search: debouncedSearch || undefined,
       skip: (currentPage - 1) * itemsPerPage,
       limit: itemsPerPage,
     }),
@@ -315,6 +326,26 @@ export default function OrdersPage() {
               <option value="approved">Approved</option>
               <option value="completed">Completed</option>
             </select>
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search order # or customer…"
+              className="input input-md pl-9 w-full"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         </div>
         
