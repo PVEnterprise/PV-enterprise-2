@@ -206,6 +206,9 @@ class ApiService {
   submitQuotation = async (orderId: string, data: any) => {
     return (await this.client.post(`/orders/${orderId}/quotation-generated`, data)).data;
   }
+  saveQuotationDraft = async (orderId: string, data: any) => {
+    return (await this.client.post(`/orders/${orderId}/quotation-draft`, data)).data;
+  }
   
   // Generate quotation preview PDF with custom prices
   generateQuotationPreviewPDF = async (orderId: string, data: any) => {

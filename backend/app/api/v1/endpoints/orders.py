@@ -1195,6 +1195,77 @@ def request_po_approval(
     return {"message": "PO approval requested successfully"}
 
 
+@router.post("/{order_id}/quotation-draft", response_model=dict)
+def save_quotation_draft(
+    order_id: UUID,
+    quotation_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Save quotation as draft — persists price list, discount, and custom unit prices
+    without changing the workflow stage (order stays in 'quotation' stage).
+    Available for quoter and executive roles.
+    """
+    if current_user.role_name not in ['quoter', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only quoters and executives can save quotation drafts"
+        )
+
+    order = db.query(Order).options(
+        joinedload(Order.items)
+    ).filter(Order.id == order_id).first()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    if order.workflow_stage != "quotation":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order must be in quotation stage to save a draft"
+        )
+
+    # Apply price list prices to order items
+    if 'price_list_id' in quotation_data:
+        order.price_list_id = quotation_data['price_list_id']
+        if quotation_data['price_list_id']:
+            from app.models.price_list import PriceListItem
+            price_list_items = db.query(PriceListItem).filter(
+                PriceListItem.price_list_id == quotation_data['price_list_id']
+            ).all()
+            price_map = {pli.inventory_id: pli for pli in price_list_items}
+            for item in order.items:
+                if item.inventory_id in price_map:
+                    pli = price_map[item.inventory_id]
+                    item.unit_price = pli.unit_price
+                    item.gst_percentage = pli.tax_percentage or item.gst_percentage
+
+    # Apply custom unit prices (takes priority over price list)
+    if 'custom_prices' in quotation_data and quotation_data['custom_prices']:
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in quotation_data['custom_prices']:
+                item.unit_price = quotation_data['custom_prices'][item_id_str]
+
+    # Save discount
+    if 'discount_percent' in quotation_data:
+        order.discount_percentage = quotation_data['discount_percent']
+
+    add_order_action(
+        order=order,
+        action="Quotation Draft Saved",
+        user=current_user,
+        details=f"Draft saved — discount: {quotation_data.get('discount_percent', 0)}%, Grand Total: ₹{quotation_data.get('grand_total', 0)}"
+    )
+
+    db.commit()
+    return {"message": "Quotation draft saved successfully"}
+
+
 @router.post("/{order_id}/quotation-generated", response_model=dict)
 def mark_quotation_generated(
     order_id: UUID,
