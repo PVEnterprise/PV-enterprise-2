@@ -1,7 +1,7 @@
 /**
  * Generate Quotation Page - Create quotation with price list and discount
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Edit2, X, Check } from 'lucide-react';
@@ -42,6 +42,8 @@ interface Order {
   items: OrderItem[];
   status: string;
   workflow_stage: string;
+  price_list_id?: string | null;
+  discount_percentage?: number | null;
 }
 
 interface PriceListItem {
@@ -71,6 +73,9 @@ export default function GenerateQuotationPage() {
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [isEditingOrderNumber, setIsEditingOrderNumber] = useState(false);
   const [editedOrderNumber, setEditedOrderNumber] = useState('');
+  const [draftSavedMsg, setDraftSavedMsg] = useState<string | null>(null);
+  const draftMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initializedFromOrder = useRef(false);
   // Store custom unit prices per item (itemId -> custom price)
   const [customUnitPrices, setCustomUnitPrices] = useState<Record<string, number>>({});
 
@@ -83,6 +88,15 @@ export default function GenerateQuotationPage() {
     queryFn: () => api.getOrder(orderId!),
     enabled: !!orderId && canAccess,
   });
+
+  // Initialise price list + discount from previously saved draft when order loads
+  useEffect(() => {
+    if (order && !initializedFromOrder.current) {
+      initializedFromOrder.current = true;
+      if (order.price_list_id) setSelectedPriceListId(String(order.price_list_id));
+      if (order.discount_percentage != null) setDiscountPercent(Number(order.discount_percentage));
+    }
+  }, [order]);
 
   // Fetch price lists
   const { data: priceLists = [] } = useQuery<PriceList[]>({
@@ -161,6 +175,33 @@ export default function GenerateQuotationPage() {
     quotationItems.reduce((sum, item) => sum + Number(item.total_amount), 0),
     [quotationItems]
   );
+
+  // Save as draft mutation — persists data, stays on page
+  const saveDraftMutation = useMutation({
+    mutationFn: async () => {
+      return await api.saveQuotationDraft(orderId!, {
+        price_list_id: selectedPriceListId || null,
+        discount_percent: discountPercent,
+        sub_total: subTotal,
+        discount_amount: discountAmount,
+        tax_amount: totalTaxAmount,
+        grand_total: grandTotal,
+        custom_prices: customUnitPrices,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      if (draftMsgTimer.current) clearTimeout(draftMsgTimer.current);
+      setDraftSavedMsg('Draft saved successfully');
+      draftMsgTimer.current = setTimeout(() => setDraftSavedMsg(null), 3000);
+    },
+    onError: (error: any) => {
+      const detail = error?.response?.data?.detail || 'Failed to save draft';
+      if (draftMsgTimer.current) clearTimeout(draftMsgTimer.current);
+      setDraftSavedMsg(`Error: ${detail}`);
+      draftMsgTimer.current = setTimeout(() => setDraftSavedMsg(null), 4000);
+    },
+  });
 
   // Save and submit quotation mutation
   const saveQuotationMutation = useMutation({
@@ -486,11 +527,29 @@ export default function GenerateQuotationPage() {
           </div>
 
           <div className="flex flex-col gap-2 mt-4">
+            {draftSavedMsg && (
+              <p className={`text-xs text-center px-2 py-1 rounded ${
+                draftSavedMsg.startsWith('Error') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'
+              }`}>
+                {draftSavedMsg}
+              </p>
+            )}
+            <button
+              onClick={() => {
+                if (quotationItems.length === 0) { alert('No items to save'); return; }
+                saveDraftMutation.mutate();
+              }}
+              disabled={saveDraftMutation.isPending}
+              className="btn btn-secondary btn-sm w-full text-xs py-2"
+            >
+              {saveDraftMutation.isPending ? 'Saving…' : 'Save as Draft'}
+            </button>
             <button
               onClick={handleSaveAndSubmit}
+              disabled={saveQuotationMutation.isPending}
               className="btn btn-primary btn-sm w-full text-xs py-2"
             >
-              Save & Submit
+              {saveQuotationMutation.isPending ? 'Submitting…' : 'Save & Submit'}
             </button>
             <button
               onClick={async () => {

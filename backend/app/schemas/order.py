@@ -134,6 +134,8 @@ class OrderResponse(OrderBase):
     customer: Optional[CustomerBasic] = None  # Nested customer data
     status: str
     workflow_stage: str
+    price_list_id: Optional[UUID] = None
+    discount_percentage: Optional[Decimal] = None
     po_number: Optional[str] = None
     po_date: Optional[date] = None
     po_amount: Optional[Decimal] = None
