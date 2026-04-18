@@ -12,6 +12,8 @@ interface AuthContextType {
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
+  sessionExpired: boolean;
+  restoreSession: (credentials: LoginRequest) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,6 +21,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -42,6 +45,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
+  useEffect(() => {
+    const handleSessionExpired = () => setSessionExpired(true);
+    window.addEventListener('session:expired', handleSessionExpired);
+    return () => window.removeEventListener('session:expired', handleSessionExpired);
+  }, []);
+
   const login = async (credentials: LoginRequest) => {
     const response: AuthResponse = await api.login(credentials.email, credentials.password);
     localStorage.setItem('access_token', response.access_token);
@@ -58,12 +67,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     setUser(null);
+    setSessionExpired(false);
     // Clear all React Query cache on logout
     queryClient.clear();
   };
 
+  const restoreSession = async (credentials: LoginRequest) => {
+    const response: AuthResponse = await api.login(credentials.email, credentials.password);
+    localStorage.setItem('access_token', response.access_token);
+    localStorage.setItem('refresh_token', response.refresh_token);
+    const userData = await api.getCurrentUser();
+    if (userData.role) {
+      userData.role_name = userData.role.name;
+    }
+    setUser(userData);
+    setSessionExpired(false);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, isAuthenticated: !!user, sessionExpired, restoreSession }}>
       {children}
     </AuthContext.Provider>
   );
