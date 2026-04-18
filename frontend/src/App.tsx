@@ -18,6 +18,7 @@ import OutstandingPage from '@/pages/OutstandingPage';
 import DemosPage from '@/pages/DemosPage';
 import DemoRequestDetailPage from '@/pages/DemoRequestDetailPage';
 import Layout from '@/components/Layout';
+import SessionExpiredModal from '@/components/SessionExpiredModal';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -248,6 +249,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <SessionExpiredModal />
       </AuthProvider>
     </BrowserRouter>
   );
