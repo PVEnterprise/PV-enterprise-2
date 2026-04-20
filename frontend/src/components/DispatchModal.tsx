@@ -2,8 +2,8 @@
  * Dispatch Modal Component
  * Allows inventory admin to create dispatches for order items
  */
-import { useState, useEffect, useRef } from 'react';
-import { X, Package, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { X, Package, Plus, Trash2 } from 'lucide-react';
 import { OrderItem } from '@/types';
 import api from '@/services/api';
 
@@ -79,17 +79,17 @@ function AlternateSearch({ onSelect }: { onSelect: (item: { id: string; sku: str
         value={query}
         onChange={(e) => search(e.target.value)}
         placeholder="Search by Catalog ID or description..."
-        className="input w-full text-sm"
+        className="input w-full text-xs"
         autoFocus
       />
-      {loading && <p className="text-xs text-gray-500 mt-1">Searching...</p>}
+      {loading && <p className="text-xs text-gray-500 mt-0.5">Searching...</p>}
       {open && results.length > 0 && (
-        <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+        <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
           {results.map((r) => (
             <button
               key={r.id}
               type="button"
-              className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm border-b border-gray-100 last:border-0"
+              className="w-full text-left px-2 py-1.5 hover:bg-blue-50 text-xs border-b border-gray-100 last:border-0"
               onClick={() => {
                 onSelect({ id: r.id, sku: r.sku, description: r.description || '', stock: r.stock_quantity });
                 setQuery('');
@@ -105,7 +105,7 @@ function AlternateSearch({ onSelect }: { onSelect: (item: { id: string; sku: str
         </div>
       )}
       {open && results.length === 0 && !loading && (
-        <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 p-3 text-sm text-gray-500">
+        <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 p-2 text-xs text-gray-500">
           No items found
         </div>
       )}
@@ -127,31 +127,37 @@ export default function DispatchModal({
   const [notes, setNotes] = useState('');
   const [dispatchItems, setDispatchItems] = useState<DispatchItemData[]>([]);
 
-  useEffect(() => {
-    const outstandingItems = orderItems
-      .filter(item => item.inventory_id && (item.outstanding_quantity || 0) > 0)
-      .map(item => ({
-        order_item_id: item.id,
-        inventory_id: item.inventory_id!,
-        quantity: item.outstanding_quantity || 0,
-        item_description: item.item_description,
-        available_stock: item.inventory?.stock_quantity || 0,
-        outstanding_quantity: item.outstanding_quantity || 0,
-        showAlternate: false,
-        alternate: null,
-      }));
-    setDispatchItems(outstandingItems);
-  }, [orderItems]);
+  const availableItems = orderItems.filter(
+    item => item.inventory_id &&
+      (item.outstanding_quantity || 0) > 0 &&
+      !dispatchItems.some(di => di.order_item_id === item.id)
+  );
+
+  const addItem = (item: OrderItem) => {
+    setDispatchItems(prev => [...prev, {
+      order_item_id: item.id,
+      inventory_id: item.inventory_id!,
+      quantity: 1,
+      item_description: item.item_description,
+      available_stock: item.inventory?.stock_quantity || 0,
+      outstanding_quantity: item.outstanding_quantity || 0,
+      showAlternate: false,
+      alternate: null,
+    }]);
+  };
+
+  const removeItem = (index: number) => {
+    setDispatchItems(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleQuantityChange = (index: number, newQuantity: number) => {
     const updatedItems = [...dispatchItems];
     const item = updatedItems[index];
     if (newQuantity < 0) newQuantity = 0;
     if (newQuantity > item.outstanding_quantity) newQuantity = item.outstanding_quantity;
-    // If alternate exists, alternate qty cannot exceed new total - 1
     let alternate = item.alternate;
-    if (alternate && alternate.quantity >= newQuantity) {
-      alternate = { ...alternate, quantity: newQuantity - 1 > 0 ? newQuantity - 1 : 0 };
+    if (alternate && alternate.quantity > newQuantity) {
+      alternate = { ...alternate, quantity: newQuantity };
     }
     updatedItems[index] = { ...item, quantity: newQuantity, alternate };
     setDispatchItems(updatedItems);
@@ -167,7 +173,6 @@ export default function DispatchModal({
   const handleAlternateSelect = (index: number, selected: { id: string; sku: string; description: string; stock: number }) => {
     const updatedItems = [...dispatchItems];
     const item = updatedItems[index];
-    const defaultAltQty = Math.min(1, item.quantity - 1);
     updatedItems[index] = {
       ...item,
       alternate: {
@@ -175,7 +180,7 @@ export default function DispatchModal({
         sku: selected.sku,
         description: selected.description,
         available_stock: selected.stock,
-        quantity: defaultAltQty > 0 ? defaultAltQty : 1,
+        quantity: Math.min(1, item.quantity),
       }
     };
     setDispatchItems(updatedItems);
@@ -185,7 +190,7 @@ export default function DispatchModal({
     const updatedItems = [...dispatchItems];
     const item = updatedItems[index];
     if (!item.alternate) return;
-    if (newQty < 1) newQty = 1;
+    if (newQty < 0) newQty = 0;
     const maxAlt = item.quantity;
     if (newQty > maxAlt) newQty = maxAlt;
     if (newQty > item.alternate.available_stock) newQty = item.alternate.available_stock;
@@ -230,156 +235,205 @@ export default function DispatchModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+        <div className="px-4 py-2.5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
-            <Package size={24} className="text-blue-600" />
-            <h2 className="text-2xl font-bold">Create Dispatch</h2>
+            <Package size={16} className="text-blue-600" />
+            <h2 className="text-base font-bold">Create Dispatch</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSubmitting}>
-            <X size={24} />
+            <X size={16} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="px-6 py-4 overflow-y-auto flex-1">
+        <div className="px-4 py-3 overflow-y-auto flex-1">
           {/* Dispatch Details */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-3">Dispatch Details</h3>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="mb-3">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Dispatch Details</h3>
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dispatch Date <span className="text-red-500">*</span></label>
-                <input type="date" value={dispatchDate} onChange={(e) => setDispatchDate(e.target.value)} className="input w-full" required />
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Dispatch Date <span className="text-red-500">*</span></label>
+                <input type="date" value={dispatchDate} onChange={(e) => setDispatchDate(e.target.value)} className="input w-full text-xs py-1" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Courier Name</label>
-                <input type="text" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="e.g., Blue Dart, DTDC" className="input w-full" />
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Courier Name</label>
+                <input type="text" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="e.g., Blue Dart, DTDC" className="input w-full text-xs py-1" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tracking Number</label>
-                <input type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Enter tracking number" className="input w-full" />
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Tracking Number</label>
+                <input type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Enter tracking number" className="input w-full text-xs py-1" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes" className="input w-full" />
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Notes</label>
+                <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes" className="input w-full text-xs py-1" />
               </div>
             </div>
           </div>
 
-          {/* Items to Dispatch */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Items to Dispatch</h3>
-            {dispatchItems.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <AlertCircle size={48} className="mx-auto mb-2 text-gray-400" />
-                <p>No outstanding items to dispatch</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {dispatchItems.map((item, index) => {
-                  const mainQty = item.alternate ? item.quantity - item.alternate.quantity : item.quantity;
-                  return (
-                    <div key={item.order_item_id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                      {/* Main item row */}
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900 mb-1">{item.item_description}</p>
-                          <div className="flex gap-4 text-sm text-gray-600">
-                            <span>Pending: <span className="font-medium text-orange-600">{item.outstanding_quantity}</span></span>
-                            <span>Available Stock: <span className={`font-medium ${item.available_stock > 0 ? 'text-green-600' : 'text-red-600'}`}>{item.available_stock}</span></span>
-                            {item.alternate && (
-                              <span className="text-blue-600">Main Qty: <span className="font-medium">{mainQty}</span></span>
-                            )}
+          {/* Items to Dispatch — two-column side-by-side layout */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Left: Items added to this dispatch */}
+            <div className="flex flex-col min-h-0">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex-shrink-0">
+                Items to Dispatch {dispatchItems.length > 0 && <span className="ml-1 text-blue-600">({dispatchItems.length})</span>}
+              </h3>
+              <div className="overflow-y-auto max-h-72 flex-1">
+                {dispatchItems.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-gray-400 border border-dashed border-gray-300 rounded h-full flex items-center justify-center">
+                    <span>Add items from the right panel</span>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 pr-0.5">
+                    {dispatchItems.map((item, index) => {
+                      const mainQty = item.alternate ? item.quantity - item.alternate.quantity : item.quantity;
+                      return (
+                        <div key={item.order_item_id} className="border border-gray-200 rounded p-2 bg-gray-50">
+                          {/* Main item row */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-900 truncate">{item.item_description}</p>
+                              <div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-0.5">
+                                <span>Pending: <span className="font-medium text-orange-600">{item.outstanding_quantity}</span></span>
+                                <span>Stock: <span className={`font-medium ${item.available_stock > 0 ? 'text-green-600' : 'text-red-600'}`}>{item.available_stock}</span></span>
+                                {item.alternate && (
+                                  <span className="text-blue-600">Main: <span className="font-medium">{mainQty}</span></span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Dispatch Qty</label>
+                                <input
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => handleQuantityChange(index, Number(e.target.value))}
+                                  onWheel={(e) => e.currentTarget.blur()}
+                                  min="0"
+                                  max={item.outstanding_quantity}
+                                  className="input w-16 text-xs py-1"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeItem(index)}
+                                className="text-gray-400 hover:text-red-500 mt-4"
+                                title="Remove from dispatch"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           </div>
+
+                          {/* Alternate item section */}
+                          {item.alternate ? (
+                            <div className="mt-1.5 pt-1.5 border-t border-dashed border-gray-300">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Alternate Catalog ID</span>
+                                <button type="button" onClick={() => removeAlternate(index)} className="text-red-400 hover:text-red-600">
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                              <div className="flex items-start gap-2 bg-purple-50 border border-purple-200 rounded p-1.5">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-purple-800 truncate">
+                                    <span className="font-mono">{item.alternate.sku}</span>
+                                    {item.alternate.description && <span className="text-purple-600 ml-1">— {item.alternate.description}</span>}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Stock: <span className={item.alternate.available_stock > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{item.alternate.available_stock}</span>
+                                    <span className="ml-2 text-gray-400">Main: {mainQty} · Alt: {item.alternate.quantity} · Total: {item.quantity}</span>
+                                  </p>
+                                </div>
+                                <div className="w-16 flex-shrink-0">
+                                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Alt Qty</label>
+                                  <input
+                                    type="number"
+                                    value={item.alternate.quantity}
+                                    onChange={(e) => handleAlternateQtyChange(index, Number(e.target.value))}
+                                    onWheel={(e) => e.currentTarget.blur()}
+                                    min="0"
+                                    max={item.quantity}
+                                    className="input w-full text-xs py-1"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ) : item.showAlternate ? (
+                            <div className="mt-1.5 pt-1.5 border-t border-dashed border-gray-300">
+                              <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">Search Alternate Catalog ID</p>
+                              <AlternateSearch onSelect={(selected) => handleAlternateSelect(index, selected)} />
+                            </div>
+                          ) : null}
+
+                          {/* Toggle button */}
+                          {!item.alternate && (
+                            <div className="mt-1.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleAlternate(index)}
+                                className="flex items-center gap-0.5 text-xs font-medium text-purple-600 hover:text-purple-800 transition-colors"
+                              >
+                                <Plus size={10} />
+                                {item.showAlternate ? 'Cancel alternate' : 'Add other Catalog ID'}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <div className="w-32">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Dispatch Qty</label>
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => handleQuantityChange(index, Number(e.target.value))}
-                            onWheel={(e) => e.currentTarget.blur()}
-                            min="0"
-                            max={item.outstanding_quantity}
-                            className="input w-full"
-                          />
-                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Available items to add */}
+            <div className="flex flex-col min-h-0">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex-shrink-0">
+                Add Items to Dispatch {availableItems.length > 0 && <span className="ml-1 text-gray-400">({availableItems.length})</span>}
+              </h4>
+              <div className="overflow-y-auto max-h-72 border border-gray-200 rounded divide-y divide-gray-100">
+                {availableItems.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-gray-400 h-full flex items-center justify-center">
+                    <span>All items added</span>
+                  </div>
+                ) : (
+                  availableItems.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-2 px-2 py-1.5 hover:bg-gray-50">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-800 truncate">{item.item_description}</p>
+                        <p className="text-xs text-gray-500">
+                          Pending: <span className="text-orange-600 font-medium">{item.outstanding_quantity}</span>
+                          <span className="ml-2">Stock: <span className={`font-medium ${(item.inventory?.stock_quantity || 0) > 0 ? 'text-green-600' : 'text-red-600'}`}>{item.inventory?.stock_quantity || 0}</span></span>
+                        </p>
                       </div>
-
-                      {/* Alternate item section */}
-                      {item.alternate ? (
-                        <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Alternate Catalog ID</span>
-                            <button type="button" onClick={() => removeAlternate(index)} className="text-red-400 hover:text-red-600">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                          <div className="flex items-start gap-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-purple-800">
-                                <span className="font-mono">{item.alternate.sku}</span>
-                                {item.alternate.description && <span className="text-purple-600 ml-2">— {item.alternate.description}</span>}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                Stock: <span className={item.alternate.available_stock > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{item.alternate.available_stock}</span>
-                                <span className="ml-3 text-gray-400">Main: {mainQty} · Alternate: {item.alternate.quantity} · Total: {item.quantity}</span>
-                              </p>
-                            </div>
-                            <div className="w-28">
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Alt Qty</label>
-                              <input
-                                type="number"
-                                value={item.alternate.quantity}
-                                onChange={(e) => handleAlternateQtyChange(index, Number(e.target.value))}
-                                onWheel={(e) => e.currentTarget.blur()}
-                                min="1"
-                                max={item.quantity}
-                                className="input w-full text-sm"
-                              />
-                              <p className="text-xs text-gray-400 mt-0.5">max {item.quantity}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ) : item.showAlternate ? (
-                        <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
-                          <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-2">Search Alternate Catalog ID</p>
-                          <AlternateSearch onSelect={(selected) => handleAlternateSelect(index, selected)} />
-                        </div>
-                      ) : null}
-
-                      {/* Toggle button */}
-                      {!item.alternate && item.quantity > 1 && (
-                        <div className="mt-3">
-                          <button
-                            type="button"
-                            onClick={() => toggleAlternate(index)}
-                            className="flex items-center gap-1 text-xs font-medium text-purple-600 hover:text-purple-800 transition-colors"
-                          >
-                            <Plus size={12} />
-                            {item.showAlternate ? 'Cancel alternate' : 'Add other Catalog ID'}
-                          </button>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => addItem(item)}
+                        className="flex items-center gap-0.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded transition-colors flex-shrink-0"
+                      >
+                        <Plus size={10} />
+                        Add
+                      </button>
                     </div>
-                  );
-                })}
+                  ))
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Summary */}
           {getTotalItems() > 0 && (
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded">
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm text-gray-600">Total Items to Dispatch</p>
-                  <p className="text-2xl font-bold text-blue-600">{getTotalItems()}</p>
+                  <p className="text-xs text-gray-600">Total Items</p>
+                  <p className="text-lg font-bold text-blue-600">{getTotalItems()}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Total Quantity</p>
-                  <p className="text-2xl font-bold text-blue-600">{getTotalQuantity()}</p>
+                  <p className="text-xs text-gray-600">Total Quantity</p>
+                  <p className="text-lg font-bold text-blue-600">{getTotalQuantity()}</p>
                 </div>
               </div>
             </div>
@@ -387,18 +441,18 @@ export default function DispatchModal({
 
           {/* Error Display */}
           {error && (
-            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-sm text-red-800"><strong>Error:</strong> {error}</p>
+            <div className="mt-2 bg-red-50 border border-red-200 rounded p-2">
+              <p className="text-xs text-red-800"><strong>Error:</strong> {error}</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex gap-3 justify-end flex-shrink-0">
-          <button onClick={onClose} className="btn btn-secondary" disabled={isSubmitting}>Cancel</button>
-          <button onClick={handleSubmit} className="btn btn-primary flex items-center gap-2" disabled={!canSubmit()}>
+        <div className="px-4 py-2.5 border-t border-gray-200 bg-gray-50 flex gap-2 justify-end flex-shrink-0">
+          <button onClick={onClose} className="btn btn-secondary text-sm" disabled={isSubmitting}>Cancel</button>
+          <button onClick={handleSubmit} className="btn btn-primary text-sm flex items-center gap-2" disabled={!canSubmit()}>
             {isSubmitting && (
-              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
