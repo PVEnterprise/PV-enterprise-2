@@ -101,6 +101,11 @@ export interface Inventory {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  md_bag?: number;
+  nani_bag?: number;
+  srinu_bag?: number;
+  praneeth_bag?: number;
+  prasanna_bag?: number;
 }
 
 export interface Quotation {

@@ -21,6 +21,11 @@ class Inventory(BaseModel):
     hsn_code = Column(String(8), nullable=False, index=True, comment="HSN code (8 digits)")
     tax = Column(Numeric(5, 2), nullable=False, comment="Tax percentage")
     is_active = Column(Boolean, default=True, nullable=False, index=True)
+    md_bag = Column(Integer, nullable=True, comment="MD bag quantity")
+    nani_bag = Column(Integer, nullable=True, comment="Nani bag quantity")
+    srinu_bag = Column(Integer, nullable=True, comment="Srinu bag quantity")
+    praneeth_bag = Column(Integer, nullable=True, comment="Praneeth bag quantity")
+    prasanna_bag = Column(Integer, nullable=True, comment="Prasanna bag quantity")
     
     # Relationships
     order_items = relationship("OrderItem", back_populates="inventory_item")
