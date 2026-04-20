@@ -28,6 +28,11 @@ class InventoryBase(BaseModel):
     stock_quantity: int = Field(default=0, ge=0, description="Current stock quantity")
     hsn_code: str = Field(..., min_length=8, max_length=8, pattern="^[0-9]{8}$", description="HSN code (8 digits)")
     tax: Decimal = Field(..., ge=0, le=100, description="Tax percentage")
+    md_bag: Optional[int] = Field(None, ge=0, description="MD bag quantity")
+    nani_bag: Optional[int] = Field(None, ge=0, description="Nani bag quantity")
+    srinu_bag: Optional[int] = Field(None, ge=0, description="Srinu bag quantity")
+    praneeth_bag: Optional[int] = Field(None, ge=0, description="Praneeth bag quantity")
+    prasanna_bag: Optional[int] = Field(None, ge=0, description="Prasanna bag quantity")
 
 
 class InventoryCreate(InventoryBase):
@@ -43,6 +48,11 @@ class InventoryUpdate(BaseModel):
     hsn_code: Optional[str] = Field(None, min_length=8, max_length=8, pattern="^[0-9]{8}$")
     tax: Optional[Decimal] = Field(None, ge=0, le=100)
     is_active: Optional[bool] = None
+    md_bag: Optional[int] = Field(None, ge=0)
+    nani_bag: Optional[int] = Field(None, ge=0)
+    srinu_bag: Optional[int] = Field(None, ge=0)
+    praneeth_bag: Optional[int] = Field(None, ge=0)
+    prasanna_bag: Optional[int] = Field(None, ge=0)
 
 
 class StockUpdate(BaseModel):

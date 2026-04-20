@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Inventory } from '@/types';
-import { Plus, Search, Upload, X } from 'lucide-react';
+import { Plus, Search, Upload, Download, X, Info } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column, commonActions } from '@/components/common/DataTable';
@@ -18,6 +18,7 @@ export default function InventoryPage() {
   const [formError, setFormError] = useState<string>('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [viewingItem, setViewingItem] = useState<Inventory | null>(null);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -92,6 +93,41 @@ export default function InventoryPage() {
         max: 100,
       },
     },
+    {
+      name: 'md_bag',
+      label: 'MD Bag',
+      type: 'number',
+      placeholder: 'Enter quantity',
+      validation: { min: 0 },
+    },
+    {
+      name: 'nani_bag',
+      label: 'Nani Bag',
+      type: 'number',
+      placeholder: 'Enter quantity',
+      validation: { min: 0 },
+    },
+    {
+      name: 'srinu_bag',
+      label: 'Srinu Bag',
+      type: 'number',
+      placeholder: 'Enter quantity',
+      validation: { min: 0 },
+    },
+    {
+      name: 'praneeth_bag',
+      label: 'Praneeth Bag',
+      type: 'number',
+      placeholder: 'Enter quantity',
+      validation: { min: 0 },
+    },
+    {
+      name: 'prasanna_bag',
+      label: 'Prasanna Bag',
+      type: 'number',
+      placeholder: 'Enter quantity',
+      validation: { min: 0 },
+    },
   ];
 
   // Mutations
@@ -163,6 +199,29 @@ export default function InventoryPage() {
     setFormError(''); // Clear any previous errors
   };
 
+  const handleExportExcel = async () => {
+    const XLSX = await import('xlsx');
+    const exportData = (inventory || []).map(item => ({
+      'Catalog No': item.sku,
+      'Description': item.description || '',
+      'Batch No': item.batch_no || '',
+      'Unit Price': item.unit_price,
+      'Stock Quantity': item.stock_quantity,
+      'HSN Code': item.hsn_code,
+      'Tax %': item.tax,
+      'MD Bag': item.md_bag ?? '',
+      'Nani Bag': item.nani_bag ?? '',
+      'Srinu Bag': item.srinu_bag ?? '',
+      'Praneeth Bag': item.praneeth_bag ?? '',
+      'Prasanna Bag': item.prasanna_bag ?? '',
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory');
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `inventory_${date}.xlsx`);
+  };
+
   const handleImportExcel = async () => {
     if (!importFile) return;
 
@@ -202,6 +261,11 @@ export default function InventoryPage() {
             const stockQuantity = row['Stock Quantity'] || row['stock_quantity'] || row['Stock'];
             const hsnCode = row['HSN Code'] || row['hsn_code'] || row['HSN'];
             const tax = row['Tax %'] || row['Tax'] || row['tax'];
+            const mdBag = row['MD Bag'] || row['md_bag'];
+            const naniBag = row['Nani Bag'] || row['nani_bag'];
+            const srinuBag = row['Srinu Bag'] || row['srinu_bag'];
+            const praneethBag = row['Praneeth Bag'] || row['praneeth_bag'];
+            const prasannaBag = row['Prasanna Bag'] || row['prasanna_bag'];
             
             console.log('Processing row:', { sku, description, unitPrice, stockQuantity, hsnCode, tax });
 
@@ -242,6 +306,11 @@ export default function InventoryPage() {
                 stock_quantity: stockQuantity ? parseInt(stockQuantity) : 0,
                 hsn_code: hsnStr,
                 tax: taxNum,
+                md_bag: mdBag != null ? parseInt(mdBag) : undefined,
+                nani_bag: naniBag != null ? parseInt(naniBag) : undefined,
+                srinu_bag: srinuBag != null ? parseInt(srinuBag) : undefined,
+                praneeth_bag: praneethBag != null ? parseInt(praneethBag) : undefined,
+                prasanna_bag: prasannaBag != null ? parseInt(prasannaBag) : undefined,
               });
               if (result.created) {
                 createdCount++;
@@ -367,24 +436,33 @@ export default function InventoryPage() {
         </div>
         
         {/* Action Buttons - Always Right */}
-        {canCreate && (
-          <div className="flex items-center space-x-2 ml-4">
-            <button 
-              onClick={() => setShowImportModal(true)}
-              className="btn btn-secondary btn-sm flex items-center whitespace-nowrap"
-            >
-              <Upload size={16} className="mr-1" />
-              Import Excel
-            </button>
-            <button 
-              onClick={handleAddNew}
-              className="btn btn-primary btn-sm flex items-center whitespace-nowrap"
-            >
-              <Plus size={16} className="mr-1" />
-              Add Item
-            </button>
-          </div>
-        )}
+        <div className="flex items-center space-x-2 ml-4">
+          <button
+            onClick={handleExportExcel}
+            className="btn btn-secondary btn-sm flex items-center whitespace-nowrap"
+          >
+            <Download size={16} className="mr-1" />
+            Export Excel
+          </button>
+          {canCreate && (
+            <>
+              <button 
+                onClick={() => setShowImportModal(true)}
+                className="btn btn-secondary btn-sm flex items-center whitespace-nowrap"
+              >
+                <Upload size={16} className="mr-1" />
+                Import Excel
+              </button>
+              <button 
+                onClick={handleAddNew}
+                className="btn btn-primary btn-sm flex items-center whitespace-nowrap"
+              >
+                <Plus size={16} className="mr-1" />
+                Add Item
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Scrollable Table Container */}
@@ -396,6 +474,7 @@ export default function InventoryPage() {
           emptyMessage="No inventory items found. Add your first item to get started."
           showAuditInfo={false}
           actions={[
+            commonActions.view((item) => setViewingItem(item as Inventory)),
             commonActions.edit(
               handleEdit,
               () => canUpdate
@@ -420,6 +499,48 @@ export default function InventoryPage() {
           isLoading={createMutation.isPending || updateMutation.isPending}
           error={formError}
         />
+      )}
+
+      {/* Item Info Modal */}
+      {viewingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Info size={16} className="text-blue-600" />
+                <h2 className="text-base font-bold">{viewingItem.sku}{viewingItem.description ? ` — ${viewingItem.description}` : ''}</h2>
+              </div>
+              <button onClick={() => setViewingItem(null)} className="p-1 hover:bg-gray-100 rounded">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 grid grid-cols-2 gap-x-6 gap-y-3">
+              {([
+                { label: 'Catalog No', value: viewingItem.sku },
+                { label: 'Batch No', value: viewingItem.batch_no || '-' },
+                { label: 'Description', value: viewingItem.description || '-', full: true },
+                { label: 'Unit Price', value: `₹${Number(viewingItem.unit_price).toLocaleString()}` },
+                { label: 'Stock Quantity', value: viewingItem.stock_quantity },
+                { label: 'HSN Code', value: viewingItem.hsn_code },
+                { label: 'Tax', value: `${viewingItem.tax}%` },
+                { label: 'Status', value: viewingItem.is_active ? 'Active' : 'Inactive' },
+                { label: 'MD Bag', value: viewingItem.md_bag ?? '-' },
+                { label: 'Nani Bag', value: viewingItem.nani_bag ?? '-' },
+                { label: 'Srinu Bag', value: viewingItem.srinu_bag ?? '-' },
+                { label: 'Praneeth Bag', value: viewingItem.praneeth_bag ?? '-' },
+                { label: 'Prasanna Bag', value: viewingItem.prasanna_bag ?? '-' },
+              ] as { label: string; value: any; full?: boolean }[]).map(({ label, value, full }) => (
+                <div key={label} className={full ? 'col-span-2' : ''}>
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                  <p className="text-sm text-gray-900 mt-0.5">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t flex justify-end">
+              <button onClick={() => setViewingItem(null)} className="btn btn-secondary btn-sm">Close</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Import from Excel Modal */}
@@ -451,6 +572,11 @@ export default function InventoryPage() {
                   <li><strong>Stock Quantity</strong> - Current stock (optional, default 0)</li>
                   <li><strong>HSN Code</strong> - 8-digit HSN code (required)</li>
                   <li><strong>Tax %</strong> - Tax percentage 0-100 (required)</li>
+                  <li><strong>MD Bag</strong> - MD bag quantity (optional)</li>
+                  <li><strong>Nani Bag</strong> - Nani bag quantity (optional)</li>
+                  <li><strong>Srinu Bag</strong> - Srinu bag quantity (optional)</li>
+                  <li><strong>Praneeth Bag</strong> - Praneeth bag quantity (optional)</li>
+                  <li><strong>Prasanna Bag</strong> - Prasanna bag quantity (optional)</li>
                 </ul>
                 <p className="text-xs text-gray-500 italic">
                   Items with existing SKUs will be updated with the new values.
