@@ -277,7 +277,7 @@ class EstimatePDFGenerator:
         # Use order number for #
         estimate_number = self.order.order_number
         estimate_date = datetime.now().strftime('%d.%m.%Y')
-        place_of_supply = "Maharashtra (27)"  # Default, should come from customer state
+        place_of_supply = self.customer.state or 'N/A'
         
         data = [
             ['#', f': {estimate_number}', 'Place Of Supply', f': {place_of_supply}'],

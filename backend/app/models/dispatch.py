@@ -22,6 +22,7 @@ class Dispatch(BaseModel):
     tracking_number = Column(String(100))
     status = Column(String(50), default="pending", nullable=False, index=True)
     notes = Column(Text)
+    terms = Column(String(255), nullable=True, comment="Payment/delivery terms shown on invoice")
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
     # Relationships

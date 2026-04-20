@@ -48,6 +48,7 @@ class DispatchBase(BaseModel):
     tracking_number: Optional[str] = None
     status: str = "pending"
     notes: Optional[str] = None
+    terms: Optional[str] = None
 
 
 class DispatchCreate(DispatchBase):
