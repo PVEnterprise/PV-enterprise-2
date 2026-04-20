@@ -142,6 +142,7 @@ def create_dispatch(
         tracking_number=dispatch_data.tracking_number,
         status=dispatch_data.status,
         notes=dispatch_data.notes,
+        terms=dispatch_data.terms,
         created_by=current_user.id
     )
     db.add(dispatch)
@@ -332,7 +333,7 @@ def download_dispatch_invoice_pdf(
                 self.invoice_number = f"TEMP-{dispatch.dispatch_number}"
                 self.invoice_date = dispatch.dispatch_date or date.today()
                 self.due_date = self.invoice_date + timedelta(days=30)
-                self.payment_terms = "Net 30 days"
+                self.payment_terms = dispatch.terms or ""
                 self.notes = ""
                 self.subtotal = subtotal
                 self.gst_amount = total_igst

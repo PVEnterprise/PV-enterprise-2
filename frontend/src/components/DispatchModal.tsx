@@ -41,6 +41,7 @@ export interface DispatchFormData {
   courier_name: string;
   tracking_number: string;
   notes: string;
+  terms: string;
   items: Array<{
     order_item_id: string;
     inventory_id: string;
@@ -125,6 +126,7 @@ export default function DispatchModal({
   const [courierName, setCourierName] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [notes, setNotes] = useState('');
+  const [terms, setTerms] = useState('');
   const [dispatchItems, setDispatchItems] = useState<DispatchItemData[]>([]);
 
   const availableItems = orderItems.filter(
@@ -225,6 +227,7 @@ export default function DispatchModal({
       courier_name: courierName,
       tracking_number: trackingNumber,
       notes,
+      terms,
       items: itemsToDispatch,
     });
   };
@@ -268,6 +271,10 @@ export default function DispatchModal({
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">Notes</label>
                 <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes" className="input w-full text-xs py-1" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Terms</label>
+                <input type="text" value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="e.g. Due on Receipt, Net 30" className="input w-full text-xs py-1" />
               </div>
             </div>
           </div>
