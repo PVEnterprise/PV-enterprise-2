@@ -99,6 +99,7 @@ export default function InventoryPage() {
       type: 'number',
       placeholder: 'Enter quantity',
       validation: { min: 0 },
+      defaultValue: 0,
     },
     {
       name: 'nani_bag',
@@ -106,6 +107,7 @@ export default function InventoryPage() {
       type: 'number',
       placeholder: 'Enter quantity',
       validation: { min: 0 },
+      defaultValue: 0,
     },
     {
       name: 'srinu_bag',
@@ -113,6 +115,7 @@ export default function InventoryPage() {
       type: 'number',
       placeholder: 'Enter quantity',
       validation: { min: 0 },
+      defaultValue: 0,
     },
     {
       name: 'praneeth_bag',
@@ -120,6 +123,7 @@ export default function InventoryPage() {
       type: 'number',
       placeholder: 'Enter quantity',
       validation: { min: 0 },
+      defaultValue: 0,
     },
     {
       name: 'prasanna_bag',
@@ -127,6 +131,7 @@ export default function InventoryPage() {
       type: 'number',
       placeholder: 'Enter quantity',
       validation: { min: 0 },
+      defaultValue: 0,
     },
   ];
 
