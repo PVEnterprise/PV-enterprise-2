@@ -317,7 +317,7 @@ export default function GenerateQuotationPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="-m-6 h-[calc(100vh-4rem)] flex flex-col bg-gray-50">
       {/* Compact Header */}
       <div className="bg-white border-b shadow-sm">
         <div className="flex flex-col p-4">
@@ -446,13 +446,13 @@ export default function GenerateQuotationPage() {
       </div>
 
       {/* Body Container with Fixed Height */}
-      <div className="px-4 py-6">
-        <div className="flex gap-6" style={{ height: 'calc(100vh - 280px)' }}>
+      <div className="flex-1 overflow-hidden px-4 py-4">
+        <div className="flex gap-6 h-full">
           {/* Left Section - Items Table (85%) */}
-          <div className="w-[85%] overflow-auto">
-            <div className="bg-white rounded-lg shadow overflow-hidden h-full">
+          <div className="w-[85%] flex flex-col min-h-0">
+            <div className="bg-white rounded-lg shadow flex-1 overflow-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 sticky top-0">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr className="border-b">
                   <th className="text-left p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Sr No</th>
                   <th className="text-left p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Catalog No</th>
