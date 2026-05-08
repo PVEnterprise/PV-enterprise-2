@@ -71,8 +71,9 @@ def format_indian_number(num):
 
 # ---------- Invoice Generator ----------
 class InvoicePDFGenerator:
-    BRAND_COLOR = colors.HexColor("#1B4F72")
-    ACCENT_COLOR = colors.HexColor("#DCECF8")
+    BRAND_COLOR = colors.HexColor("#3d6b9e")
+    GREEN_COLOR = colors.HexColor("#56982c")
+    ACCENT_COLOR = colors.HexColor("#f4f7fb")
 
     def __init__(self, order, invoice, dispatch):
         from app.core.config import settings
@@ -92,8 +93,9 @@ class InvoicePDFGenerator:
         ))
         self.styles.add(ParagraphStyle(
             name="InvoiceTitle",
-            fontSize=18, textColor=self.BRAND_COLOR,
-            fontName=_FONT, alignment=TA_CENTER, leading=20
+            fontSize=22, textColor=colors.HexColor('#56982c'),
+            fontName=_FONT, alignment=TA_LEFT, leading=26,
+            charSpace=4
         ))
         self.styles.add(ParagraphStyle(
             name="NormalText",
@@ -111,8 +113,12 @@ class InvoicePDFGenerator:
 
     # ---------- Helper ----------
     def _fix_width(self, t):
-        """Ensure consistent width across tables."""
-        t._argW = [180 * mm] if len(t._argW) == 1 else t._argW
+        """Ensure all tables are exactly 180mm wide."""
+        target = 180 * mm
+        total = sum(t._argW)
+        if abs(total - target) > 0.01:
+            scale = target / total
+            t._argW = [w * scale for w in t._argW]
         return t
 
     # ---------- Header ----------
@@ -128,14 +134,36 @@ class InvoicePDFGenerator:
             f"{self.settings.COMPANY_CITY}, {self.settings.COMPANY_COUNTRY}<br/>"
             f"GSTIN: {self.settings.COMPANY_GSTIN}"
         )
-        data = [[logo, Paragraph("<b>TAX INVOICE</b>", self.styles["InvoiceTitle"]), Paragraph(info, self.styles["RightText"])]]
-        t = Table(data, colWidths=[65 * mm, 50 * mm, 65 * mm], rowHeights=[26 * mm])
+        title_block = Paragraph(
+            '<b>TAX INVOICE</b><br/>'
+            '<font size="7" color="#3d6b9e">SREEDEVI LIFE SCIENCES</font>',
+            self.styles["InvoiceTitle"]
+        )
+        data = [[logo, '', title_block, Paragraph(info, self.styles["RightText"])]]
+        t = Table(data, colWidths=[60*mm, 3*mm, 55*mm, 62*mm], rowHeights=[26*mm])
         t.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (1, 0), (1, 0), "CENTER"),
-            ("ALIGN", (2, 0), (2, 0), "RIGHT"),
+            ("ALIGN", (0, 0), (0, 0), "LEFT"),
+            ("ALIGN", (2, 0), (2, 0), "LEFT"),
+            ("ALIGN", (3, 0), (3, 0), "RIGHT"),
+            ("LEFTPADDING", (1, 0), (1, 0), 0),
+            ("RIGHTPADDING", (1, 0), (1, 0), 0),
+            ("LINEBEFORE", (2, 0), (2, 0), 1.5, colors.HexColor('#d0dcea')),
         ]))
         return t
+
+    def _accent_bars(self):
+        b1 = Table([['']], colWidths=[180*mm], rowHeights=[4])
+        b1.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#56982c')),
+            ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        b2 = Table([['']], colWidths=[180*mm], rowHeights=[2])
+        b2.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#3d6b9e')),
+            ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        return [b1, b2]
 
     # ---------- Invoice Info ----------
     def _invoice_info(self):
@@ -160,12 +188,16 @@ class InvoicePDFGenerator:
     def _bill_to(self):
         c = self.order.customer
         addr = f"<b>{c.hospital_name or c.name}</b><br/>{c.address or ''}<br/>{c.city or ''} - {c.pincode or ''}<br/>{c.state or ''}, India"
-        data = [[Paragraph("Bill To", self.styles["SectionHeader"])],
+        data = [[Paragraph('<font color="#3d6b9e"><b>BILL TO</b></font>', self.styles["NormalText"])],
                 [Paragraph(addr, self.styles["NormalText"])]]
-        t = Table(data, colWidths=[180 * mm])
+        t = Table(data, colWidths=[180*mm])
         t.setStyle(TableStyle([
-            ("BOX", (0, 0), (-1, -1), 0.25, colors.lightgrey),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("BOX", (0, 0), (-1, -1), 0.25, colors.HexColor('#d0dcea')),
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor('#f4f7fb')),
+            ("LINEBEFORE", (0, 0), (0, -1), 2.5, colors.HexColor('#3d6b9e')),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, 0), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
         ]))
         return self._fix_width(t)
 
@@ -235,14 +267,19 @@ class InvoicePDFGenerator:
         data.append(["Grand Total"] + [''] * (num_cols - 2) + [f"{RUPEE}{format_indian_number(grand)}"])
         final_totals_rows = list(range(igst_row - (0 if has_named_sections else 1), len(data)))
 
-        col_widths = [8*mm, 55*mm, 18*mm, 10*mm, 27*mm, 14*mm, 22*mm, 30*mm]
+        col_widths = [8*mm, 51*mm, 18*mm, 10*mm, 27*mm, 14*mm, 22*mm, 30*mm]
         t = Table(data, colWidths=col_widths)
 
+        grand_row = len(data) - 1
         style = [
             ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),
-            ("BACKGROUND", (0, 0), (-1, 0), self.ACCENT_COLOR),
+            ("BACKGROUND", (0, 0), (-1, 0), self.BRAND_COLOR),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
+            ("BACKGROUND", (0, grand_row), (-1, grand_row), colors.HexColor('#3d6b9e')),
+            ("TEXTCOLOR", (0, grand_row), (-1, grand_row), colors.white),
+            ("FONTNAME", (0, grand_row), (-1, grand_row), _FONT),
         ]
 
         for r in section_header_rows:
@@ -279,7 +316,8 @@ class InvoicePDFGenerator:
         t = Table([[Paragraph(bank_text, self.styles["NormalText"]), sign]],
                   colWidths=[125*mm, 55*mm], rowHeights=[35*mm])
         t.setStyle(TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor('#d0dcea')),
+            ("LINEABOVE", (0, 0), (-1, 0), 3, colors.HexColor('#56982c')),
             ("VALIGN", (0, 0), (0, 0), "TOP"),
             ("VALIGN", (1, 0), (1, 0), "BOTTOM"),
             ("ALIGN", (1, 0), (1, 0), "RIGHT"),
@@ -291,12 +329,15 @@ class InvoicePDFGenerator:
     def _terms(self):
         dispatch_terms = getattr(self.dispatch, 'terms', None) or ''
         combined = dispatch_terms.replace('\n', '<br/>') if dispatch_terms else ''
-        data = [[Paragraph("Terms & Conditions", self.styles["SectionHeader"])],
+        data = [[Paragraph('<font color="#3d6b9e"><b>TERMS &amp; CONDITIONS</b></font>', self.styles["NormalText"])],
                 [Paragraph(combined, self.styles["NormalText"])]]
-        t = Table(data, colWidths=[180 * mm])
+        t = Table(data, colWidths=[180*mm])
         t.setStyle(TableStyle([
-            ("BOX", (0, 0), (-1, -1), 0.25, colors.lightgrey),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("BOX", (0, 0), (-1, -1), 0.25, colors.HexColor('#d0dcea')),
+            ("LINEBEFORE", (0, 0), (0, 0), 2.5, colors.HexColor('#56982c')),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, 0), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
         ]))
         return self._fix_width(t)
 
@@ -307,7 +348,7 @@ class InvoicePDFGenerator:
                                 leftMargin=15*mm, rightMargin=15*mm,
                                 topMargin=15*mm, bottomMargin=15*mm)
         story = [
-            self._header(), Spacer(1, 4*mm),
+            self._header(), *self._accent_bars(), Spacer(1, 4*mm),
             self._invoice_info(), Spacer(1, 4*mm),
             self._bill_to(), Spacer(1, 5*mm),
             self._items_table(), Spacer(1, 6*mm),

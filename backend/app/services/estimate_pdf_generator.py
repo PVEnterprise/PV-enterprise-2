@@ -84,9 +84,10 @@ def format_indian_number(num):
 class EstimatePDFGenerator:
     """Generate ESTIMATE PDFs in Sreedevi Medtrade format."""
     
-    # Brand Colors
-    BRAND_COLOR = colors.HexColor("#1B4F72")
-    ACCENT_COLOR = colors.HexColor("#DCECF8")
+    # Brand Colors (F1 palette)
+    BRAND_COLOR = colors.HexColor("#3d6b9e")
+    GREEN_COLOR = colors.HexColor("#56982c")
+    ACCENT_COLOR = colors.HexColor("#f4f7fb")
     
     # Bank Details
     BANK_ACCOUNT_NAME = "SREEDEVI LIFE SCIENCES"
@@ -125,11 +126,12 @@ class EstimatePDFGenerator:
         
         self.styles.add(ParagraphStyle(
             name='EstimateTitle',
-            fontSize=18,
-            textColor=self.BRAND_COLOR,
+            fontSize=22,
+            textColor=colors.HexColor('#56982c'),
             fontName=_FONT,
-            alignment=TA_CENTER,
-            leading=20
+            alignment=TA_LEFT,
+            leading=26,
+            charSpace=4
         ))
         
         self.styles.add(ParagraphStyle(
@@ -197,6 +199,7 @@ class EstimatePDFGenerator:
         
         # Header with logo and company details
         content.extend(self._build_header())
+        content.extend(self._accent_bars())
         content.append(Spacer(1, 3*mm))
         
         # Estimate info table
@@ -245,32 +248,53 @@ class EstimatePDFGenerator:
             logo_element = Paragraph('<b>SREEDEVI<br/>MEDTRADE</b>', self.styles['CompanyName'])
         
         # Create header table: [Logo | ESTIMATE | Company Details]
+        title_block = Paragraph(
+            '<b>ESTIMATE</b><br/>'
+            '<font size="7" color="#3d6b9e">SREEDEVI LIFE SCIENCES</font>',
+            self.styles['EstimateTitle']
+        )
+
         header_data = [[
             logo_element,
-            Paragraph('<b>ESTIMATE</b>', self.styles['EstimateTitle']),
+            '',
+            title_block,
             Paragraph(
                 f'<b>{self.COMPANY_NAME}</b><br/>'
-                f'{self.COMPANY_PLOT}<br/>'
-                f'{self.COMPANY_AREA}<br/>'
+                f'{self.COMPANY_PLOT}, {self.COMPANY_AREA}<br/>'
                 f'{self.COMPANY_CITY}<br/>'
-                f'{self.COMPANY_COUNTRY}<br/>'
-                f'{self.COMPANY_GSTIN}',
+                f'<font color="#3d6b9e"><b>{self.COMPANY_GSTIN}</b></font>',
                 self.styles['CompanyDetails']
             )
         ]]
-        
-        # Adjust column widths: Logo, Title (center), Company Info (right)
-        header_table = Table(header_data, colWidths=[65*mm, 50*mm, 65*mm], rowHeights=[26*mm])
+
+        header_table = Table(header_data, colWidths=[60*mm, 3*mm, 55*mm, 62*mm], rowHeights=[26*mm])
         header_table.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-            ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+            ('ALIGN', (2, 0), (2, 0), 'LEFT'),
+            ('ALIGN', (3, 0), (3, 0), 'RIGHT'),
+            ('LEFTPADDING', (1, 0), (1, 0), 0),
+            ('RIGHTPADDING', (1, 0), (1, 0), 0),
+            ('LINEBEFORE', (2, 0), (2, 0), 1.5, colors.HexColor('#d0dcea')),
         ]))
         
         elements.append(header_table)
         return elements
     
+    def _accent_bars(self):
+        """Two thin colored accent bars (F1 style)."""
+        b1 = Table([['']], colWidths=[180*mm], rowHeights=[4])
+        b1.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#56982c')),
+            ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        b2 = Table([['']], colWidths=[180*mm], rowHeights=[2])
+        b2.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#3d6b9e')),
+            ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        return [b1, b2]
+
     def _build_estimate_info(self):
         """Build estimate information table."""
         elements = []
@@ -314,14 +338,18 @@ class EstimatePDFGenerator:
             customer_text += f'<br/>{self.customer.state}, India'
         
         data = [
-            [Paragraph('Bill To', self.styles['SectionHeader'])],
+            [Paragraph('<font color="#3d6b9e"><b>BILL TO</b></font>', self.styles['SmallText'])],
             [Paragraph(customer_text, self.styles['NormalText'])]
         ]
-        
+
         table = Table(data, colWidths=[180*mm])
         table.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.25, colors.lightgrey),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('BOX', (0, 0), (-1, -1), 0.25, colors.HexColor('#d0dcea')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f4f7fb')),
+            ('LINEBEFORE', (0, 0), (0, -1), 2.5, colors.HexColor('#3d6b9e')),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, 0), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 5),
         ]))
         elements.append(table)
         
@@ -422,7 +450,7 @@ class EstimatePDFGenerator:
             if discount_percentage > 0:
                 table_data.append([f'Discount({discount_percentage:.2f}%)'] + [''] * (num_cols - 2) + [f'(-){format_indian_number(float(discount_amount))}'])
         table_data.append([igst_label] + [''] * (num_cols - 2) + [format_indian_number(float(total_igst))])
-        table_data.append(['Total'] + [''] * (num_cols - 2) + [f'Rs.{format_indian_number(float(grand_total))}'])
+        table_data.append(['Total'] + [''] * (num_cols - 2) + [f'{RUPEE}{format_indian_number(float(grand_total))}'])
 
         if show_discount_col:
             colWidths = [8*mm, 42*mm, 15*mm, 16*mm, 10*mm, 12*mm, 19*mm, 13*mm, 19*mm, 26*mm]
@@ -432,7 +460,8 @@ class EstimatePDFGenerator:
         table = Table(table_data, colWidths=colWidths)
 
         style_commands = [
-            ('BACKGROUND', (0, 0), (-1, 1), self.ACCENT_COLOR),
+            ('BACKGROUND', (0, 0), (-1, 1), self.BRAND_COLOR),
+            ('TEXTCOLOR', (0, 0), (-1, 1), colors.white),
             ('FONTNAME', (0, 0), (-1, 1), _FONT),
             ('FONTSIZE', (0, 0), (-1, -1), 7),
             ('ALIGN', (0, 0), (-1, 1), 'CENTER'),
@@ -469,12 +498,20 @@ class EstimatePDFGenerator:
             ])
 
         # Section subtotal rows + final totals rows: merge all except last col
-        for r in section_subtotal_rows + list(range(final_rows_start, len(table_data))):
+        for r in section_subtotal_rows + list(range(final_rows_start, len(table_data) - 1)):
             style_commands.extend([
                 ('SPAN', (0, r), (num_cols - 2, r)),
                 ('ALIGN', (0, r), (0, r), 'RIGHT'),
                 ('FONTNAME', (0, r), (num_cols - 1, r), _FONT),
             ])
+        grand_row = len(table_data) - 1
+        style_commands.extend([
+            ('SPAN', (0, grand_row), (num_cols - 2, grand_row)),
+            ('ALIGN', (0, grand_row), (0, grand_row), 'RIGHT'),
+            ('BACKGROUND', (0, grand_row), (-1, grand_row), colors.HexColor('#3d6b9e')),
+            ('TEXTCOLOR', (0, grand_row), (-1, grand_row), colors.white),
+            ('FONTNAME', (0, grand_row), (-1, grand_row), 'Helvetica-Bold'),
+        ])
 
         table.setStyle(TableStyle(style_commands))
         elements.append(table)
@@ -503,7 +540,8 @@ class EstimatePDFGenerator:
         
         table = Table(data, colWidths=[125*mm, 55*mm], rowHeights=[35*mm])
         table.setStyle(TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.25, colors.lightgrey),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#d0dcea')),
+            ('LINEABOVE', (0, 0), (-1, 0), 3, colors.HexColor('#56982c')),
             ('LEFTPADDING', (0, 0), (-1, -1), 6),
             ('VALIGN', (0, 0), (0, 0), 'TOP'),
             ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
@@ -526,14 +564,17 @@ class EstimatePDFGenerator:
         )
         
         data = [
-            [Paragraph('Terms & Conditions', self.styles['SectionHeader'])],
+            [Paragraph('<font color="#3d6b9e"><b>TERMS &amp; CONDITIONS</b></font>', self.styles['SmallText'])],
             [Paragraph(terms_text, self.styles['NormalText'])]
         ]
-        
+
         table = Table(data, colWidths=[180*mm])
         table.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.25, colors.lightgrey),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('BOX', (0, 0), (-1, -1), 0.25, colors.HexColor('#d0dcea')),
+            ('LINEBEFORE', (0, 0), (0, 0), 2.5, colors.HexColor('#56982c')),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, 0), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 5),
         ]))
         
         elements.append(table)
