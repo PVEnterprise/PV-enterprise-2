@@ -239,7 +239,7 @@ class EstimatePDFGenerator:
         
         if os.path.exists(logo_path):
             try:
-                logo_element = Image(logo_path, width=65*mm, height=22*mm)
+                logo_element = Image(logo_path, width=56*mm, height=22*mm)
             except:
                 # Fallback to text if logo fails
                 logo_element = Paragraph('<b>SREEDEVI<br/>MEDTRADE</b>', self.styles['CompanyName'])
@@ -260,9 +260,10 @@ class EstimatePDFGenerator:
             title_block,
             Paragraph(
                 f'<b>{self.COMPANY_NAME}</b><br/>'
-                f'{self.COMPANY_PLOT}, {self.COMPANY_AREA}<br/>'
-                f'{self.COMPANY_CITY}<br/>'
-                f'<font color="#3d6b9e"><b>{self.COMPANY_GSTIN}</b></font>',
+                f'{self.COMPANY_PLOT},<br/>'
+                f'{self.COMPANY_AREA}, {self.COMPANY_CITY.split()[0]}<br/>'
+                f"{' '.join(self.COMPANY_CITY.split()[1:])}, India<br/>"
+                f'<font color="#3d6b9e"><b>GSTIN: {self.COMPANY_GSTIN}</b></font>',
                 self.styles['CompanyDetails']
             )
         ]]
@@ -273,6 +274,10 @@ class EstimatePDFGenerator:
             ('ALIGN', (0, 0), (0, 0), 'LEFT'),
             ('ALIGN', (2, 0), (2, 0), 'LEFT'),
             ('ALIGN', (3, 0), (3, 0), 'RIGHT'),
+            ('LEFTPADDING', (0, 0), (0, 0), 0),
+            ('RIGHTPADDING', (0, 0), (0, 0), 0),
+            ('TOPPADDING', (0, 0), (0, 0), 0),
+            ('BOTTOMPADDING', (0, 0), (0, 0), 0),
             ('LEFTPADDING', (1, 0), (1, 0), 0),
             ('RIGHTPADDING', (1, 0), (1, 0), 0),
             ('LINEBEFORE', (2, 0), (2, 0), 1.5, colors.HexColor('#d0dcea')),
