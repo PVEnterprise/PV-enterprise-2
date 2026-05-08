@@ -148,8 +148,6 @@ class InvoicePDFGenerator:
         ]
         if po_number:
             data.append(["PO #", f": {po_number}", "", ""])
-        if terms:
-            data.append(["Terms", f": {terms}", "", ""])
         t = Table(data, colWidths=[30 * mm, 60 * mm, 40 * mm, 50 * mm])
         t.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
@@ -291,12 +289,10 @@ class InvoicePDFGenerator:
 
     # ---------- Terms ----------
     def _terms(self):
-        terms = ("1) GST 12% is included in the Invoice.<br/>"
-                 "2) Payment 100% in advance.<br/>"
-                 "3) 3 years warranty.<br/>"
-                 "4) Freight included.")
+        dispatch_terms = getattr(self.dispatch, 'terms', None) or ''
+        combined = dispatch_terms.replace('\n', '<br/>') if dispatch_terms else ''
         data = [[Paragraph("Terms & Conditions", self.styles["SectionHeader"])],
-                [Paragraph(terms, self.styles["NormalText"])]]
+                [Paragraph(combined, self.styles["NormalText"])]]
         t = Table(data, colWidths=[180 * mm])
         t.setStyle(TableStyle([
             ("BOX", (0, 0), (-1, -1), 0.25, colors.lightgrey),
