@@ -31,6 +31,12 @@ export default function OrderDetailPage() {
   }>>([]);
   const [currentQuantity, setCurrentQuantity] = useState<number>(1);
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [showValidTillModal, setShowValidTillModal] = useState(false);
+  const [validTillDate, setValidTillDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  });
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ['order', orderId],
@@ -309,10 +315,15 @@ export default function OrderDetailPage() {
     rejectMutation.reset();
   };
 
-  const handleGetQuotation = async () => {
+  const handleGetQuotation = () => {
+    setShowValidTillModal(true);
+  };
+
+  const handleDownloadQuotationPDF = async () => {
+    setShowValidTillModal(false);
     try {
-      // Use estimate-pdf endpoint which automatically uses saved price_list_id and discount_percentage
-      const response = await fetch(`/api/v1/orders/${orderId}/estimate-pdf`, {
+      const url = `/api/v1/orders/${orderId}/estimate-pdf${validTillDate ? `?valid_till=${validTillDate}` : ''}`;
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
@@ -322,18 +333,13 @@ export default function OrderDetailPage() {
         throw new Error('Failed to generate quotation');
       }
 
-      // Get the PDF blob
       const blob = await response.blob();
-      
-      // Create a download link
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = `Estimate_${order?.order_number || 'order'}.pdf`;
       document.body.appendChild(link);
       link.click();
-      
-      // Cleanup
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
@@ -1401,6 +1407,38 @@ export default function OrderDetailPage() {
 
       {/* Order Notes Panel - Expandable from right side */}
       <OrderNotesPanel notes={order.notes || null} />
+
+      {/* Valid Till Modal for Quotation PDF */}
+      {showValidTillModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Generate Estimate</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Valid Till</label>
+              <input
+                type="date"
+                value={validTillDate}
+                onChange={(e) => setValidTillDate(e.target.value)}
+                className="input w-full"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowValidTillModal(false)}
+                className="btn btn-secondary btn-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDownloadQuotationPDF}
+                className="btn btn-primary btn-sm"
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

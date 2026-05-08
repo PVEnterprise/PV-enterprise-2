@@ -295,7 +295,7 @@ export default function DispatchModal({
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">Terms</label>
-                <input type="text" value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="e.g. Due on Receipt, Net 30" className="input w-full text-xs py-1" />
+                <textarea value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="e.g. Due on Receipt, Net 30" rows={3} className="input w-full text-xs py-1 resize-none" />
               </div>
             </div>
           </div>

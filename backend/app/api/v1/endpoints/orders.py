@@ -1005,6 +1005,7 @@ def generate_estimate_pdf_with_discount(
     order_id: UUID,
     discount: Optional[float] = Query(None, ge=0, le=100, description="Discount percentage (uses saved value if not provided)"),
     price_list_id: Optional[UUID] = Query(None, description="Price list ID to use for pricing (uses saved value if not provided)"),
+    valid_till: Optional[str] = Query(None, description="Valid till date in YYYY-MM-DD format"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1065,8 +1066,17 @@ def generate_estimate_pdf_with_discount(
     # Set discount on order for PDF generation
     order.discount_percentage = final_discount
     
+    # Parse valid_till date
+    expiry_date = None
+    if valid_till:
+        from datetime import date as date_type
+        try:
+            expiry_date = date_type.fromisoformat(valid_till)
+        except ValueError:
+            pass
+
     # Generate PDF
-    pdf_buffer = generate_estimate_pdf(order)
+    pdf_buffer = generate_estimate_pdf(order, expiry_date=expiry_date)
     
     # Return as downloadable file
     filename = f"Estimate_{order.order_number}.pdf"
