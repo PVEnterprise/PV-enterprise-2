@@ -9,6 +9,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL
 
 class ApiService {
   private client: AxiosInstance;
+  private isRefreshing = false;
+  private refreshQueue: Array<(token: string) => void> = [];
 
   constructor() {
     this.client = axios.create({
@@ -24,13 +26,56 @@ class ApiService {
 
     this.client.interceptors.response.use(
       (response) => response,
-      (error) => {
-        if (
-          error.response?.status === 401 &&
-          !error.config?.url?.includes('/auth/login')
-        ) {
-          window.dispatchEvent(new CustomEvent('session:expired'));
+      async (error) => {
+        const originalRequest = error.config;
+        const isAuthEndpoint =
+          originalRequest?.url?.includes('/auth/login') ||
+          originalRequest?.url?.includes('/auth/refresh');
+
+        if (error.response?.status === 401 && !isAuthEndpoint && !originalRequest._retry) {
+          const refreshToken = localStorage.getItem('refresh_token');
+
+          if (!refreshToken) {
+            window.dispatchEvent(new CustomEvent('session:expired'));
+            return Promise.reject(error);
+          }
+
+          if (this.isRefreshing) {
+            return new Promise<string>((resolve) => {
+              this.refreshQueue.push(resolve);
+            }).then((newToken) => {
+              originalRequest.headers.Authorization = `Bearer ${newToken}`;
+              return this.client(originalRequest);
+            });
+          }
+
+          originalRequest._retry = true;
+          this.isRefreshing = true;
+
+          try {
+            const response = await this.client.post('/auth/refresh', {
+              refresh_token: refreshToken,
+            });
+            const { access_token, refresh_token: newRefresh } = response.data;
+            localStorage.setItem('access_token', access_token);
+            if (newRefresh) localStorage.setItem('refresh_token', newRefresh);
+
+            this.refreshQueue.forEach((resolve) => resolve(access_token));
+            this.refreshQueue = [];
+
+            originalRequest.headers.Authorization = `Bearer ${access_token}`;
+            return this.client(originalRequest);
+          } catch {
+            this.refreshQueue = [];
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            window.dispatchEvent(new CustomEvent('session:expired'));
+            return Promise.reject(error);
+          } finally {
+            this.isRefreshing = false;
+          }
         }
+
         return Promise.reject(error);
       }
     );
