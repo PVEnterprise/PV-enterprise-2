@@ -51,6 +51,7 @@ class DispatchBase(BaseModel):
     terms: Optional[str] = None
     po_number: Optional[str] = None
     dc_number: Optional[str] = None
+    invoice_number: Optional[str] = None
 
 
 class DispatchCreate(DispatchBase):
