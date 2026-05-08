@@ -145,6 +145,7 @@ def create_dispatch(
         terms=dispatch_data.terms,
         po_number=dispatch_data.po_number,
         dc_number=dispatch_data.dc_number,
+        invoice_number=dispatch_data.invoice_number,
         created_by=current_user.id
     )
     db.add(dispatch)
@@ -332,7 +333,7 @@ def download_dispatch_invoice_pdf(
         # Create temporary invoice object
         class TempInvoice:
             def __init__(self):
-                self.invoice_number = f"TEMP-{dispatch.dispatch_number}"
+                self.invoice_number = dispatch.invoice_number or f"TEMP-{dispatch.dispatch_number}"
                 self.invoice_date = dispatch.dispatch_date or date.today()
                 self.due_date = self.invoice_date + timedelta(days=30)
                 self.payment_terms = dispatch.terms or ""

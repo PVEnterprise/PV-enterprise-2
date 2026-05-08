@@ -25,6 +25,7 @@ class Dispatch(BaseModel):
     terms = Column(String(255), nullable=True, comment="Payment/delivery terms shown on invoice")
     po_number = Column(String(100), nullable=True, comment="Purchase Order number from customer")
     dc_number = Column(String(100), nullable=True, comment="Delivery Challan reference number")
+    invoice_number = Column(String(100), nullable=True, comment="Invoice number shown on the invoice PDF")
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
     # Relationships

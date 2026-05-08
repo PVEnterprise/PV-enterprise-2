@@ -44,6 +44,7 @@ export interface DispatchFormData {
   terms: string;
   po_number: string;
   dc_number: string;
+  invoice_number: string;
   items: Array<{
     order_item_id: string;
     inventory_id: string;
@@ -131,6 +132,7 @@ export default function DispatchModal({
   const [terms, setTerms] = useState('');
   const [poNumber, setPoNumber] = useState('');
   const [dcNumber, setDcNumber] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [dispatchItems, setDispatchItems] = useState<DispatchItemData[]>([]);
 
   const availableItems = orderItems.filter(
@@ -234,6 +236,7 @@ export default function DispatchModal({
       terms,
       po_number: poNumber,
       dc_number: dcNumber,
+      invoice_number: invoiceNumber,
       items: itemsToDispatch,
     });
   };
@@ -285,6 +288,10 @@ export default function DispatchModal({
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">DC #</label>
                 <input type="text" value={dcNumber} onChange={(e) => setDcNumber(e.target.value)} placeholder="Delivery Challan number" className="input w-full text-xs py-1" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Invoice #</label>
+                <input type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Invoice number" className="input w-full text-xs py-1" />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">Terms</label>
