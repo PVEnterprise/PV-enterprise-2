@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     COMPANY_AREA: str = "Alkapuri Township"
     COMPANY_CITY: str = "Hyderabad Telangana 500089"
     COMPANY_COUNTRY: str = "India"
-    COMPANY_GSTIN: str = "GSTIN 36ACGFS4458L1ZK"
+    COMPANY_GSTIN: str = "36ACGFS4458L1ZK"
     
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -127,11 +127,15 @@ class InvoicePDFGenerator:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         backend_dir = os.path.dirname(os.path.dirname(current_dir))
         logo_path = os.path.join(backend_dir, "uploads", "logo.png")
-        logo = Image(logo_path, width=60 * mm, height=20 * mm) if os.path.exists(logo_path) else Paragraph("<b>Sreedevi Life Sciences</b>", self.styles["CompanyName"])
+        logo = Image(logo_path, width=56 * mm, height=22 * mm) if os.path.exists(logo_path) else Paragraph("<b>Sreedevi Life Sciences</b>", self.styles["CompanyName"])
+        _city_parts = self.settings.COMPANY_CITY.split()
+        _city_name = _city_parts[0] if _city_parts else ''
+        _state_pin = ' '.join(_city_parts[1:]) if len(_city_parts) > 1 else ''
         info = (
             f"<b>{self.settings.COMPANY_NAME}</b><br/>"
-            f"{self.settings.COMPANY_PLOT}, {self.settings.COMPANY_AREA}<br/>"
-            f"{self.settings.COMPANY_CITY}, {self.settings.COMPANY_COUNTRY}<br/>"
+            f"{self.settings.COMPANY_PLOT},<br/>"
+            f"{self.settings.COMPANY_AREA}, {_city_name}<br/>"
+            f"{_state_pin}, {self.settings.COMPANY_COUNTRY}<br/>"
             f"GSTIN: {self.settings.COMPANY_GSTIN}"
         )
         title_block = Paragraph(
@@ -146,6 +150,10 @@ class InvoicePDFGenerator:
             ("ALIGN", (0, 0), (0, 0), "LEFT"),
             ("ALIGN", (2, 0), (2, 0), "LEFT"),
             ("ALIGN", (3, 0), (3, 0), "RIGHT"),
+            ("LEFTPADDING", (0, 0), (0, 0), 0),
+            ("RIGHTPADDING", (0, 0), (0, 0), 0),
+            ("TOPPADDING", (0, 0), (0, 0), 0),
+            ("BOTTOMPADDING", (0, 0), (0, 0), 0),
             ("LEFTPADDING", (1, 0), (1, 0), 0),
             ("RIGHTPADDING", (1, 0), (1, 0), 0),
             ("LINEBEFORE", (2, 0), (2, 0), 1.5, colors.HexColor('#d0dcea')),
