@@ -144,6 +144,26 @@ export default function DispatchDetailModal({
               </div>
             )}
 
+            {dispatch.po_number && (
+              <div>
+                <div className="flex items-center gap-2 text-gray-600 mb-1">
+                  <FileText size={16} />
+                  <label className="text-sm font-medium">PO #</label>
+                </div>
+                <p className="text-gray-900 font-medium font-mono">{dispatch.po_number}</p>
+              </div>
+            )}
+
+            {dispatch.dc_number && (
+              <div>
+                <div className="flex items-center gap-2 text-gray-600 mb-1">
+                  <FileText size={16} />
+                  <label className="text-sm font-medium">DC #</label>
+                </div>
+                <p className="text-gray-900 font-medium font-mono">{dispatch.dc_number}</p>
+              </div>
+            )}
+
             {dispatch.notes && (
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-600 mb-1 block">Notes</label>

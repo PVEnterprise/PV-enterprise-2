@@ -195,6 +195,8 @@ export interface Dispatch {
   tracking_number?: string;
   status: string;
   notes?: string;
+  po_number?: string;
+  dc_number?: string;
   created_by: string;
   items: DispatchItem[];
   created_at: string;

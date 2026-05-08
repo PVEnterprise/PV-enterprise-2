@@ -140,10 +140,13 @@ class InvoicePDFGenerator:
     # ---------- Invoice Info ----------
     def _invoice_info(self):
         terms = getattr(self.dispatch, 'terms', None) or getattr(self.invoice, 'payment_terms', '') or ''
+        po_number = getattr(self.dispatch, 'po_number', None) or ''
         data = [
             ["Invoice No.", f": {self.invoice.invoice_number}", "Place Of Supply", f": {self.order.customer.state or 'N/A'}"],
             ["Invoice Date", f": {self.invoice.invoice_date.strftime('%d.%m.%Y')}", "Due Date", f": {self.invoice.due_date.strftime('%d.%m.%Y')}"],
         ]
+        if po_number:
+            data.append(["PO #", f": {po_number}", "", ""])
         if terms:
             data.append(["Terms", f": {terms}", "", ""])
         t = Table(data, colWidths=[30 * mm, 60 * mm, 40 * mm, 50 * mm])
