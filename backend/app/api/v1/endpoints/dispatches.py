@@ -143,6 +143,8 @@ def create_dispatch(
         status=dispatch_data.status,
         notes=dispatch_data.notes,
         terms=dispatch_data.terms,
+        po_number=dispatch_data.po_number,
+        dc_number=dispatch_data.dc_number,
         created_by=current_user.id
     )
     db.add(dispatch)

@@ -189,10 +189,13 @@ class DeliveryChallanPDFGenerator:
         # Get state from customer
         state_info = self.customer.state or 'Maharashtra'
         
+        dc_number = getattr(self.dispatch, 'dc_number', None) or ''
         dc_info_data = [
             ['#', f': {self.dispatch.dispatch_number}', 'Place Of Supply', f': {state_info} (27)'],
             ['Date', f': {dc_date}', '', ''],
         ]
+        if dc_number:
+            dc_info_data.append(['DC #', f': {dc_number}', '', ''])
         
         dc_info_table = Table(dc_info_data, colWidths=[30*mm, 60*mm, 40*mm, 50*mm])
         dc_info_table.setStyle(TableStyle([

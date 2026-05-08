@@ -23,6 +23,8 @@ class Dispatch(BaseModel):
     status = Column(String(50), default="pending", nullable=False, index=True)
     notes = Column(Text)
     terms = Column(String(255), nullable=True, comment="Payment/delivery terms shown on invoice")
+    po_number = Column(String(100), nullable=True, comment="Purchase Order number from customer")
+    dc_number = Column(String(100), nullable=True, comment="Delivery Challan reference number")
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
     # Relationships
