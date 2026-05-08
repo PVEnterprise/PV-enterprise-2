@@ -363,10 +363,10 @@ def generate_quotation_pdf(quotation: Quotation) -> BytesIO:
     return generator.generate()
 
 
-def generate_order_quotation_pdf(order: Order) -> BytesIO:
+def generate_order_quotation_pdf(order: Order, expiry_date=None) -> BytesIO:
     """
     Generate a quotation PDF directly from an order (without Quotation model).
     Used for quick quotation generation from approved orders.
     """
     from app.services.estimate_pdf_generator import generate_estimate_pdf
-    return generate_estimate_pdf(order)
+    return generate_estimate_pdf(order, expiry_date=expiry_date)

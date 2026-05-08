@@ -71,6 +71,11 @@ export default function GenerateQuotationPage() {
 
   const [selectedPriceListId, setSelectedPriceListId] = useState<string>('');
   const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [expiryDate, setExpiryDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  });
   const [isEditingOrderNumber, setIsEditingOrderNumber] = useState(false);
   const [editedOrderNumber, setEditedOrderNumber] = useState('');
   const [draftSavedMsg, setDraftSavedMsg] = useState<string | null>(null);
@@ -407,6 +412,19 @@ export default function GenerateQuotationPage() {
               </select>
             </div>
 
+            {/* Expiry Date */}
+            <div className="w-40">
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Valid Until
+              </label>
+              <input
+                type="date"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                className="input input-sm w-full text-xs"
+              />
+            </div>
+
             {/* Discount Input */}
             <div className="w-32">
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -559,6 +577,7 @@ export default function GenerateQuotationPage() {
                     price_list_id: selectedPriceListId || null,
                     discount_percent: discountPercent,
                     custom_prices: customUnitPrices,
+                    expiry_date: expiryDate || null,
                   });
                   
                   // Download the PDF

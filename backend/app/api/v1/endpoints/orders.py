@@ -967,8 +967,17 @@ def generate_quotation_preview_pdf(
         if 'discount_percent' in quotation_data:
             order.discount_percentage = Decimal(str(quotation_data['discount_percent']))
         
+        # Parse expiry_date if provided
+        from datetime import date as date_type
+        expiry_date = None
+        if quotation_data.get('expiry_date'):
+            try:
+                expiry_date = date_type.fromisoformat(quotation_data['expiry_date'])
+            except (ValueError, TypeError):
+                expiry_date = None
+        
         # Generate PDF with modified prices
-        pdf_buffer = generate_order_quotation_pdf(order)
+        pdf_buffer = generate_order_quotation_pdf(order, expiry_date=expiry_date)
         
         # Return as downloadable file
         filename = f"Quotation_Preview_{order.order_number}.pdf"
