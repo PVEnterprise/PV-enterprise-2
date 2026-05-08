@@ -80,13 +80,23 @@ def create_inventory_item(
     
     Only inventory admins and executives can create inventory items.
     """
-    # Check if SKU already exists
+    # Check if SKU already exists (including soft-deleted)
     existing = db.query(Inventory).filter(Inventory.sku == item_data.sku).first()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="SKU already exists"
-        )
+        if existing.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SKU already exists"
+            )
+        # Reactivate soft-deleted item with new data
+        update_data = item_data.model_dump()
+        for field, value in update_data.items():
+            setattr(existing, field, value)
+        existing.is_active = True
+        existing.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing
     
     # Create inventory item
     inventory = Inventory(**item_data.model_dump())
