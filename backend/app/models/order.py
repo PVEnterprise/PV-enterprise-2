@@ -35,7 +35,7 @@ class Order(BaseModel):
     # Relationships
     customer = relationship("Customer", back_populates="orders")
     sales_rep = relationship("User", back_populates="created_orders", foreign_keys=[sales_rep_id])
-    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan", order_by="OrderItem.created_at")
     quotations = relationship("Quotation", back_populates="order")
     invoices = relationship("Invoice", back_populates="order")
     approvals = relationship("Approval", foreign_keys="Approval.entity_id", 

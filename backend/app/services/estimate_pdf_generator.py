@@ -95,10 +95,11 @@ class EstimatePDFGenerator:
     BANK_IFSC = "ICIC0007286"
     BANK_BRANCH = "ALKAPURI TOWNSHIP"
     
-    def __init__(self, order: Order):
+    def __init__(self, order: Order, expiry_date=None):
         from app.core.config import settings
         
         self.order = order
+        self.expiry_date = expiry_date
         self.customer: Customer = order.customer
         self.buffer = BytesIO()
         self.styles = getSampleStyleSheet()
@@ -279,9 +280,10 @@ class EstimatePDFGenerator:
         estimate_date = datetime.now().strftime('%d.%m.%Y')
         place_of_supply = self.customer.state or 'N/A'
         
+        valid_until_str = self.expiry_date.strftime('%d.%m.%Y') if self.expiry_date else ''
         data = [
             ['#', f': {estimate_number}', 'Place Of Supply', f': {place_of_supply}'],
-            ['Estimate Date', f': {estimate_date}', '', '']
+            ['Estimate Date', f': {estimate_date}', 'Valid Until' if valid_until_str else '', f': {valid_until_str}' if valid_until_str else '']
         ]
         
         table = Table(data, colWidths=[30*mm, 60*mm, 35*mm, 55*mm])
@@ -536,18 +538,19 @@ class EstimatePDFGenerator:
         
         elements.append(table)
         return elements
-    
 
 
-def generate_estimate_pdf(order: Order) -> BytesIO:
+
+def generate_estimate_pdf(order: Order, expiry_date=None) -> BytesIO:
     """
     Generate an ESTIMATE PDF for the given order.
-    
+
     Args:
         order: Order model instance with loaded relationships (customer, items, inventory)
-        
+        expiry_date: Optional date object for quotation validity
+
     Returns:
         BytesIO buffer containing the PDF
     """
-    generator = EstimatePDFGenerator(order)
+    generator = EstimatePDFGenerator(order, expiry_date=expiry_date)
     return generator.generate()
