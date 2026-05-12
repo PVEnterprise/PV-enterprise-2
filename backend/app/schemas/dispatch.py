@@ -49,6 +49,7 @@ class DispatchBase(BaseModel):
     status: str = "pending"
     notes: Optional[str] = None
     terms: Optional[str] = None
+    payment_terms: Optional[str] = None
     po_number: Optional[str] = None
     dc_number: Optional[str] = None
     invoice_number: Optional[str] = None

@@ -195,8 +195,11 @@ export interface Dispatch {
   tracking_number?: string;
   status: string;
   notes?: string;
+  terms?: string;
+  payment_terms?: string;
   po_number?: string;
   dc_number?: string;
+  invoice_number?: string;
   created_by: string;
   items: DispatchItem[];
   created_at: string;

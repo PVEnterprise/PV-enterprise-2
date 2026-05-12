@@ -143,6 +143,7 @@ def create_dispatch(
         status=dispatch_data.status,
         notes=dispatch_data.notes,
         terms=dispatch_data.terms,
+        payment_terms=dispatch_data.payment_terms,
         po_number=dispatch_data.po_number,
         dc_number=dispatch_data.dc_number,
         invoice_number=dispatch_data.invoice_number,
