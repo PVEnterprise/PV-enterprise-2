@@ -17,33 +17,31 @@ import os
 
 # ---------- Register font with ₹ symbol ----------
 def _register_unicode_font():
-    """Register Unicode font for rupee symbol. Tries bundled font first, then system fonts."""
-    # Get the directory where this file is located
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.dirname(os.path.dirname(current_dir))  # Go up to backend/
-    
-    paths = [
-        # Bundled font (highest priority)
-        os.path.join(backend_dir, "fonts", "DejaVuSans.ttf"),
-        # System fonts (fallback)
-        "/Library/Fonts/DejaVuSans.ttf",
-        "/Library/Fonts/DejaVu Sans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/local/share/fonts/DejaVuSans.ttf",
-    ]
-    
-    for p in paths:
-        if os.path.exists(p):
-            try:
-                pdfmetrics.registerFont(TTFont("DejaVuSans", p))
-                return "DejaVuSans"
-            except Exception:
-                continue
-    
-    # Fallback to Helvetica (won't show ₹ symbol correctly)
-    return "Helvetica"
+    """Register NotoSans (regular + bold) for rupee symbol support."""
+    try:
+        pdfmetrics.getFont("NotoSans")
+        pdfmetrics.getFont("NotoSans-Bold")
+        return "NotoSans", "NotoSans-Bold"
+    except KeyError:
+        pass
+    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "fonts")
+    regular = os.path.normpath(os.path.join(fonts_dir, "NotoSans-Regular.ttf"))
+    bold    = os.path.normpath(os.path.join(fonts_dir, "NotoSans-Bold.ttf"))
+    if os.path.exists(regular):
+        try:
+            pdfmetrics.registerFont(TTFont("NotoSans", regular))
+            pdfmetrics.registerFont(TTFont("NotoSans-Bold", bold if os.path.exists(bold) else regular))
+            pdfmetrics.registerFontFamily(
+                "NotoSans",
+                normal="NotoSans", bold="NotoSans-Bold",
+                italic="NotoSans", boldItalic="NotoSans-Bold",
+            )
+            return "NotoSans", "NotoSans-Bold"
+        except Exception:
+            pass
+    return "Helvetica", "Helvetica-Bold"
 
-_FONT = _register_unicode_font()
+_FONT, _FONT_BOLD = _register_unicode_font()
 RUPEE = "₹"
 
 
@@ -51,8 +49,9 @@ class DeliveryChallanPDFGenerator:
     """Generate Delivery Challan PDF for dispatch."""
     
     # Brand Colors
-    BRAND_COLOR = colors.HexColor("#1B4F72")
-    ACCENT_COLOR = colors.HexColor("#DCECF8")
+    BRAND_COLOR = colors.HexColor("#3d6b9e")
+    GREEN_COLOR = colors.HexColor("#56982c")
+    ACCENT_COLOR = colors.HexColor("#f4f7fb")
     
     def __init__(self, dispatch, order, customer):
         from app.core.config import settings
@@ -135,8 +134,15 @@ class DeliveryChallanPDFGenerator:
         self.styles.add(ParagraphStyle(
             name='BoldText',
             fontSize=10,
-            fontName=_FONT,
+            fontName=_FONT_BOLD,
             leading=12
+        ))
+        self.styles.add(ParagraphStyle(
+            name='RightText',
+            fontSize=9,
+            fontName=_FONT,
+            alignment=TA_RIGHT,
+            leading=11
         ))
     
     def _build_header(self):
@@ -155,27 +161,36 @@ class DeliveryChallanPDFGenerator:
         else:
             logo_element = Paragraph('<b>SREEDEVI<br/>MEDTRADE</b>', self.styles['CompanyName'])
         
-        # Create header table: [Logo | DELIVERY NOTE | Company Details]
+        # Create header table: [Logo | spacer | DELIVERY NOTE | Company Details]
+        _city_parts = self.COMPANY_CITY.split()
+        _city_name = _city_parts[0] if _city_parts else ''
+        _state_pin = ' '.join(_city_parts[1:]) if len(_city_parts) > 1 else ''
         header_data = [[
             logo_element,
+            '',
             Paragraph('<b>DELIVERY NOTE</b>', self.styles['DCTitle']),
             Paragraph(
-                f'<b>{self.COMPANY_NAME}</b><br/>'
-                f'{self.COMPANY_PLOT}<br/>'
-                f'{self.COMPANY_AREA}<br/>'
-                f'{self.COMPANY_CITY}<br/>'
-                f'{self.COMPANY_COUNTRY}<br/>'
-                f'{self.COMPANY_GSTIN}',
+                f'{self.COMPANY_PLOT},<br/>'
+                f'{self.COMPANY_AREA}, {_city_name}<br/>'
+                f'{_state_pin}, {self.COMPANY_COUNTRY}<br/>'
+                + '<font color="#3d6b9e"><b>'
+                + ("" if self.COMPANY_GSTIN.upper().startswith("GSTIN") else "GSTIN: ")
+                + self.COMPANY_GSTIN + '</b></font>',
                 self.styles['CompanyDetails']
             )
         ]]
-        
-        header_table = Table(header_data, colWidths=[65*mm, 50*mm, 65*mm], rowHeights=[26*mm])
+
+        header_table = Table(header_data, colWidths=[60*mm, 3*mm, 55*mm, 62*mm], rowHeights=[26*mm])
         header_table.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-            ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+            ('ALIGN', (2, 0), (2, 0), 'CENTER'),
+            ('ALIGN', (3, 0), (3, 0), 'RIGHT'),
+            ('LEFTPADDING', (0, 0), (0, 0), 0),
+            ('RIGHTPADDING', (0, 0), (0, 0), 0),
+            ('LEFTPADDING', (1, 0), (1, 0), 0),
+            ('RIGHTPADDING', (1, 0), (1, 0), 0),
+            ('LINEBEFORE', (2, 0), (2, 0), 1.5, colors.HexColor('#d0dcea')),
         ]))
         
         self.elements.append(header_table)
@@ -266,28 +281,36 @@ class DeliveryChallanPDFGenerator:
         items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
         
         # Styling - modern layout with accent color header
+        grand_row = len(table_data) - 1
         table_style = [
-            # Header row - accent color background
-            ('BACKGROUND', (0, 0), (-1, 0), self.ACCENT_COLOR),
-            ('FONTNAME', (0, 0), (-1, 0), _FONT),
-            ('FONTSIZE', (0, 0), (-1, 0), 9),
-            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
-            ('ALIGN', (2, 0), (-1, 0), 'CENTER'),
+            # Header row
+            ('BACKGROUND', (0, 0), (-1, 0), self.BRAND_COLOR),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), _FONT_BOLD),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
-            
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+
             # Item rows
-            ('FONTNAME', (0, 1), (-1, -1), _FONT),
-            ('FONTSIZE', (0, 1), (-1, -2), 9),
-            ('ALIGN', (0, 1), (0, -2), 'CENTER'),  # # center
-            ('ALIGN', (2, 1), (-1, -2), 'CENTER'),  # HSN and Qty center
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            
-            # Total row - merge first 3 columns
-            ('SPAN', (0, -1), (2, -1)),
-            ('FONTSIZE', (0, -1), (-1, -1), 9),
-            ('ALIGN', (0, -1), (0, -1), 'RIGHT'),
-            ('ALIGN', (3, -1), (3, -1), 'CENTER'),
+            ('FONTNAME', (0, 1), (-1, grand_row - 1), _FONT),
+            ('ALIGN', (0, 1), (0, grand_row - 1), 'CENTER'),
+            ('ALIGN', (2, 1), (-1, grand_row - 1), 'CENTER'),
+
+            # Total row — merge first 3 columns, blue background
+            ('SPAN', (0, grand_row), (2, grand_row)),
+            ('BACKGROUND', (0, grand_row), (-1, grand_row), colors.HexColor('#3d6b9e')),
+            ('TEXTCOLOR', (0, grand_row), (-1, grand_row), colors.white),
+            ('FONTNAME', (0, grand_row), (-1, grand_row), _FONT_BOLD),
+            ('FONTSIZE', (0, grand_row), (-1, grand_row), 9),
+            ('TOPPADDING', (0, grand_row), (-1, grand_row), 5),
+            ('BOTTOMPADDING', (0, grand_row), (-1, grand_row), 5),
+            ('ALIGN', (0, grand_row), (0, grand_row), 'RIGHT'),
+            ('ALIGN', (3, grand_row), (3, grand_row), 'CENTER'),
         ]
         
         items_table.setStyle(TableStyle(table_style))

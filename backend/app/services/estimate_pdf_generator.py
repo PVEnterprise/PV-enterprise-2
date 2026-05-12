@@ -23,33 +23,31 @@ from app.models.customer import Customer
 
 # ---------- Register font with ₹ symbol ----------
 def _register_unicode_font():
-    """Register Unicode font for rupee symbol. Tries bundled font first, then system fonts."""
-    # Get the directory where this file is located
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.dirname(os.path.dirname(current_dir))  # Go up to backend/
-    
-    paths = [
-        # Bundled font (highest priority)
-        os.path.join(backend_dir, "fonts", "DejaVuSans.ttf"),
-        # System fonts (fallback)
-        "/Library/Fonts/DejaVuSans.ttf",
-        "/Library/Fonts/DejaVu Sans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/local/share/fonts/DejaVuSans.ttf",
-    ]
-    
-    for p in paths:
-        if os.path.exists(p):
-            try:
-                pdfmetrics.registerFont(TTFont("DejaVuSans", p))
-                return "DejaVuSans"
-            except Exception:
-                continue
-    
-    # Fallback to Helvetica (won't show ₹ symbol correctly)
-    return "Helvetica"
+    """Register NotoSans (regular + bold) for rupee symbol support."""
+    try:
+        pdfmetrics.getFont("NotoSans")
+        pdfmetrics.getFont("NotoSans-Bold")
+        return "NotoSans", "NotoSans-Bold"
+    except KeyError:
+        pass
+    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "fonts")
+    regular = os.path.normpath(os.path.join(fonts_dir, "NotoSans-Regular.ttf"))
+    bold    = os.path.normpath(os.path.join(fonts_dir, "NotoSans-Bold.ttf"))
+    if os.path.exists(regular):
+        try:
+            pdfmetrics.registerFont(TTFont("NotoSans", regular))
+            pdfmetrics.registerFont(TTFont("NotoSans-Bold", bold if os.path.exists(bold) else regular))
+            pdfmetrics.registerFontFamily(
+                "NotoSans",
+                normal="NotoSans", bold="NotoSans-Bold",
+                italic="NotoSans", boldItalic="NotoSans-Bold",
+            )
+            return "NotoSans", "NotoSans-Bold"
+        except Exception:
+            pass
+    return "Helvetica", "Helvetica-Bold"
 
-_FONT = _register_unicode_font()
+_FONT, _FONT_BOLD = _register_unicode_font()
 RUPEE = "₹"
 
 
@@ -248,22 +246,19 @@ class EstimatePDFGenerator:
             logo_element = Paragraph('<b>SREEDEVI<br/>MEDTRADE</b>', self.styles['CompanyName'])
         
         # Create header table: [Logo | ESTIMATE | Company Details]
-        title_block = Paragraph(
-            '<b>ESTIMATE</b><br/>'
-            '<font size="7" color="#3d6b9e">SREEDEVI LIFE SCIENCES</font>',
-            self.styles['EstimateTitle']
-        )
+        title_block = Paragraph('<b>ESTIMATE</b>', self.styles['EstimateTitle'])
 
         header_data = [[
             logo_element,
             '',
             title_block,
             Paragraph(
-                f'<b>{self.COMPANY_NAME}</b><br/>'
                 f'{self.COMPANY_PLOT},<br/>'
                 f'{self.COMPANY_AREA}, {self.COMPANY_CITY.split()[0]}<br/>'
                 f"{' '.join(self.COMPANY_CITY.split()[1:])}, India<br/>"
-                f'<font color="#3d6b9e"><b>GSTIN: {self.COMPANY_GSTIN}</b></font>',
+                + '<font color="#3d6b9e"><b>'
+                + ("" if self.COMPANY_GSTIN.upper().startswith("GSTIN") else "GSTIN: ")
+                + self.COMPANY_GSTIN + '</b></font>',
                 self.styles['CompanyDetails']
             )
         ]]
@@ -447,7 +442,7 @@ class EstimatePDFGenerator:
         subtotal_after_discount = subtotal - discount_amount
         grand_total = subtotal_after_discount + total_igst
 
-        igst_label = f'IGST ({float(total_igst / subtotal * 100) if subtotal > 0 else 0:.0f}%)'
+        igst_label = f'IGST ({float(total_igst / subtotal_after_discount * 100) if subtotal_after_discount > 0 else 0:.0f}%)'
         final_rows_start = len(table_data)
 
         if not has_named_sections:
@@ -468,15 +463,18 @@ class EstimatePDFGenerator:
             ('BACKGROUND', (0, 0), (-1, 1), self.BRAND_COLOR),
             ('TEXTCOLOR', (0, 0), (-1, 1), colors.white),
             ('FONTNAME', (0, 0), (-1, 1), _FONT),
-            ('FONTSIZE', (0, 0), (-1, -1), 7),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('ALIGN', (0, 0), (-1, 1), 'CENTER'),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 2),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('FONTNAME', (0, -1), (-1, -1), _FONT_BOLD),
+            # Bold + right-align value column for ALL data rows (items + summary + total)
+            ('FONTNAME', (-1, 2), (-1, -1), _FONT_BOLD),
+            ('ALIGN', (-1, 2), (-1, -1), 'RIGHT'),
         ]
 
         if show_discount_col:
@@ -498,7 +496,7 @@ class EstimatePDFGenerator:
                 ('SPAN', (0, r), (num_cols - 1, r)),
                 ('BACKGROUND', (0, r), (num_cols - 1, r), self.BRAND_COLOR),
                 ('TEXTCOLOR', (0, r), (num_cols - 1, r), colors.white),
-                ('FONTNAME', (0, r), (num_cols - 1, r), 'Helvetica-Bold'),
+                ('FONTNAME', (0, r), (num_cols - 1, r), _FONT_BOLD),
                 ('ALIGN', (0, r), (num_cols - 1, r), 'LEFT'),
             ])
 
@@ -507,15 +505,21 @@ class EstimatePDFGenerator:
             style_commands.extend([
                 ('SPAN', (0, r), (num_cols - 2, r)),
                 ('ALIGN', (0, r), (0, r), 'RIGHT'),
-                ('FONTNAME', (0, r), (num_cols - 1, r), _FONT),
+                ('ALIGN', (num_cols - 1, r), (num_cols - 1, r), 'RIGHT'),
+                ('FONTNAME', (0, r), (num_cols - 1, r), _FONT_BOLD),
+                ('BACKGROUND', (0, r), (-1, r), colors.HexColor('#eef2f7')),
             ])
         grand_row = len(table_data) - 1
         style_commands.extend([
             ('SPAN', (0, grand_row), (num_cols - 2, grand_row)),
             ('ALIGN', (0, grand_row), (0, grand_row), 'RIGHT'),
+            ('ALIGN', (num_cols - 1, grand_row), (num_cols - 1, grand_row), 'RIGHT'),
             ('BACKGROUND', (0, grand_row), (-1, grand_row), colors.HexColor('#3d6b9e')),
             ('TEXTCOLOR', (0, grand_row), (-1, grand_row), colors.white),
-            ('FONTNAME', (0, grand_row), (-1, grand_row), 'Helvetica-Bold'),
+            ('FONTNAME', (0, grand_row), (-1, grand_row), _FONT_BOLD),
+            ('FONTSIZE', (0, grand_row), (-1, grand_row), 9),
+            ('TOPPADDING', (0, grand_row), (-1, grand_row), 5),
+            ('BOTTOMPADDING', (0, grand_row), (-1, grand_row), 5),
         ])
 
         table.setStyle(TableStyle(style_commands))

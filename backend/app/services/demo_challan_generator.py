@@ -19,23 +19,31 @@ from app.models.demo_request import DemoRequest
 
 
 def _register_unicode_font():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.dirname(os.path.dirname(current_dir))
-    paths = [
-        os.path.join(backend_dir, "fonts", "DejaVuSans.ttf"),
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/Library/Fonts/DejaVuSans.ttf",
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            try:
-                pdfmetrics.registerFont(TTFont("DejaVuSans", p))
-                return "DejaVuSans"
-            except Exception:
-                continue
-    return "Helvetica"
+    """Register NotoSans (regular + bold) for rupee symbol support."""
+    try:
+        pdfmetrics.getFont("NotoSans")
+        pdfmetrics.getFont("NotoSans-Bold")
+        return "NotoSans", "NotoSans-Bold"
+    except KeyError:
+        pass
+    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "fonts")
+    regular = os.path.normpath(os.path.join(fonts_dir, "NotoSans-Regular.ttf"))
+    bold    = os.path.normpath(os.path.join(fonts_dir, "NotoSans-Bold.ttf"))
+    if os.path.exists(regular):
+        try:
+            pdfmetrics.registerFont(TTFont("NotoSans", regular))
+            pdfmetrics.registerFont(TTFont("NotoSans-Bold", bold if os.path.exists(bold) else regular))
+            pdfmetrics.registerFontFamily(
+                "NotoSans",
+                normal="NotoSans", bold="NotoSans-Bold",
+                italic="NotoSans", boldItalic="NotoSans-Bold",
+            )
+            return "NotoSans", "NotoSans-Bold"
+        except Exception:
+            pass
+    return "Helvetica", "Helvetica-Bold"
 
-_FONT = _register_unicode_font()
+_FONT, _FONT_BOLD = _register_unicode_font()
 
 
 class DemoChallanPDFGenerator:
@@ -139,21 +147,18 @@ class DemoChallanPDFGenerator:
         else:
             logo_element = Paragraph('<b>SREEDEVI<br/>MEDTRADE</b>', self.styles['NormalText'])
 
-        title_block = Paragraph(
-            '<b>DEMO CHALLAN</b><br/>'
-            '<font size="7" color="#3d6b9e">SREEDEVI LIFE SCIENCES</font>',
-            self.styles['ChallanTitle']
-        )
+        title_block = Paragraph('<b>DEMO CHALLAN</b>', self.styles['ChallanTitle'])
         header_data = [[
             logo_element,
             '',
             title_block,
             Paragraph(
-                f'<b>{self.COMPANY_NAME}</b><br/>'
                 f'{self.COMPANY_PLOT},<br/>'
                 f'{self.COMPANY_AREA}, {self.COMPANY_CITY.split()[0]}<br/>'
                 f"{' '.join(self.COMPANY_CITY.split()[1:])}, India<br/>"
-                f'<font color="#3d6b9e"><b>GSTIN: {self.COMPANY_GSTIN}</b></font>',
+                + '<font color="#3d6b9e"><b>'
+                + ("" if self.COMPANY_GSTIN.upper().startswith("GSTIN") else "GSTIN: ")
+                + self.COMPANY_GSTIN + '</b></font>',
                 self.styles['CompanyDetails']
             )
         ]]
@@ -251,7 +256,7 @@ class DemoChallanPDFGenerator:
         t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), self.BRAND_COLOR),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), _FONT),
+            ('FONTNAME', (0, 0), (-1, 0), _FONT_BOLD),
             ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('ALIGN', (0, 1), (0, -1), 'CENTER'),
@@ -263,9 +268,14 @@ class DemoChallanPDFGenerator:
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
             ('LEFTPADDING', (0, 0), (-1, -1), 4),
             ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            # Bold quantity column for item rows
+            ('FONTNAME', (3, 1), (3, grand_row - 1), _FONT_BOLD),
             ('BACKGROUND', (0, grand_row), (-1, grand_row), colors.HexColor('#3d6b9e')),
             ('TEXTCOLOR', (0, grand_row), (-1, grand_row), colors.white),
-            ('FONTNAME', (0, grand_row), (-1, grand_row), 'Helvetica-Bold'),
+            ('FONTNAME', (0, grand_row), (-1, grand_row), _FONT_BOLD),
+            ('FONTSIZE', (0, grand_row), (-1, grand_row), 9),
+            ('TOPPADDING', (0, grand_row), (-1, grand_row), 5),
+            ('BOTTOMPADDING', (0, grand_row), (-1, grand_row), 5),
             ('ALIGN', (2, grand_row), (2, grand_row), 'RIGHT'),
         ]))
         return [t]

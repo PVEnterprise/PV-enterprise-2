@@ -17,32 +17,30 @@ import math
 
 # ---------- Register font with ₹ symbol ----------
 def _register_unicode_font():
-    """Register Unicode font for rupee symbol. Tries bundled font first, then system fonts."""
-    # Get the directory where this file is located
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.dirname(os.path.dirname(current_dir))  # Go up to backend/
-    
-    paths = [
-        # Bundled font (highest priority)
-        os.path.join(backend_dir, "fonts", "DejaVuSans.ttf"),
-        # System fonts (fallback)
-        "/Library/Fonts/DejaVuSans.ttf",
-        "/Library/Fonts/DejaVu Sans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/local/share/fonts/DejaVuSans.ttf",
-    ]
-    
-    for p in paths:
-        if os.path.exists(p):
-            try:
-                pdfmetrics.registerFont(TTFont("DejaVuSans", p))
-                return "DejaVuSans"
-            except Exception:
-                continue
-    
-    # Fallback to Helvetica (won't show ₹ symbol correctly)
-    return "Helvetica"
-_FONT = _register_unicode_font()
+    """Register NotoSans (regular + bold) for rupee symbol support."""
+    try:
+        pdfmetrics.getFont("NotoSans")
+        pdfmetrics.getFont("NotoSans-Bold")
+        return "NotoSans", "NotoSans-Bold"
+    except KeyError:
+        pass
+    fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "fonts")
+    regular = os.path.normpath(os.path.join(fonts_dir, "NotoSans-Regular.ttf"))
+    bold    = os.path.normpath(os.path.join(fonts_dir, "NotoSans-Bold.ttf"))
+    if os.path.exists(regular):
+        try:
+            pdfmetrics.registerFont(TTFont("NotoSans", regular))
+            pdfmetrics.registerFont(TTFont("NotoSans-Bold", bold if os.path.exists(bold) else regular))
+            pdfmetrics.registerFontFamily(
+                "NotoSans",
+                normal="NotoSans", bold="NotoSans-Bold",
+                italic="NotoSans", boldItalic="NotoSans-Bold",
+            )
+            return "NotoSans", "NotoSans-Bold"
+        except Exception:
+            pass
+    return "Helvetica", "Helvetica-Bold"
+_FONT, _FONT_BOLD = _register_unicode_font()
 RUPEE = "₹"
 
 
@@ -132,17 +130,13 @@ class InvoicePDFGenerator:
         _city_name = _city_parts[0] if _city_parts else ''
         _state_pin = ' '.join(_city_parts[1:]) if len(_city_parts) > 1 else ''
         info = (
-            f"<b>{self.settings.COMPANY_NAME}</b><br/>"
             f"{self.settings.COMPANY_PLOT},<br/>"
             f"{self.settings.COMPANY_AREA}, {_city_name}<br/>"
             f"{_state_pin}, {self.settings.COMPANY_COUNTRY}<br/>"
-            f"GSTIN: {self.settings.COMPANY_GSTIN}"
+            + ("" if self.settings.COMPANY_GSTIN.upper().startswith("GSTIN") else "GSTIN: ")
+            + self.settings.COMPANY_GSTIN
         )
-        title_block = Paragraph(
-            '<b>TAX INVOICE</b><br/>'
-            '<font size="7" color="#3d6b9e">SREEDEVI LIFE SCIENCES</font>',
-            self.styles["InvoiceTitle"]
-        )
+        title_block = Paragraph('<b>TAX INVOICE</b>', self.styles["InvoiceTitle"])
         data = [[logo, '', title_block, Paragraph(info, self.styles["RightText"])]]
         t = Table(data, colWidths=[60*mm, 3*mm, 55*mm, 62*mm], rowHeights=[26*mm])
         t.setStyle(TableStyle([
@@ -278,16 +272,19 @@ class InvoicePDFGenerator:
         col_widths = [8*mm, 51*mm, 18*mm, 10*mm, 27*mm, 14*mm, 22*mm, 30*mm]
         t = Table(data, colWidths=col_widths)
 
+        item_start = 1
         grand_row = len(data) - 1
         style = [
             ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),
             ("BACKGROUND", (0, 0), (-1, 0), self.BRAND_COLOR),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), _FONT_BOLD),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
-            ("BACKGROUND", (0, grand_row), (-1, grand_row), colors.HexColor('#3d6b9e')),
-            ("TEXTCOLOR", (0, grand_row), (-1, grand_row), colors.white),
-            ("FONTNAME", (0, grand_row), (-1, grand_row), _FONT),
+            ("FONTNAME", (-1, item_start), (-1, grand_row - 1), _FONT_BOLD),
         ]
 
         for r in section_header_rows:
@@ -295,16 +292,30 @@ class InvoicePDFGenerator:
                 ("SPAN", (0, r), (num_cols - 1, r)),
                 ("BACKGROUND", (0, r), (num_cols - 1, r), self.BRAND_COLOR),
                 ("TEXTCOLOR", (0, r), (num_cols - 1, r), colors.white),
-                ("FONTNAME", (0, r), (num_cols - 1, r), _FONT),
+                ("FONTNAME", (0, r), (num_cols - 1, r), _FONT_BOLD),
                 ("LEFTPADDING", (0, r), (num_cols - 1, r), 4),
             ]
 
         for r in section_subtotal_rows + final_totals_rows:
+            if r == grand_row:
+                continue
             style += [
                 ("SPAN", (0, r), (num_cols - 2, r)),
                 ("ALIGN", (0, r), (num_cols - 2, r), "RIGHT"),
-                ("FONTNAME", (0, r), (num_cols - 1, r), _FONT),
+                ("FONTNAME", (0, r), (num_cols - 1, r), _FONT_BOLD),
+                ("BACKGROUND", (0, r), (-1, r), colors.HexColor('#eef2f7')),
             ]
+
+        style += [
+            ("SPAN", (0, grand_row), (num_cols - 2, grand_row)),
+            ("ALIGN", (0, grand_row), (num_cols - 2, grand_row), "RIGHT"),
+            ("BACKGROUND", (0, grand_row), (-1, grand_row), colors.HexColor('#3d6b9e')),
+            ("TEXTCOLOR", (0, grand_row), (-1, grand_row), colors.white),
+            ("FONTNAME", (0, grand_row), (-1, grand_row), _FONT_BOLD),
+            ("FONTSIZE", (0, grand_row), (-1, grand_row), 9),
+            ("TOPPADDING", (0, grand_row), (-1, grand_row), 5),
+            ("BOTTOMPADDING", (0, grand_row), (-1, grand_row), 5),
+        ]
 
         t.setStyle(TableStyle(style))
         return self._fix_width(t)
