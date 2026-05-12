@@ -176,10 +176,12 @@ class InvoicePDFGenerator:
             ["Invoice #", f": {invoice_number}", "Place Of Supply", f": {self.order.customer.state or 'N/A'}"],
             ["Invoice Date", f": {self.invoice.invoice_date.strftime('%d.%m.%Y')}", "Due Date", f": {self.invoice.due_date.strftime('%d.%m.%Y')}"],
         ]
-        if payment_terms:
-            data.append(["Terms", f": {payment_terms}", "", ""])
-        if po_number:
-            data.append(["PO #", f": {po_number}", "", ""])
+        if po_number or payment_terms:
+            left_label = "PO #" if po_number else ""
+            left_val   = f": {po_number}" if po_number else ""
+            right_label = "Terms" if payment_terms else ""
+            right_val   = f": {payment_terms}" if payment_terms else ""
+            data.append([left_label, left_val, right_label, right_val])
         t = Table(data, colWidths=[30 * mm, 60 * mm, 40 * mm, 50 * mm])
         t.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
