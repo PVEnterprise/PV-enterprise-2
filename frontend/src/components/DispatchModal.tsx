@@ -35,6 +35,20 @@ export interface DispatchItemData {
   alternate: AlternateItem | null;
 }
 
+const DEFAULT_TERMS = `Terms & Conditions
+1) GST 5% included in this invoice.
+2) Payment shall be made 100% in advance along side with Delivery.
+3) 3 years warrenty.
+4) Freight included.`;
+
+const PAYMENT_TERMS_OPTIONS = [
+  'Due on Receipt',
+  'Net 15',
+  'Net 30',
+  'Net 45',
+  'Net 60',
+];
+
 export interface DispatchFormData {
   order_id: string;
   dispatch_date: string;
@@ -42,6 +56,7 @@ export interface DispatchFormData {
   tracking_number: string;
   notes: string;
   terms: string;
+  payment_terms: string;
   po_number: string;
   dc_number: string;
   invoice_number: string;
@@ -129,7 +144,8 @@ export default function DispatchModal({
   const [courierName, setCourierName] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [notes, setNotes] = useState('');
-  const [terms, setTerms] = useState('');
+  const [terms, setTerms] = useState(DEFAULT_TERMS);
+  const [paymentTerms, setPaymentTerms] = useState('Due on Receipt');
   const [poNumber, setPoNumber] = useState('');
   const [dcNumber, setDcNumber] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -234,6 +250,7 @@ export default function DispatchModal({
       tracking_number: trackingNumber,
       notes,
       terms,
+      payment_terms: paymentTerms,
       po_number: poNumber,
       dc_number: dcNumber,
       invoice_number: invoiceNumber,
@@ -293,9 +310,17 @@ export default function DispatchModal({
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">Invoice #</label>
                 <input type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Invoice number" className="input w-full text-xs py-1" />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Terms</label>
+                <select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} className="input w-full text-xs py-1">
+                  {PAYMENT_TERMS_OPTIONS.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Terms</label>
-                <textarea value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="e.g. Due on Receipt, Net 30" rows={3} className="input w-full text-xs py-1 resize-none" />
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Terms &amp; Conditions</label>
+                <textarea value={terms} onChange={(e) => setTerms(e.target.value)} rows={5} className="input w-full text-xs py-1 resize-none font-mono" />
               </div>
             </div>
           </div>
