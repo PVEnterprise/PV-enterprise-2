@@ -379,8 +379,14 @@ export default function GenerateQuotationPage() {
                 </span>
               )}
             </span>
-            <span className="text-gray-600 truncate">
-              Customer: <span className="font-semibold text-gray-900">{order.customer.name}</span>
+            <span className="text-gray-600 flex items-center gap-1 min-w-0">
+              <span className="whitespace-nowrap">Customer:</span>
+              <span
+                className="font-semibold text-gray-900 truncate max-w-[180px]"
+                title={order.customer.name}
+              >
+                {order.customer.name}
+              </span>
             </span>
           </div>
 
