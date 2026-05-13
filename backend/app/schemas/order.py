@@ -96,6 +96,7 @@ class OrderBase(BaseModel):
     source: Optional[str] = None
     sales_rep_description: Optional[str] = None  # Requirements from sales rep
     notes: Optional[str] = None
+    subject: Optional[str] = None
 
 
 class OrderCreate(OrderBase):
@@ -113,6 +114,7 @@ class OrderUpdate(BaseModel):
     po_date: Optional[date] = None
     po_amount: Optional[Decimal] = None
     notes: Optional[str] = None
+    subject: Optional[str] = None
 
 
 class OrderStatusUpdate(BaseModel):
@@ -134,6 +136,7 @@ class OrderResponse(OrderBase):
     customer: Optional[CustomerBasic] = None  # Nested customer data
     status: str
     workflow_stage: str
+    subject: Optional[str] = None
     price_list_id: Optional[UUID] = None
     discount_percentage: Optional[Decimal] = None
     po_number: Optional[str] = None

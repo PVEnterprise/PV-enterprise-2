@@ -44,6 +44,7 @@ interface Order {
   workflow_stage: string;
   price_list_id?: string | null;
   discount_percentage?: number | null;
+  subject?: string | null;
 }
 
 interface PriceListItem {
@@ -83,6 +84,8 @@ export default function GenerateQuotationPage() {
   const initializedFromOrder = useRef(false);
   // Store custom unit prices per item (itemId -> custom price)
   const [customUnitPrices, setCustomUnitPrices] = useState<Record<string, number>>({});
+  const [rawPriceInputs, setRawPriceInputs] = useState<Record<string, string>>({});
+  const [subject, setSubject] = useState<string>('');
 
   // Check role access
   const canAccess = user?.role_name === 'quoter' || user?.role_name === 'executive';
@@ -100,6 +103,7 @@ export default function GenerateQuotationPage() {
       initializedFromOrder.current = true;
       if (order.price_list_id) setSelectedPriceListId(String(order.price_list_id));
       if (order.discount_percentage != null) setDiscountPercent(Number(order.discount_percentage));
+      if (order.subject) setSubject(order.subject);
     }
   }, [order]);
 
@@ -187,6 +191,7 @@ export default function GenerateQuotationPage() {
       return await api.saveQuotationDraft(orderId!, {
         price_list_id: selectedPriceListId || null,
         discount_percent: discountPercent,
+        subject,
         sub_total: subTotal,
         discount_amount: discountAmount,
         tax_amount: totalTaxAmount,
@@ -214,11 +219,12 @@ export default function GenerateQuotationPage() {
       return await api.submitQuotation(orderId!, {
         price_list_id: selectedPriceListId || null,
         discount_percent: discountPercent,
+        subject,
         sub_total: subTotal,
         discount_amount: discountAmount,
         tax_amount: totalTaxAmount,
         grand_total: grandTotal,
-        custom_prices: customUnitPrices, // Send custom prices to backend
+        custom_prices: customUnitPrices,
       });
     },
     onSuccess: () => {
@@ -266,22 +272,25 @@ export default function GenerateQuotationPage() {
     setEditedOrderNumber('');
   };
 
-  // Handle unit price change
-  const handleUnitPriceChange = (itemId: string, newPrice: string) => {
-    const price = parseFloat(newPrice);
-    if (!isNaN(price) && price >= 0) {
-      setCustomUnitPrices(prev => ({
-        ...prev,
-        [itemId]: price
-      }));
-    } else if (newPrice === '') {
-      // Remove custom price if input is cleared
-      setCustomUnitPrices(prev => {
-        const updated = { ...prev };
-        delete updated[itemId];
-        return updated;
-      });
+  // Handle unit price change — allow clearing all digits (stored as raw string)
+  const handleUnitPriceChange = (itemId: string, rawValue: string) => {
+    setRawPriceInputs(prev => ({ ...prev, [itemId]: rawValue }));
+    if (rawValue === '' || rawValue === '.') {
+      setCustomUnitPrices(prev => ({ ...prev, [itemId]: 0 }));
+    } else {
+      const price = parseFloat(rawValue);
+      if (!isNaN(price) && price >= 0) {
+        setCustomUnitPrices(prev => ({ ...prev, [itemId]: price }));
+      }
     }
+  };
+
+  const handleUnitPriceBlur = (itemId: string) => {
+    setRawPriceInputs(prev => {
+      const updated = { ...prev };
+      delete updated[itemId];
+      return updated;
+    });
   };
 
   const handleSaveAndSubmit = () => {
@@ -318,129 +327,117 @@ export default function GenerateQuotationPage() {
 
   return (
     <div className="-m-6 h-[calc(100vh-4rem)] flex flex-col bg-gray-50">
-      {/* Compact Header */}
-      <div className="bg-white border-b shadow-sm">
-        <div className="flex flex-col p-4">
-          {/* Top bar with back button and title */}
-          <div className="flex items-center justify-between mb-3">
-            <button
-              onClick={() => navigate(`/orders/${orderId}`)}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft size={18} />
-              <span className="text-sm">Back to Order</span>
-            </button>
-            <div className="flex items-center gap-2">
-              <FileText size={20} className="text-blue-600" />
-              <h1 className="text-lg font-bold text-gray-900">Generate Quotation</h1>
-            </div>
+      {/* Header */}
+      <div className="bg-white border-b shadow-sm px-4 pt-3 pb-2">
+        {/* Row 1: Back + Title */}
+        <div className="flex items-center justify-between mb-2">
+          <button
+            onClick={() => navigate(`/orders/${orderId}`)}
+            className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900"
+          >
+            <ArrowLeft size={16} />
+            Back to Order
+          </button>
+          <div className="flex items-center gap-2 text-blue-700 font-bold text-base">
+            <FileText size={18} />
+            Generate Quotation
+          </div>
+        </div>
+
+        {/* Row 2: Order/Customer (left) + Subject + controls (right) */}
+        <div className="flex items-center gap-3">
+          {/* Left: order number + customer */}
+          <div className="flex items-center gap-3 text-sm min-w-0">
+            <span className="text-gray-600 whitespace-nowrap">
+              Order:{' '}
+              {isEditingOrderNumber ? (
+                <span className="inline-flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={editedOrderNumber}
+                    onChange={(e) => setEditedOrderNumber(e.target.value)}
+                    className="input input-sm w-32 text-xs font-semibold"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveOrderNumber();
+                      if (e.key === 'Escape') handleCancelEditOrderNumber();
+                    }}
+                  />
+                  <button onClick={handleSaveOrderNumber} disabled={updateOrderNumberMutation.isPending} className="p-0.5 hover:bg-green-100 rounded" title="Save">
+                    <Check size={13} className="text-green-600" />
+                  </button>
+                  <button onClick={handleCancelEditOrderNumber} disabled={updateOrderNumberMutation.isPending} className="p-0.5 hover:bg-red-100 rounded" title="Cancel">
+                    <X size={13} className="text-red-600" />
+                  </button>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  <span className="font-semibold text-gray-900">{order.order_number}</span>
+                  <button onClick={handleEditOrderNumber} className="p-0.5 hover:bg-gray-100 rounded" title="Edit order number">
+                    <Edit2 size={11} className="text-gray-500 hover:text-blue-600" />
+                  </button>
+                </span>
+              )}
+            </span>
+            <span className="text-gray-600 truncate">
+              Customer: <span className="font-semibold text-gray-900">{order.customer.name}</span>
+            </span>
           </div>
 
-          {/* Order info and controls in single compact row */}
-          <div className="flex items-center gap-4">
-            {/* Order Info */}
-            <div className="flex gap-4 text-xs">
-              <span className="text-gray-600 flex items-center gap-2">
-                Order: 
-                {isEditingOrderNumber ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="text"
-                      value={editedOrderNumber}
-                      onChange={(e) => setEditedOrderNumber(e.target.value)}
-                      className="input input-sm w-40 text-xs font-semibold"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveOrderNumber();
-                        if (e.key === 'Escape') handleCancelEditOrderNumber();
-                      }}
-                    />
-                    <button
-                      onClick={handleSaveOrderNumber}
-                      disabled={updateOrderNumberMutation.isPending}
-                      className="p-1 hover:bg-green-100 rounded transition-colors"
-                      title="Save"
-                    >
-                      <Check size={14} className="text-green-600" />
-                    </button>
-                    <button
-                      onClick={handleCancelEditOrderNumber}
-                      disabled={updateOrderNumberMutation.isPending}
-                      className="p-1 hover:bg-red-100 rounded transition-colors"
-                      title="Cancel"
-                    >
-                      <X size={14} className="text-red-600" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="font-semibold text-gray-900">{order.order_number}</span>
-                    <button
-                      onClick={handleEditOrderNumber}
-                      className="p-1 hover:bg-gray-100 rounded transition-colors"
-                      title="Edit order number"
-                    >
-                      <Edit2 size={12} className="text-gray-600 hover:text-blue-600" />
-                    </button>
-                  </>
-                )}
-              </span>
-              <span className="text-gray-600">
-                Customer: <span className="font-semibold text-gray-900">{order.customer.name}</span>
-              </span>
-            </div>
+          {/* Spacer */}
+          <div className="flex-1" />
 
-            {/* Spacer */}
-            <div className="flex-1"></div>
+          {/* Subject */}
+          <div className="flex items-center gap-1 w-52">
+            <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Subject:</label>
+            <input
+              type="text"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Optional subject"
+              className="input input-sm text-xs flex-1 min-w-0"
+            />
+          </div>
 
-            {/* Price List Picker */}
-            <div className="w-56">
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Price List
-              </label>
-              <select
-                value={selectedPriceListId}
-                onChange={(e) => setSelectedPriceListId(e.target.value)}
-                className="input input-sm w-full text-xs"
-              >
-                <option value="">Standard Prices</option>
-                {priceLists.map((pl) => (
-                  <option key={pl.id} value={pl.id}>
-                    {pl.name} {pl.is_default ? '(Default)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Price List */}
+          <div className="flex items-center gap-1">
+            <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Price List</label>
+            <select
+              value={selectedPriceListId}
+              onChange={(e) => setSelectedPriceListId(e.target.value)}
+              className="input input-sm text-xs w-40"
+            >
+              <option value="">Standard Prices</option>
+              {priceLists.map((pl) => (
+                <option key={pl.id} value={pl.id}>{pl.name}{pl.is_default ? ' (Default)' : ''}</option>
+              ))}
+            </select>
+          </div>
 
-            {/* Expiry Date */}
-            <div className="w-40">
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Valid Until
-              </label>
-              <input
-                type="date"
-                value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
-                className="input input-sm w-full text-xs"
-              />
-            </div>
+          {/* Valid Until */}
+          <div className="flex items-center gap-1">
+            <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Valid Until</label>
+            <input
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              className="input input-sm text-xs w-32"
+            />
+          </div>
 
-            {/* Discount Input */}
-            <div className="w-32">
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Discount %
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                value={discountPercent}
-                onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
-                className="input input-sm w-full text-xs"
-                placeholder="0"
-              />
-            </div>
+          {/* Discount */}
+          <div className="flex items-center gap-1">
+            <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Disc %</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={discountPercent}
+              onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+              className="input input-sm text-xs w-16"
+              placeholder="0"
+            />
           </div>
         </div>
       </div>
@@ -482,11 +479,11 @@ export default function GenerateQuotationPage() {
                       <div className="flex items-center justify-end gap-1">
                         <span className="text-gray-600">₹</span>
                         <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.final_unit_price}
+                          type="text"
+                          inputMode="decimal"
+                          value={rawPriceInputs[item.id] !== undefined ? rawPriceInputs[item.id] : String(item.final_unit_price)}
                           onChange={(e) => handleUnitPriceChange(item.id, e.target.value)}
+                          onBlur={() => handleUnitPriceBlur(item.id)}
                           className={`w-24 text-right border rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                             customUnitPrices[item.id] !== undefined 
                               ? 'border-blue-500 bg-blue-50' 

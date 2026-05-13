@@ -832,18 +832,6 @@ def reject_order(
         # Reject quotation - send back to quotation stage
         order.status = "approved"
         order.workflow_stage = "quotation"
-        # Clear saved price list and discount so user can select new ones
-        order.price_list_id = None
-        order.discount_percentage = 0
-        
-        # Reset order item prices back to standard inventory prices
-        from app.models.inventory import Inventory
-        for item in order.items:
-            if item.inventory_id:
-                inventory = db.query(Inventory).filter(Inventory.id == item.inventory_id).first()
-                if inventory:
-                    item.unit_price = inventory.unit_price
-        
         action_detail = f"Reason: {reject_data.reason}\nSent back to quotation stage for regeneration"
     else:
         # Reject decoding - send back to draft for decoder to update
@@ -1274,6 +1262,10 @@ def save_quotation_draft(
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
 
+    # Save subject
+    if 'subject' in quotation_data:
+        order.subject = quotation_data['subject'] or None
+
     add_order_action(
         order=order,
         action="Quotation Draft Saved",
@@ -1353,6 +1345,10 @@ def mark_quotation_generated(
     
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
+
+    # Save subject
+    if 'subject' in quotation_data:
+        order.subject = quotation_data['subject'] or None
     
     # Update order workflow
     order.workflow_stage = "quotation_generated"

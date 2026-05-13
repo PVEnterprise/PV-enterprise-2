@@ -57,6 +57,7 @@ export interface Order {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   source?: string;
   sales_rep_description?: string; // Requirements from sales rep
+  subject?: string;
   po_number?: string;
   po_date?: string;
   po_amount?: number;
