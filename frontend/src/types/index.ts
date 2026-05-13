@@ -200,6 +200,11 @@ export interface Dispatch {
   po_number?: string;
   dc_number?: string;
   invoice_number?: string;
+  bank_account_name?: string;
+  bank_account_number?: string;
+  bank_name?: string;
+  bank_ifsc?: string;
+  bank_branch?: string;
   created_by: string;
   items: DispatchItem[];
   created_at: string;

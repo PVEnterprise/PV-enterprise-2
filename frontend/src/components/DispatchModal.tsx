@@ -35,8 +35,7 @@ export interface DispatchItemData {
   alternate: AlternateItem | null;
 }
 
-const DEFAULT_TERMS = `Terms & Conditions
-1) GST 5% included in this invoice.
+const DEFAULT_TERMS = `1) GST 5% included in this invoice.
 2) Payment shall be made 100% in advance along side with Delivery.
 3) 3 years warrenty.
 4) Freight included.`;
@@ -60,6 +59,11 @@ export interface DispatchFormData {
   po_number: string;
   dc_number: string;
   invoice_number: string;
+  bank_account_name: string;
+  bank_account_number: string;
+  bank_name: string;
+  bank_ifsc: string;
+  bank_branch: string;
   items: Array<{
     order_item_id: string;
     inventory_id: string;
@@ -146,6 +150,11 @@ export default function DispatchModal({
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState(DEFAULT_TERMS);
   const [paymentTerms, setPaymentTerms] = useState('Due on Receipt');
+  const [bankAccountName, setBankAccountName] = useState('Sreedevi Life Sciences');
+  const [bankAccountNumber, setBankAccountNumber] = useState('42285740549');
+  const [bankName, setBankName] = useState('State Bank of India');
+  const [bankIfsc, setBankIfsc] = useState('SBIN0021790');
+  const [bankBranch, setBankBranch] = useState('Manikonda, Hyderabad');
   const [poNumber, setPoNumber] = useState('');
   const [dcNumber, setDcNumber] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -251,6 +260,11 @@ export default function DispatchModal({
       notes,
       terms,
       payment_terms: paymentTerms,
+      bank_account_name: bankAccountName,
+      bank_account_number: bankAccountNumber,
+      bank_name: bankName,
+      bank_ifsc: bankIfsc,
+      bank_branch: bankBranch,
       po_number: poNumber,
       dc_number: dcNumber,
       invoice_number: invoiceNumber,
@@ -321,6 +335,33 @@ export default function DispatchModal({
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">Terms &amp; Conditions</label>
                 <textarea value={terms} onChange={(e) => setTerms(e.target.value)} rows={5} className="input w-full text-xs py-1 resize-none font-mono" />
+              </div>
+            </div>
+          </div>
+
+          {/* Bank Details */}
+          <div className="mb-3">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Bank Details</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Account Name</label>
+                <input type="text" value={bankAccountName} onChange={(e) => setBankAccountName(e.target.value)} className="input w-full text-xs py-1" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Account Number</label>
+                <input type="text" value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className="input w-full text-xs py-1" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Bank Name</label>
+                <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} className="input w-full text-xs py-1" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">IFSC Code</label>
+                <input type="text" value={bankIfsc} onChange={(e) => setBankIfsc(e.target.value)} className="input w-full text-xs py-1" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Branch</label>
+                <input type="text" value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} className="input w-full text-xs py-1" />
               </div>
             </div>
           </div>

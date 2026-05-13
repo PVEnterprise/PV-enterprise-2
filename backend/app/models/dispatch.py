@@ -27,6 +27,11 @@ class Dispatch(BaseModel):
     po_number = Column(String(100), nullable=True, comment="Purchase Order number from customer")
     dc_number = Column(String(100), nullable=True, comment="Delivery Challan reference number")
     invoice_number = Column(String(100), nullable=True, comment="Invoice number shown on the invoice PDF")
+    bank_account_name   = Column(String(100), nullable=True, comment="Bank account name for invoice")
+    bank_account_number = Column(String(50),  nullable=True, comment="Bank account number for invoice")
+    bank_name           = Column(String(100), nullable=True, comment="Bank name for invoice")
+    bank_ifsc           = Column(String(20),  nullable=True, comment="Bank IFSC code for invoice")
+    bank_branch         = Column(String(100), nullable=True, comment="Bank branch for invoice")
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
     # Relationships

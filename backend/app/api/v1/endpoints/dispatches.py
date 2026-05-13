@@ -147,6 +147,11 @@ def create_dispatch(
         po_number=dispatch_data.po_number,
         dc_number=dispatch_data.dc_number,
         invoice_number=dispatch_data.invoice_number,
+        bank_account_name=dispatch_data.bank_account_name,
+        bank_account_number=dispatch_data.bank_account_number,
+        bank_name=dispatch_data.bank_name,
+        bank_ifsc=dispatch_data.bank_ifsc,
+        bank_branch=dispatch_data.bank_branch,
         created_by=current_user.id
     )
     db.add(dispatch)
@@ -372,6 +377,89 @@ def download_dispatch_invoice_pdf(
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+
+@router.delete("/{dispatch_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_dispatch(
+    dispatch_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete a dispatch, restore inventory stock, and recalculate order item statuses.
+    Available for inventory_admin and executive roles.
+    """
+    if current_user.role_name not in ['inventory_admin', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only inventory admins and executives can delete dispatches"
+        )
+
+    dispatch = db.query(Dispatch).options(
+        joinedload(Dispatch.items)
+    ).filter(Dispatch.id == dispatch_id).first()
+
+    if not dispatch:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dispatch not found")
+
+    order_id = dispatch.order_id
+    dispatch_number = dispatch.dispatch_number
+
+    # Restore inventory stock
+    for item in dispatch.items:
+        if item.alternate_inventory_id and item.alternate_quantity:
+            main_qty = item.quantity - item.alternate_quantity
+            alt_inv = db.query(Inventory).filter(Inventory.id == item.alternate_inventory_id).first()
+            if alt_inv:
+                alt_inv.stock_quantity += item.alternate_quantity
+            if main_qty > 0:
+                main_inv = db.query(Inventory).filter(Inventory.id == item.inventory_id).first()
+                if main_inv:
+                    main_inv.stock_quantity += main_qty
+        else:
+            inv = db.query(Inventory).filter(Inventory.id == item.inventory_id).first()
+            if inv:
+                inv.stock_quantity += item.quantity
+
+    db.delete(dispatch)
+    db.flush()
+
+    # Recalculate order item statuses after deletion
+    all_order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+    for order_item in all_order_items:
+        total_dispatched = sum(di.quantity for di in order_item.dispatch_items)
+        if total_dispatched >= order_item.quantity:
+            order_item.status = "completed"
+        elif total_dispatched > 0:
+            order_item.status = "partial"
+        else:
+            order_item.status = "pending"
+
+    # Revert order workflow stage
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order:
+        all_completed = all(oi.status == "completed" for oi in all_order_items)
+        any_dispatched = any(oi.status in ["partial", "completed"] for oi in all_order_items)
+
+        if all_completed:
+            order.status = "payment_pending"
+            order.workflow_stage = "payment_pending"
+        elif any_dispatched:
+            order.status = "partially_dispatched"
+            order.workflow_stage = "inventory_check"
+        else:
+            order.status = "confirmed"
+            order.workflow_stage = "inventory_check"
+
+        add_order_action(
+            order=order,
+            action="Dispatch Deleted",
+            user=current_user,
+            details=f"Dispatch #{dispatch_number} deleted. Inventory stock restored."
+        )
+
+    db.commit()
+    return None
 
 
 @router.get("/{dispatch_id}/delivery-challan/pdf")
