@@ -28,6 +28,8 @@ class Order(BaseModel):
     po_amount = Column(Numeric(15, 2))
     notes = Column(Text)
     
+    subject = Column(String(255), nullable=True, comment="Quotation subject line shown below Bill To")
+    
     # Quotation details
     price_list_id = Column(UUID(as_uuid=True), ForeignKey("price_lists.id"), nullable=True)
     discount_percentage = Column(Numeric(5, 2), default=0)

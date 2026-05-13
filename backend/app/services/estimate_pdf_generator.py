@@ -206,7 +206,15 @@ class EstimatePDFGenerator:
         
         # Bill To section
         content.extend(self._build_bill_to())
-        content.append(Spacer(1, 5*mm))
+        content.append(Spacer(1, 3*mm))
+
+        # Subject (optional)
+        subject = getattr(self.order, 'subject', None)
+        if subject:
+            content.extend(self._build_subject(subject))
+            content.append(Spacer(1, 3*mm))
+        else:
+            content.append(Spacer(1, 2*mm))
         
         # Items table
         content.extend(self._build_items_table())
@@ -355,6 +363,18 @@ class EstimatePDFGenerator:
         
         return elements
     
+    def _build_subject(self, subject: str):
+        """Build Subject line shown below Bill To."""
+        data = [[Paragraph(f'<b>Subject:</b> {subject}', self.styles['NormalText'])]]
+        table = Table(data, colWidths=[180*mm])
+        table.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.25, colors.HexColor('#d0dcea')),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        return [table]
+
     def _build_items_table(self):
         """Build items table grouped by section_name."""
         elements = []
