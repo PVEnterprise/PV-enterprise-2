@@ -223,6 +223,9 @@ class ApiService {
   createDispatch = async (data: any) => {
     return (await this.client.post('/dispatches/', data)).data;
   }
+  deleteDispatch = async (id: string) => {
+    return (await this.client.delete(`/dispatches/${id}`)).data;
+  }
 
   // Outstanding
   getOutstandingByCustomer = async () => {

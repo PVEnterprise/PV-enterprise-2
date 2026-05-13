@@ -88,11 +88,11 @@ class EstimatePDFGenerator:
     ACCENT_COLOR = colors.HexColor("#f4f7fb")
     
     # Bank Details
-    BANK_ACCOUNT_NAME = "SREEDEVI LIFE SCIENCES"
-    BANK_ACCOUNT_NUMBER = "50200079949944"
-    BANK_NAME = "ICICI Bank"
-    BANK_IFSC = "ICIC0007286"
-    BANK_BRANCH = "ALKAPURI TOWNSHIP"
+    BANK_ACCOUNT_NAME = "Sreedevi Life Sciences"
+    BANK_ACCOUNT_NUMBER = "42285740549"
+    BANK_NAME = "State Bank of India"
+    BANK_IFSC = "SBIN0021790"
+    BANK_BRANCH = "Manikonda, Hyderabad"
     
     def __init__(self, order: Order, expiry_date=None):
         from app.core.config import settings

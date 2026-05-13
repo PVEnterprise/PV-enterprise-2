@@ -327,13 +327,18 @@ class InvoicePDFGenerator:
 
     # ---------- Footer ----------
     def _footer(self):
+        bank_name    = getattr(self.dispatch, 'bank_account_name',   None) or "Sreedevi Life Sciences"
+        bank_number  = getattr(self.dispatch, 'bank_account_number', None) or "42285740549"
+        bank_nm      = getattr(self.dispatch, 'bank_name',           None) or "State Bank of India"
+        bank_ifsc    = getattr(self.dispatch, 'bank_ifsc',           None) or "SBIN0021790"
+        bank_branch  = getattr(self.dispatch, 'bank_branch',         None) or "Manikonda, Hyderabad"
         bank_text = (
             "<b>Bank Details</b><br/>"
-            "Account Name : SREEDEVI LIFE SCIENCES<br/>"
-            "Account Number : 50200079949944<br/>"
-            "Bank Name : ICICI Bank<br/>"
-            "IFSC Code : ICIC0007286<br/>"
-            "Branch : ALKAPURI TOWNSHIP"
+            f"Account Name : {bank_name}<br/>"
+            f"Account Number : {bank_number}<br/>"
+            f"Bank Name : {bank_nm}<br/>"
+            f"IFSC Code : {bank_ifsc}<br/>"
+            f"Branch : {bank_branch}"
         )
         sign = Paragraph("<br/><br/>Authorized Signature", self.styles["RightText"])
         t = Table([[Paragraph(bank_text, self.styles["NormalText"]), sign]],

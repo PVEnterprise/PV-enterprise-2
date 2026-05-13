@@ -1402,6 +1402,11 @@ export default function OrderDetailPage() {
         <DispatchDetailModal
           dispatch={selectedDispatch}
           onClose={() => setSelectedDispatch(null)}
+          onDeleted={() => {
+            queryClient.invalidateQueries({ queryKey: ['dispatches', orderId] });
+            queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+            setSelectedDispatch(null);
+          }}
         />
       )}
 

@@ -53,6 +53,11 @@ class DispatchBase(BaseModel):
     po_number: Optional[str] = None
     dc_number: Optional[str] = None
     invoice_number: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_branch: Optional[str] = None
 
 
 class DispatchCreate(DispatchBase):
