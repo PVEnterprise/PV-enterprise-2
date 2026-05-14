@@ -181,6 +181,14 @@ class ApiService {
     return (await this.client.get('/dashboard/fy-trend')).data;
   }
 
+  getDashboardInventoryInsights = async () => {
+    return (await this.client.get('/dashboard/inventory-insights')).data;
+  }
+
+  getDashboardCustomerInsights = async () => {
+    return (await this.client.get('/dashboard/customer-insights')).data;
+  }
+
   // Employees
   getEmployees = async (params?: any) => {
     return (await this.client.get('/users/', { params })).data;
