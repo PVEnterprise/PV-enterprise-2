@@ -82,7 +82,7 @@ function Panel({ title, subtitle, icon: Icon, iconBg, children }: {
   title: string; subtitle?: string; icon: React.ElementType; iconBg: string; children: React.ReactNode;
 }) {
   return (
-    <div className="card flex flex-col">
+    <div className="card flex flex-col h-full min-h-0">
       <div className="flex items-center gap-2 mb-1 pb-2.5 border-b border-gray-100">
         <div className={`${iconBg} p-1.5 rounded-md shrink-0`}>
           <Icon className="h-3.5 w-3.5 text-white" />
@@ -90,7 +90,7 @@ function Panel({ title, subtitle, icon: Icon, iconBg, children }: {
         <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide leading-none">{title}</h3>
       </div>
       {subtitle && <p className="text-[10px] text-gray-400 mb-2.5 leading-snug">{subtitle}</p>}
-      <div className="max-h-72 overflow-y-auto">{children}</div>
+      <div className="flex-1 overflow-y-auto min-h-0">{children}</div>
     </div>
   );
 }
@@ -152,7 +152,7 @@ function RevenueView({ stats: s, fyTrend, fyLabel }: { stats: DashboardStats; fy
 
 function InventoryView({ data }: { data: InventoryInsights; }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
       <Panel title="Top 10 Sold — This FY" icon={TrendingUp} iconBg="bg-green-500">
         {data.top_sold_items.length === 0
           ? <p className="text-xs text-gray-400 italic py-2">No dispatch data this FY</p>
@@ -211,7 +211,7 @@ function InventoryView({ data }: { data: InventoryInsights; }) {
 
 function CustomerView({ data }: { data: CustomerInsights; }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
       <Panel title="Last 5 New Customers" icon={UserPlus} iconBg="bg-blue-500">
         {data.new_customers.length === 0
           ? <p className="text-xs text-gray-400 italic py-2">No customers yet</p>
@@ -311,7 +311,7 @@ export default function DashboardPage() {
   const fyLabel = `FY ${fyStartYear}-${String(fyStartYear + 1).slice(2)}`;
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5 h-[calc(100vh-7rem)]">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">CEO Dashboard</h1>
@@ -320,23 +320,23 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Sliding carousel */}
-      <div className="overflow-hidden">
+      {/* Sliding carousel — flex-1 so it fills space between header and dots */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         <div
-          className="flex transition-transform duration-500 ease-in-out"
+          className="flex h-full transition-transform duration-500 ease-in-out"
           style={{ transform: `translateX(-${view * 100}%)` }}
         >
           {/* View 0: Revenue */}
-          <div className="w-full flex-shrink-0">
+          <div className="w-full flex-shrink-0 h-full overflow-y-auto">
             <RevenueView stats={s} fyTrend={fyTrend} fyLabel={fyLabel} />
           </div>
 
           {/* View 1: Inventory */}
-          <div className="w-full flex-shrink-0">
+          <div className="w-full flex-shrink-0 h-full">
             {inventoryInsights
               ? <InventoryView data={inventoryInsights} />
               : (
-                <div className="flex items-center justify-center h-64">
+                <div className="flex items-center justify-center h-full">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600" />
                 </div>
               )
@@ -344,11 +344,11 @@ export default function DashboardPage() {
           </div>
 
           {/* View 2: Customers */}
-          <div className="w-full flex-shrink-0">
+          <div className="w-full flex-shrink-0 h-full">
             {customerInsights
               ? <CustomerView data={customerInsights} />
               : (
-                <div className="flex items-center justify-center h-64">
+                <div className="flex items-center justify-center h-full">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600" />
                 </div>
               )
