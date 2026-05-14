@@ -131,11 +131,12 @@ def get_dashboard_stats(
 
     # --- Quotations ---
     total_quotations = db.query(Quotation).count()
-    # Quotation value = full order value for orders awaiting PO from customer
+    # Quotation value = decoded orders at any pre-PO stage (before inventory_check)
+    _pre_po_stages = ['order_request', 'pending_approval', 'approved', 'waiting_purchase_order']
     pending_quotations = db.query(func.count(func.distinct(Order.id))).join(
         OrderItem, OrderItem.order_id == Order.id
     ).filter(
-        Order.workflow_stage == "waiting_purchase_order",
+        Order.workflow_stage.in_(_pre_po_stages),
         OrderItem.unit_price.isnot(None)
     ).scalar() or 0
     pending_quotation_value = db.query(
@@ -146,7 +147,7 @@ def get_dashboard_stats(
             * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
         )
     ).join(Order, Order.id == OrderItem.order_id).filter(
-        Order.workflow_stage == "waiting_purchase_order",
+        Order.workflow_stage.in_(_pre_po_stages),
         OrderItem.unit_price.isnot(None),
         OrderItem.inventory_id.isnot(None)
     ).scalar() or Decimal(0)
@@ -347,6 +348,218 @@ def get_monthly_trend(
         })
 
     return result
+
+
+@router.get("/inventory-insights")
+def get_inventory_insights(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(Permission.DASHBOARD_VIEW))
+):
+    """Inventory metrics: top sold, out-of-stock pending, quotation pending."""
+    now = datetime.now()
+    fy_start_year = now.year if now.month >= 4 else now.year - 1
+    fy_start = datetime(fy_start_year, 4, 1)
+
+    # 1) Top 10 sold items this FY by dispatched quantity
+    sold_rows = db.query(
+        Inventory.sku,
+        Inventory.description,
+        Inventory.unit_price,
+        func.sum(DispatchItem.quantity).label('total_sold')
+    ).join(DispatchItem, DispatchItem.inventory_id == Inventory.id
+    ).join(Dispatch, Dispatch.id == DispatchItem.dispatch_id
+    ).filter(
+        Dispatch.dispatch_date >= fy_start.date(),
+        Inventory.is_active == True
+    ).group_by(Inventory.id, Inventory.sku, Inventory.description, Inventory.unit_price
+    ).order_by(func.sum(DispatchItem.quantity).desc()
+    ).limit(10).all()
+
+    top_sold = [
+        {
+            "sku": r.sku,
+            "description": r.description,
+            "unit_price": float(r.unit_price),
+            "total_sold": int(r.total_sold),
+        }
+        for r in sold_rows
+    ]
+
+    # 2) Top 10 pending items with low stock (<5), ordered by pending order value
+    out_of_stock_rows = db.query(
+        Inventory.sku,
+        Inventory.description,
+        Inventory.unit_price,
+        Inventory.stock_quantity,
+        func.sum(OrderItem.quantity).label('ordered_qty'),
+        func.sum(OrderItem.quantity * OrderItem.unit_price).label('total_value'),
+    ).join(OrderItem, OrderItem.inventory_id == Inventory.id
+    ).join(Order, Order.id == OrderItem.order_id
+    ).filter(
+        Inventory.stock_quantity < 5,
+        Order.status.notin_(['completed', 'cancelled']),
+        OrderItem.unit_price.isnot(None)
+    ).group_by(Inventory.id, Inventory.sku, Inventory.description, Inventory.unit_price, Inventory.stock_quantity
+    ).order_by(func.sum(OrderItem.quantity * OrderItem.unit_price).desc()
+    ).limit(10).all()
+
+    top_out_of_stock = [
+        {
+            "sku": r.sku,
+            "description": r.description,
+            "unit_price": float(r.unit_price),
+            "stock_quantity": r.stock_quantity,
+            "ordered_qty": int(r.ordered_qty),
+            "total_value": float(r.total_value),
+        }
+        for r in out_of_stock_rows
+    ]
+
+    # 3) Top 10 low-stock (<5) items in pre-PO decoded stages (decoded but no PO yet)
+    _pre_po = ['order_request', 'pending_approval', 'approved', 'waiting_purchase_order']
+    quotation_rows = db.query(
+        Inventory.sku,
+        Inventory.description,
+        Inventory.unit_price,
+        Inventory.stock_quantity,
+        func.count(func.distinct(Order.id)).label('order_count'),
+        func.sum(OrderItem.quantity).label('total_qty'),
+        func.sum(
+            OrderItem.quantity * OrderItem.unit_price
+            * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+            * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+        ).label('total_value'),
+    ).join(OrderItem, OrderItem.inventory_id == Inventory.id
+    ).join(Order, Order.id == OrderItem.order_id
+    ).filter(
+        Order.workflow_stage.in_(_pre_po),
+        OrderItem.unit_price.isnot(None),
+        Inventory.stock_quantity < 5
+    ).group_by(Inventory.id, Inventory.sku, Inventory.description, Inventory.unit_price, Inventory.stock_quantity
+    ).order_by(func.sum(
+        OrderItem.quantity * OrderItem.unit_price
+        * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+        * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+    ).desc()
+    ).limit(10).all()
+
+    top_quotation_pending = [
+        {
+            "sku": r.sku,
+            "description": r.description,
+            "unit_price": float(r.unit_price),
+            "stock_quantity": r.stock_quantity,
+            "order_count": int(r.order_count),
+            "total_qty": int(r.total_qty),
+            "total_value": float(r.total_value),
+        }
+        for r in quotation_rows
+    ]
+
+    return {
+        "top_sold_items": top_sold,
+        "top_out_of_stock_pending": top_out_of_stock,
+        "top_quotation_pending": top_quotation_pending,
+    }
+
+
+@router.get("/customer-insights")
+def get_customer_insights(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(PermissionChecker(Permission.DASHBOARD_VIEW))
+):
+    """Customer metrics: new customers, top revenue, top pending value."""
+    now = datetime.now()
+    fy_start_year = now.year if now.month >= 4 else now.year - 1
+    fy_start = datetime(fy_start_year, 4, 1)
+
+    # 1) Last 5 new customers
+    new_cust_rows = db.query(Customer).order_by(Customer.created_at.desc()).limit(5).all()
+    new_customers = [
+        {
+            "id": str(c.id),
+            "name": c.name,
+            "hospital_name": c.hospital_name,
+            "city": c.city or "",
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        }
+        for c in new_cust_rows
+    ]
+
+    # 2) Top 5 customers by revenue this FY (sum of dispatched item values)
+    revenue_rows = db.query(
+        Customer.id,
+        Customer.name,
+        Customer.hospital_name,
+        func.sum(DispatchItem.quantity * OrderItem.unit_price).label('revenue'),
+    ).join(Order, Order.customer_id == Customer.id
+    ).join(OrderItem, OrderItem.order_id == Order.id
+    ).join(DispatchItem, DispatchItem.order_item_id == OrderItem.id
+    ).join(Dispatch, Dispatch.id == DispatchItem.dispatch_id
+    ).filter(
+        Dispatch.dispatch_date >= fy_start.date(),
+        OrderItem.unit_price.isnot(None)
+    ).group_by(Customer.id, Customer.name, Customer.hospital_name
+    ).order_by(func.sum(DispatchItem.quantity * OrderItem.unit_price).desc()
+    ).limit(5).all()
+
+    top_revenue = [
+        {
+            "id": str(r.id),
+            "name": r.name,
+            "hospital_name": r.hospital_name,
+            "revenue": float(r.revenue),
+        }
+        for r in revenue_rows
+    ]
+
+    # 3) Top 5 customers with highest pending order value
+    _dispatched_subq = db.query(
+        DispatchItem.order_item_id,
+        func.sum(DispatchItem.quantity).label('dispatched_qty')
+    ).group_by(DispatchItem.order_item_id).subquery()
+
+    pending_rows = db.query(
+        Customer.id,
+        Customer.name,
+        Customer.hospital_name,
+        func.sum(
+            (OrderItem.quantity - func.coalesce(_dispatched_subq.c.dispatched_qty, 0))
+            * OrderItem.unit_price
+            * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+            * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+        ).label('pending_value'),
+    ).join(Order, Order.customer_id == Customer.id
+    ).join(OrderItem, OrderItem.order_id == Order.id
+    ).outerjoin(_dispatched_subq, _dispatched_subq.c.order_item_id == OrderItem.id
+    ).filter(
+        Order.workflow_stage.in_(['inventory_check', 'payment_pending']),
+        OrderItem.unit_price.isnot(None),
+        OrderItem.inventory_id.isnot(None)
+    ).group_by(Customer.id, Customer.name, Customer.hospital_name
+    ).order_by(func.sum(
+        (OrderItem.quantity - func.coalesce(_dispatched_subq.c.dispatched_qty, 0))
+        * OrderItem.unit_price
+        * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+        * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+    ).desc()
+    ).limit(5).all()
+
+    top_pending = [
+        {
+            "id": str(r.id),
+            "name": r.name,
+            "hospital_name": r.hospital_name,
+            "pending_value": float(r.pending_value) if r.pending_value else 0.0,
+        }
+        for r in pending_rows
+    ]
+
+    return {
+        "new_customers": new_customers,
+        "top_revenue_customers": top_revenue,
+        "top_pending_customers": top_pending,
+    }
 
 
 @router.get("/revenue-trend")
