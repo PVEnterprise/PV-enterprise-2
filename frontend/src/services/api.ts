@@ -385,6 +385,39 @@ class ApiService {
   deletePayment = async (id: string) => {
     return (await this.client.delete(`/payments/${id}`)).data;
   }
+
+  // Procurement
+  getProcurements = async (status?: string) => {
+    const params = status ? { status } : undefined;
+    return (await this.client.get('/procurement/', { params })).data;
+  }
+  getProcurement = async (id: string) => {
+    return (await this.client.get(`/procurement/${id}`)).data;
+  }
+  createProcurement = async (data: any) => {
+    return (await this.client.post('/procurement/', data)).data;
+  }
+  updateProcurement = async (id: string, data: any) => {
+    return (await this.client.put(`/procurement/${id}`, data)).data;
+  }
+  deleteProcurement = async (id: string) => {
+    return (await this.client.delete(`/procurement/${id}`)).data;
+  }
+  addProcurementItem = async (procurementId: string, data: any) => {
+    return (await this.client.post(`/procurement/${procurementId}/items`, data)).data;
+  }
+  updateProcurementItem = async (procurementId: string, itemId: string, data: any) => {
+    return (await this.client.put(`/procurement/${procurementId}/items/${itemId}`, data)).data;
+  }
+  removeProcurementItem = async (procurementId: string, itemId: string) => {
+    return (await this.client.delete(`/procurement/${procurementId}/items/${itemId}`)).data;
+  }
+  markProcurementPaymentDone = async (id: string) => {
+    return (await this.client.post(`/procurement/${id}/mark-payment-done`)).data;
+  }
+  receiveProcurement = async (id: string, data: any) => {
+    return (await this.client.post(`/procurement/${id}/receive`, data)).data;
+  }
 }
 
 export default new ApiService();

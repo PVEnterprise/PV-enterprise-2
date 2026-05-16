@@ -18,6 +18,7 @@ import OutstandingPage from '@/pages/OutstandingPage';
 import DemosPage from '@/pages/DemosPage';
 import DemoRequestDetailPage from '@/pages/DemoRequestDetailPage';
 import AccountsPage from '@/pages/AccountsPage';
+import ProcurementPage from '@/pages/ProcurementPage';
 import Layout from '@/components/Layout';
 import SessionExpiredModal from '@/components/SessionExpiredModal';
 
@@ -250,6 +251,14 @@ function AppRoutes() {
             <PermissionRoute permission="payment:read">
               <AccountsPage />
             </PermissionRoute>
+          } 
+        />
+        <Route 
+          path="procurement" 
+          element={
+            <RoleRoute allowedRoles={['executive']}>
+              <ProcurementPage />
+            </RoleRoute>
           } 
         />
       </Route>

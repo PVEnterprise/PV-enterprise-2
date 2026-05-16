@@ -33,6 +33,7 @@ class Inventory(BaseModel):
     invoice_items = relationship("InvoiceItem", back_populates="inventory_item")
     dispatch_items = relationship("DispatchItem", back_populates="inventory_item", foreign_keys="DispatchItem.inventory_id")
     demo_items = relationship("DemoItem", back_populates="inventory_item")
+    procurement_items = relationship("ProcurementItem", back_populates="inventory_item")
     
     # Constraints
     __table_args__ = (

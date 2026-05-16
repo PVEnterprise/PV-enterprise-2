@@ -77,6 +77,12 @@ class Permission(str, Enum):
     PAYMENT_UPDATE = "payment:update"
     PAYMENT_DELETE = "payment:delete"
 
+    # Procurement permissions
+    PROCUREMENT_CREATE = "procurement:create"
+    PROCUREMENT_READ = "procurement:read"
+    PROCUREMENT_UPDATE = "procurement:update"
+    PROCUREMENT_DELETE = "procurement:delete"
+
 
 # Role-based permission mapping
 ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
@@ -138,6 +144,12 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         Permission.DISPATCH_CREATE,
         Permission.DISPATCH_READ,
         Permission.DISPATCH_UPDATE,
+
+        # Procurement (executive only)
+        Permission.PROCUREMENT_CREATE,
+        Permission.PROCUREMENT_READ,
+        Permission.PROCUREMENT_UPDATE,
+        Permission.PROCUREMENT_DELETE,
     },
     
     Role.SALES_REP: {
