@@ -14,7 +14,8 @@ import {
   X,
   TrendingUp,
   DollarSign,
-  Beaker
+  Beaker,
+  Landmark
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -74,6 +75,12 @@ export default function Layout() {
       icon: UserCog,
       permission: 'user:read'
     },
+    {
+      name: 'Accounts',
+      href: '/accounts',
+      icon: Landmark,
+      permission: 'payment:read'
+    },
   ];
 
   // Filter navigation based on user permissions
@@ -99,7 +106,12 @@ export default function Layout() {
       return false;
     }
     
-    return user.role.permissions[item.permission] === true;
+    // Accounts module visible to accountant and executive
+    if (item.href === '/accounts' && !['accountant', 'executive'].includes(user.role_name || '')) {
+      return false;
+    }
+    
+    return user.role?.permissions[item.permission] === true;
   });
 
   const isActive = (path: string) => location.pathname === path;
@@ -124,7 +136,7 @@ export default function Layout() {
             <div className="flex items-center space-x-4">
               <div className="text-sm">
                 <p className="font-medium text-gray-900">{user?.full_name}</p>
-                <p className="text-gray-500 capitalize">{user?.role.name.replace('_', ' ')}</p>
+                <p className="text-gray-500 capitalize">{user?.role?.name.replace('_', ' ')}</p>
               </div>
               <button
                 onClick={logout}

@@ -16,6 +16,7 @@ from app.models.attachment import Attachment
 from app.models.price_list import PriceList, PriceListItem
 from app.models.demo_request import DemoRequest
 from app.models.demo_item import DemoItem
+from app.models.payment import Payment
 
 __all__ = [
     "User",
@@ -38,4 +39,5 @@ __all__ = [
     "PriceListItem",
     "DemoRequest",
     "DemoItem",
+    "Payment",
 ]

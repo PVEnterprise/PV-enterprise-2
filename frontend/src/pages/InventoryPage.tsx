@@ -396,6 +396,16 @@ export default function InventoryPage() {
       ),
     },
     {
+      key: 'qty_in_demos',
+      label: 'In Demos',
+      width: '8%',
+      render: (value: number) => (
+        <span className={value > 0 ? 'text-orange-600 font-medium' : 'text-gray-400'}>
+          {value ?? 0}
+        </span>
+      ),
+    },
+    {
       key: 'unit_price',
       label: 'Unit Price',
       width: '10%',

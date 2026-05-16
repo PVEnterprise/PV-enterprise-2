@@ -108,12 +108,17 @@ def list_demo_requests(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     state: Optional[str] = None,
+    states: Optional[str] = None,
     search: Optional[str] = None,
+    catalog_no: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     List demo requests with filtering and search.
+    - state: single state filter
+    - states: comma-separated list of states (e.g. 'requested,dispatched')
+    - catalog_no: filter to demos containing an item with this catalog number (partial match)
     """
     # Check permission
     require_permission(current_user.role_name, Permission.INVENTORY_READ)
@@ -123,16 +128,31 @@ def list_demo_requests(
         joinedload(DemoRequest.creator)
     )
     
-    # Apply filters
-    if state:
+    # Multi-state filter takes priority over single state
+    if states:
+        state_list = [s.strip() for s in states.split(",") if s.strip()]
+        if state_list:
+            query = query.filter(DemoRequest.state.in_(state_list))
+    elif state:
         query = query.filter(DemoRequest.state == state)
     
     if search:
         search_term = f"%{search}%"
-        query = query.join(Customer).filter(
+        query = query.join(Customer, Customer.id == DemoRequest.hospital_id).filter(
             (DemoRequest.number.ilike(search_term)) |
             (Customer.hospital_name.ilike(search_term)) |
             (DemoRequest.city.ilike(search_term))
+        )
+    
+    # Filter by catalog number (joins through demo_items -> inventory)
+    if catalog_no:
+        catalog_term = f"%{catalog_no}%"
+        query = (
+            query
+            .join(DemoItem, DemoItem.demo_request_id == DemoRequest.id)
+            .join(Inventory, Inventory.id == DemoItem.inventory_item_id)
+            .filter(Inventory.sku.ilike(catalog_term))
+            .distinct()
         )
     
     # Order by created date (newest first)

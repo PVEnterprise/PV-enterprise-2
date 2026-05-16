@@ -5,6 +5,7 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime
 
 from app.db.session import get_db
@@ -12,6 +13,8 @@ from app.api.deps import get_current_user, PermissionChecker
 from app.core.permissions import Permission
 from app.models.user import User
 from app.models.inventory import Inventory
+from app.models.demo_item import DemoItem
+from app.models.demo_request import DemoRequest
 from pydantic import BaseModel, Field, ConfigDict
 from decimal import Decimal
 
@@ -65,6 +68,7 @@ class InventoryResponse(InventoryBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    qty_in_demos: int = 0
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -144,7 +148,22 @@ def list_inventory(
     
     # Pagination
     items = query.offset(skip).limit(limit).all()
-    
+
+    # Compute qty currently out in dispatched demos per inventory item
+    demo_qty_rows = (
+        db.query(
+            DemoItem.inventory_item_id,
+            func.sum(DemoItem.quantity).label("qty")
+        )
+        .join(DemoRequest, DemoRequest.id == DemoItem.demo_request_id)
+        .filter(DemoRequest.state == "dispatched")
+        .group_by(DemoItem.inventory_item_id)
+        .all()
+    )
+    demo_qty_map = {str(row.inventory_item_id): int(row.qty) for row in demo_qty_rows}
+    for item in items:
+        item.qty_in_demos = demo_qty_map.get(str(item.id), 0)
+
     return items
 
 

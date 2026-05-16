@@ -17,6 +17,7 @@ import EmployeesPage from '@/pages/EmployeesPage';
 import OutstandingPage from '@/pages/OutstandingPage';
 import DemosPage from '@/pages/DemosPage';
 import DemoRequestDetailPage from '@/pages/DemoRequestDetailPage';
+import AccountsPage from '@/pages/AccountsPage';
 import Layout from '@/components/Layout';
 import SessionExpiredModal from '@/components/SessionExpiredModal';
 
@@ -111,6 +112,10 @@ const HomePage = () => {
   
   if (user?.role_name === 'inventory_admin') {
     return <Navigate to="/inventory" replace />;
+  }
+  
+  if (user?.role_name === 'accountant') {
+    return <Navigate to="/accounts" replace />;
   }
   
   // Executives and admins go to dashboard if they have permission
@@ -236,6 +241,14 @@ function AppRoutes() {
           element={
             <PermissionRoute permission="inventory:read">
               <DemoRequestDetailPage />
+            </PermissionRoute>
+          } 
+        />
+        <Route 
+          path="accounts" 
+          element={
+            <PermissionRoute permission="payment:read">
+              <AccountsPage />
             </PermissionRoute>
           } 
         />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Users, FileText, DollarSign, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { Package, Users, FileText, DollarSign, ExternalLink, ChevronDown, ChevronUp, Printer, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import DataTable, { Column } from '../components/common/DataTable';
@@ -41,6 +41,63 @@ const OutstandingPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleExportExcel = async () => {
+    const XLSX = await import('xlsx');
+
+    // Build groups from current state
+    const groups = byCustomer.reduce((acc, item) => {
+      const key = item.customer_id;
+      if (!acc[key]) acc[key] = { customer_name: item.customer_name, hospital_name: item.hospital_name, items: [] };
+      acc[key].items.push(item);
+      return acc;
+    }, {} as Record<string, { customer_name: string; hospital_name: string; items: OutstandingItemByCustomer[] }>);
+
+    const rows: (string | number)[][] = [];
+
+    // Column headers
+    rows.push(['Customer / Hospital', 'Item', 'Ordered', 'Dispatched', 'Pending', 'Order No', 'Stock', 'Status']);
+
+    Object.values(groups).forEach(group => {
+      const label = group.customer_name === group.hospital_name
+        ? group.customer_name
+        : `${group.customer_name} — ${group.hospital_name}`;
+      // Customer header row
+      rows.push([`${label} (${group.items.length} item${group.items.length !== 1 ? 's' : ''})`, '', '', '', '', '', '', '']);
+
+      group.items.forEach(item => {
+        // Show "SKU — Description" if they differ, otherwise just SKU
+        const itemLabel = item.item_name && item.item_name !== item.sku
+          ? `${item.sku} — ${item.item_name}`
+          : item.sku;
+        rows.push([
+          '',
+          itemLabel,
+          item.ordered,
+          item.dispatched,
+          item.outstanding,
+          item.order_number,
+          item.available_stock,
+          item.item_status,
+        ]);
+      });
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 42 }, { wch: 30 },
+      { wch: 9 }, { wch: 11 }, { wch: 9 },
+      { wch: 14 }, { wch: 8 }, { wch: 10 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Pending Items');
+    XLSX.writeFile(wb, `pending_items_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handlePrint = () => window.print();
 
   const fetchData = async () => {
     try {
@@ -184,26 +241,55 @@ const OutstandingPage: React.FC = () => {
     );
   }
 
+  // Group data by customer for the print-only table
+  const customerGroups = byCustomer.reduce((acc, item) => {
+    const key = item.customer_id;
+    if (!acc[key]) {
+      acc[key] = { customer_name: item.customer_name, hospital_name: item.hospital_name, items: [] };
+    }
+    acc[key].items.push(item);
+    return acc;
+  }, {} as Record<string, { customer_name: string; hospital_name: string; items: OutstandingItemByCustomer[] }>);
+
   return (
     <div className="space-y-6">
       {/* Header with Collapse Toggle */}
-      <div className="card p-4">
-        <button
-          onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
-          className="w-full flex items-center justify-between hover:bg-gray-50 transition-colors rounded p-2 -m-2"
-        >
-          <div className="text-left">
-            <h1 className="text-2xl font-bold text-gray-900">Pending Items</h1>
-            <p className="text-gray-600 mt-1">Track pending deliveries across all orders</p>
+      <div className="card p-4 screen-only">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
+            className="flex-1 flex items-center justify-between hover:bg-gray-50 transition-colors rounded p-2 -m-2"
+          >
+            <div className="text-left">
+              <h1 className="text-2xl font-bold text-gray-900">Pending Items</h1>
+              <p className="text-gray-600 mt-1">Track pending deliveries across all orders</p>
+            </div>
+            <div className="ml-4">
+              {isSummaryExpanded ? (
+                <ChevronUp size={24} className="text-gray-600" />
+              ) : (
+                <ChevronDown size={24} className="text-gray-600" />
+              )}
+            </div>
+          </button>
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 ml-4 no-print">
+            <button
+              onClick={handleExportExcel}
+              className="btn btn-secondary flex items-center gap-2 text-sm"
+            >
+              <Download size={15} />
+              Export Excel
+            </button>
+            <button
+              onClick={handlePrint}
+              className="btn btn-primary flex items-center gap-2 text-sm"
+            >
+              <Printer size={15} />
+              Print
+            </button>
           </div>
-          <div className="ml-4">
-            {isSummaryExpanded ? (
-              <ChevronUp size={24} className="text-gray-600" />
-            ) : (
-              <ChevronDown size={24} className="text-gray-600" />
-            )}
-          </div>
-        </button>
+        </div>
 
         {/* Summary Cards - Collapseable */}
         {isSummaryExpanded && summary && (
@@ -261,13 +347,13 @@ const OutstandingPage: React.FC = () => {
         )}
       </div>
 
-      {/* Pending Items Table */}
-      <div 
-        className="overflow-auto transition-all duration-300"
-        style={{ 
-          maxHeight: isSummaryExpanded 
-            ? 'calc(100vh - 320px)' 
-            : 'calc(100vh - 210px)' 
+      {/* Pending Items Table — screen only */}
+      <div
+        className="overflow-auto transition-all duration-300 screen-only"
+        style={{
+          maxHeight: isSummaryExpanded
+            ? 'calc(100vh - 320px)'
+            : 'calc(100vh - 210px)'
         }}
       >
         <DataTable
@@ -282,6 +368,56 @@ const OutstandingPage: React.FC = () => {
           tableId="outstanding-items"
           defaultGroupBy={['customer_name', 'item_name']}
         />
+      </div>
+
+      {/* ── Print-only view ─────────────────────────────────────────────── */}
+      <div className="print-only" style={{ display: 'none' }}>
+        <div style={{ marginBottom: 12 }}>
+          <h1 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Pending Items</h1>
+          <p style={{ fontSize: 11, color: '#555', margin: '2px 0 0' }}>
+            SreeDevi Life Sciences &mdash; Printed on {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+            {summary && (
+              <> &nbsp;|&nbsp; {summary.total_outstanding_items} items &nbsp;|&nbsp; {summary.total_customers} customers &nbsp;|&nbsp; ₹{summary.total_outstanding_value.toLocaleString('en-IN')} value</>
+            )}
+          </p>
+        </div>
+        <table className="print-table">
+          <thead>
+            <tr>
+              <th>Customer / Hospital</th>
+              <th>SKU</th>
+              <th>Item</th>
+              <th style={{ textAlign: 'right' }}>Ordered</th>
+              <th style={{ textAlign: 'right' }}>Dispatched</th>
+              <th style={{ textAlign: 'right', color: '#c2410c' }}>Pending</th>
+              <th>Order No</th>
+              <th style={{ textAlign: 'right' }}>Stock</th>
+              <th style={{ textAlign: 'center' }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.values(customerGroups).map((group) => (
+              <React.Fragment key={group.customer_name}>
+                <tr className="customer-row">
+                  <td colSpan={9}>{group.customer_name} — {group.hospital_name} ({group.items.length} item{group.items.length !== 1 ? 's' : ''})</td>
+                </tr>
+                {group.items.map((item) => (
+                  <tr key={item.order_item_id}>
+                    <td style={{ paddingLeft: 20, color: '#6b7280', fontSize: 9 }}></td>
+                    <td>{item.sku}</td>
+                    <td>{item.item_name}</td>
+                    <td style={{ textAlign: 'right' }}>{item.ordered}</td>
+                    <td style={{ textAlign: 'right' }}>{item.dispatched}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, color: '#c2410c' }}>{item.outstanding}</td>
+                    <td>{item.order_number}</td>
+                    <td style={{ textAlign: 'right', color: item.available_stock > 0 ? '#15803d' : '#dc2626' }}>{item.available_stock}</td>
+                    <td style={{ textAlign: 'center' }} className={`status-${item.item_status}`}>{item.item_status}</td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
