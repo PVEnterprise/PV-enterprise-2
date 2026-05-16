@@ -107,6 +107,7 @@ export interface Inventory {
   srinu_bag?: number;
   praneeth_bag?: number;
   prasanna_bag?: number;
+  qty_in_demos?: number;
 }
 
 export interface Quotation {

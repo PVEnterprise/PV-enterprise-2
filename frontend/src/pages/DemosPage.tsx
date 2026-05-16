@@ -13,6 +13,7 @@ import DataTable, { Column, commonActions } from '@/components/common/DataTable'
 
 export default function DemosPage() {
   const [search, setSearch] = useState('');
+  const [catalogSearch, setCatalogSearch] = useState('');
   const [stateFilter, setStateFilter] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
   const [editingDemo, setEditingDemo] = useState<DemoRequest | null>(null);
@@ -22,8 +23,14 @@ export default function DemosPage() {
   const navigate = useNavigate();
 
   const { data: demoRequests, isLoading } = useQuery<DemoRequest[]>({
-    queryKey: ['demo-requests', search, stateFilter],
-    queryFn: () => api.getDemoRequests({ search, state: stateFilter || undefined }),
+    queryKey: ['demo-requests', search, catalogSearch, stateFilter],
+    queryFn: () => api.getDemoRequests({
+      search: search || undefined,
+      catalog_no: catalogSearch || undefined,
+      // when no specific state filter, default to requested+dispatched only
+      states: stateFilter ? undefined : 'requested,dispatched',
+      state: stateFilter || undefined,
+    }),
   });
 
   // Check permissions
@@ -209,16 +216,27 @@ export default function DemosPage() {
             />
           </div>
           
+          {/* Catalog Number Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Catalog no…"
+              value={catalogSearch}
+              onChange={(e) => setCatalogSearch(e.target.value)}
+              className="input input-sm pl-9 w-36"
+            />
+          </div>
+
           {/* State Filter */}
           <select
             value={stateFilter}
             onChange={(e) => setStateFilter(e.target.value)}
             className="input input-sm"
           >
-            <option value="">All States</option>
+            <option value="">Requested &amp; Dispatched</option>
             <option value="requested">Requested</option>
             <option value="dispatched">Dispatched</option>
-            <option value="returned">Returned</option>
           </select>
         </div>
         

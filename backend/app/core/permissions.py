@@ -14,6 +14,7 @@ class Role(str, Enum):
     DECODER = "decoder"
     QUOTER = "quoter"
     INVENTORY_ADMIN = "inventory_admin"
+    ACCOUNTANT = "accountant"
 
 
 class Permission(str, Enum):
@@ -69,6 +70,12 @@ class Permission(str, Enum):
     DISPATCH_CREATE = "dispatch:create"
     DISPATCH_READ = "dispatch:read"
     DISPATCH_UPDATE = "dispatch:update"
+    
+    # Payment permissions
+    PAYMENT_CREATE = "payment:create"
+    PAYMENT_READ = "payment:read"
+    PAYMENT_UPDATE = "payment:update"
+    PAYMENT_DELETE = "payment:delete"
 
 
 # Role-based permission mapping
@@ -81,6 +88,12 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         Permission.ORDER_UPDATE,
         Permission.ORDER_DELETE,
         Permission.ORDER_APPROVE,
+        
+        # Payment access
+        Permission.PAYMENT_CREATE,
+        Permission.PAYMENT_READ,
+        Permission.PAYMENT_UPDATE,
+        Permission.PAYMENT_DELETE,
         
         # Full access to inventory
         Permission.INVENTORY_CREATE,
@@ -179,6 +192,20 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         
         # Dashboard access
         Permission.DASHBOARD_VIEW,
+    },
+    
+    Role.ACCOUNTANT: {
+        # Payment management
+        Permission.PAYMENT_CREATE,
+        Permission.PAYMENT_READ,
+        Permission.PAYMENT_UPDATE,
+        Permission.PAYMENT_DELETE,
+        
+        # Read customers and orders for reference
+        Permission.CUSTOMER_READ,
+        Permission.ORDER_READ,
+        Permission.ORDER_READ_ALL,
+        Permission.DISPATCH_READ,
     },
     
     Role.INVENTORY_ADMIN: {

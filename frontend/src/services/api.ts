@@ -361,6 +361,30 @@ class ApiService {
     });
     return response.data;
   }
+
+  // Payments
+  getPayments = async (customerId?: string) => {
+    const params = customerId ? { customer_id: customerId } : undefined;
+    return (await this.client.get('/payments/', { params })).data;
+  }
+  recordPayment = async (data: {
+    customer_id: string;
+    amount: number;
+    payment_date: string;
+    order_id?: string;
+    notes?: string;
+  }) => {
+    return (await this.client.post('/payments/', data)).data;
+  }
+  getPaymentPendingSummary = async () => {
+    return (await this.client.get('/payments/pending-summary')).data;
+  }
+  getPaymentSummary = async () => {
+    return (await this.client.get('/payments/summary')).data;
+  }
+  deletePayment = async (id: string) => {
+    return (await this.client.delete(`/payments/${id}`)).data;
+  }
 }
 
 export default new ApiService();
