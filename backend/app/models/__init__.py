@@ -17,6 +17,7 @@ from app.models.price_list import PriceList, PriceListItem
 from app.models.demo_request import DemoRequest
 from app.models.demo_item import DemoItem
 from app.models.payment import Payment
+from app.models.procurement import Procurement, ProcurementItem
 
 __all__ = [
     "User",
@@ -40,4 +41,6 @@ __all__ = [
     "DemoRequest",
     "DemoItem",
     "Payment",
+    "Procurement",
+    "ProcurementItem",
 ]

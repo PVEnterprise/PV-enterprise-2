@@ -22,6 +22,7 @@ interface OutstandingItemByCustomer {
   item_status: string;
   order_status: string;
   available_stock: number;
+  in_procurement: number;
 }
 
 interface OutstandingSummary {
@@ -194,6 +195,19 @@ const OutstandingPage: React.FC = () => {
         <div className="text-right">
           <span className={`font-medium ${value > 0 ? 'text-green-600' : 'text-red-600'}`}>
             {value}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'in_procurement',
+      label: 'In Procurement',
+      sortable: true,
+      width: '10%',
+      render: (value) => (
+        <div className="text-right">
+          <span className={`font-medium ${value > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
+            {value > 0 ? value : '—'}
           </span>
         </div>
       ),

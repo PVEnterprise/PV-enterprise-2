@@ -15,7 +15,8 @@ import {
   TrendingUp,
   DollarSign,
   Beaker,
-  Landmark
+  Landmark,
+  ShoppingBag
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -80,6 +81,12 @@ export default function Layout() {
       href: '/accounts',
       icon: Landmark,
       permission: 'payment:read'
+    },
+    {
+      name: 'Procurement',
+      href: '/procurement',
+      icon: ShoppingBag,
+      roleOnly: 'executive'
     },
   ];
 

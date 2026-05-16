@@ -15,6 +15,7 @@ from app.models.order import Order, OrderItem
 from app.models.customer import Customer
 from app.models.inventory import Inventory
 from app.models.dispatch import DispatchItem
+from app.models.procurement import Procurement, ProcurementItem
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
@@ -46,6 +47,7 @@ class OutstandingItemByCustomer(BaseModel):
     item_status: str  # OrderItem status
     order_status: str  # Order status
     available_stock: int  # Current inventory stock
+    in_procurement: int  # Qty currently in procurement (ordered or payment_done)
 
 
 class OutstandingItemByItem(BaseModel):
@@ -134,7 +136,17 @@ def get_outstanding_by_customer(
     
     # Filter out items with no outstanding quantity (do this in Python since HAVING with non-aggregated columns is complex)
     query = [row for row in query if (row.ordered - row.dispatched) > 0]
-    
+
+    # Build in_procurement map: inventory_id -> total qty in active procurements
+    proc_rows = db.query(
+        ProcurementItem.inventory_id.label('inventory_id'),
+        func.sum(ProcurementItem.quantity).label('total_qty')
+    ).join(Procurement, ProcurementItem.procurement_id == Procurement.id)\
+    .filter(Procurement.status.in_(['ordered', 'payment_done']))\
+    .group_by(ProcurementItem.inventory_id).all()
+
+    in_procurement_map = {str(r.inventory_id): int(r.total_qty) for r in proc_rows}
+
     # Format results - one record per OrderItem
     outstanding_items = []
     for row in query:
@@ -156,7 +168,8 @@ def get_outstanding_by_customer(
             outstanding_value=Decimal(outstanding_qty) * row.unit_price,
             item_status=row.item_status,
             order_status=row.order_status,
-            available_stock=row.available_stock
+            available_stock=row.available_stock,
+            in_procurement=in_procurement_map.get(str(row.item_id), 0)
         ))
     
     return outstanding_items
