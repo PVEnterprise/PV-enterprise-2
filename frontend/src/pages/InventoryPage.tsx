@@ -1,7 +1,7 @@
 /**
  * Inventory page for managing stock.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { Inventory } from '@/types';
@@ -11,7 +11,10 @@ import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column, commonActions } from '@/components/common/DataTable';
 
 export default function InventoryPage() {
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 100;
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<Inventory | null>(null);
@@ -22,10 +25,22 @@ export default function InventoryPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: inventory, isLoading } = useQuery<Inventory[]>({
-    queryKey: ['inventory', search, lowStockOnly],
-    queryFn: () => api.getInventory({ search, low_stock: lowStockOnly, limit: 10000 }),
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const { data: inventoryData, isLoading } = useQuery<{ items: Inventory[]; total: number }>({
+    queryKey: ['inventory', search, lowStockOnly, page],
+    queryFn: () => api.getInventory({ search, low_stock: lowStockOnly, skip: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE }),
   });
+
+  const inventory = inventoryData?.items || [];
+  const totalCount = inventoryData?.total || 0;
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   // Check permissions
   const canCreate = user?.role?.permissions?.['inventory:create'] === true;
@@ -206,7 +221,8 @@ export default function InventoryPage() {
 
   const handleExportExcel = async () => {
     const XLSX = await import('xlsx');
-    const exportData = (inventory || []).map(item => ({
+    const allData = await api.getInventory({ search, low_stock: lowStockOnly, limit: 10000 });
+    const exportData = ((allData as any).items || allData || []).map((item: Inventory) => ({
       'Catalog No': item.sku,
       'Description': item.description || '',
       'Batch No': item.batch_no || '',
@@ -432,8 +448,8 @@ export default function InventoryPage() {
             <input
               type="text"
               placeholder="Search catalog no, description..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="input input-sm pl-9 w-full"
             />
           </div>
@@ -443,7 +459,7 @@ export default function InventoryPage() {
             <input
               type="checkbox"
               checked={lowStockOnly}
-              onChange={(e) => setLowStockOnly(e.target.checked)}
+              onChange={(e) => { setLowStockOnly(e.target.checked); setPage(1); }}
               className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             <span className="text-sm font-medium text-gray-700">Low Stock</span>
@@ -481,7 +497,7 @@ export default function InventoryPage() {
       </div>
 
       {/* Scrollable Table Container */}
-      <div className="overflow-auto max-h-[calc(100vh-200px)]">
+      <div className="overflow-auto max-h-[calc(100vh-260px)]">
         <DataTable
           data={inventory || []}
           columns={columns}
@@ -501,6 +517,39 @@ export default function InventoryPage() {
           ]}
         />
       </div>
+
+      {/* Pagination */}
+      {totalCount > 0 && (
+        <div className="flex items-center justify-between mt-3 px-4 py-2.5 bg-white rounded-lg shadow-sm">
+          <p className="text-sm text-gray-600">
+            Showing{' '}
+            <span className="font-medium">{(page - 1) * PAGE_SIZE + 1}</span>
+            {' '}–{' '}
+            <span className="font-medium">{Math.min(page * PAGE_SIZE, totalCount)}</span>
+            {' '}of{' '}
+            <span className="font-medium">{totalCount}</span> items
+          </p>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="btn btn-secondary btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ← Prev
+            </button>
+            <span className="text-sm text-gray-700 px-1">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="btn btn-secondary btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <DynamicForm

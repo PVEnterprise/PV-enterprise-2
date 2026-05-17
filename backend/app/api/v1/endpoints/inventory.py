@@ -73,6 +73,13 @@ class InventoryResponse(InventoryBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PaginatedInventoryResponse(BaseModel):
+    items: List[InventoryResponse]
+    total: int
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
 @router.post("/", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED)
 def create_inventory_item(
     item_data: InventoryCreate,
@@ -111,10 +118,10 @@ def create_inventory_item(
     return inventory
 
 
-@router.get("/", response_model=List[InventoryResponse])
+@router.get("/", response_model=PaginatedInventoryResponse)
 def list_inventory(
     skip: int = Query(0, ge=0),
-    limit: int = Query(10000, ge=1, le=100000),
+    limit: int = Query(100, ge=1, le=10000),
     search: Optional[str] = None,
     low_stock: bool = False,
     active_only: bool = True,
@@ -146,6 +153,9 @@ def list_inventory(
     # Order by SKU (catalog number)
     query = query.order_by(Inventory.sku)
     
+    # Total count before pagination
+    total = query.count()
+    
     # Pagination
     items = query.offset(skip).limit(limit).all()
 
@@ -164,7 +174,7 @@ def list_inventory(
     for item in items:
         item.qty_in_demos = demo_qty_map.get(str(item.id), 0)
 
-    return items
+    return PaginatedInventoryResponse(items=items, total=total)
 
 
 @router.get("/{item_id}", response_model=InventoryResponse)
