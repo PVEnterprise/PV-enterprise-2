@@ -34,7 +34,7 @@ export default function DecodeOrderPage() {
   // Fetch all inventory for searching
   const { data: allInventory = [] } = useQuery<Inventory[]>({
     queryKey: ['inventory'],
-    queryFn: api.getInventory,
+    queryFn: () => api.getInventory().then((d: any) => d.items ?? d),
   });
 
   // Pre-populate with existing decoded items

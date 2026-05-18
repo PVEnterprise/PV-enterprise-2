@@ -69,7 +69,7 @@ export default function OrderDetailPage() {
   // Search inventory items
   const { data: inventoryItems } = useQuery<Inventory[]>({
     queryKey: ['inventory', debouncedSearch],
-    queryFn: () => api.getInventory({ search: debouncedSearch }),
+    queryFn: () => api.getInventory({ search: debouncedSearch }).then((d: any) => d.items ?? d),
     enabled: debouncedSearch.length > 0,
   });
 

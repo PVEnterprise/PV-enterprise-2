@@ -93,8 +93,8 @@ export default function DecodePage() {
     const searchInventory = async () => {
       if (catalogSearch.length > 0 && !selectedCatalog) {
         try {
-          const results = await api.getInventory({ search: catalogSearch });
-          setSearchResults(results);
+          const data = await api.getInventory({ search: catalogSearch });
+          setSearchResults((data as any).items ?? data);
           setShowDropdown(true);
         } catch (error) {
           console.error('Error searching inventory:', error);

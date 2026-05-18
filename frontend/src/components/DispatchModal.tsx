@@ -88,7 +88,7 @@ function AlternateSearch({ onSelect }: { onSelect: (item: { id: string; sku: str
       setLoading(true);
       try {
         const data = await api.getInventory({ search: val, limit: 10 });
-        setResults(data);
+        setResults((data as any).items ?? data);
         setOpen(true);
       } catch { setResults([]); }
       finally { setLoading(false); }
