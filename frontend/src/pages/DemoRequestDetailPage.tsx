@@ -53,7 +53,7 @@ export default function DemoRequestDetailPage() {
   // Fetch inventory items for search
   const { data: inventoryItems } = useQuery<Inventory[]>({
     queryKey: ['inventory-search', debouncedSearch],
-    queryFn: () => api.getInventory({ search: debouncedSearch, limit: 20 }),
+    queryFn: () => api.getInventory({ search: debouncedSearch, limit: 20 }).then((d: any) => d.items ?? d),
     enabled: debouncedSearch.length > 0 && showItemsPanel,
   });
 
