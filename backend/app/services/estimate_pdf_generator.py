@@ -94,7 +94,15 @@ class EstimatePDFGenerator:
     BANK_IFSC = "SBIN0021790"
     BANK_BRANCH = "Manikonda, Hyderabad"
     
-    def __init__(self, order: Order, expiry_date=None):
+    DEFAULT_TERMS = (
+        '1) Delivery within 10-12 weeks after receiving the confirmed Purchase Order and payment.\n'
+        '2) Prices are mentioned in the Quote.\n'
+        '3) Payment shall be made 100% in advance along with Purchase Order.\n'
+        '4) 3 years warranty.\n'
+        '5) Freight Included.'
+    )
+
+    def __init__(self, order: Order, expiry_date=None, bank_details: dict = None, quotation_number: int = None, terms_and_conditions: str = None):
         from app.core.config import settings
         
         self.order = order
@@ -111,6 +119,20 @@ class EstimatePDFGenerator:
         self.COMPANY_CITY = settings.COMPANY_CITY
         self.COMPANY_COUNTRY = settings.COMPANY_COUNTRY
         self.COMPANY_GSTIN = settings.COMPANY_GSTIN
+        
+        # Override bank details if provided
+        if bank_details:
+            self.BANK_ACCOUNT_NAME = bank_details.get('bank_account_name', self.BANK_ACCOUNT_NAME)
+            self.BANK_ACCOUNT_NUMBER = bank_details.get('bank_account_number', self.BANK_ACCOUNT_NUMBER)
+            self.BANK_NAME = bank_details.get('bank_name', self.BANK_NAME)
+            self.BANK_IFSC = bank_details.get('bank_ifsc', self.BANK_IFSC)
+            self.BANK_BRANCH = bank_details.get('bank_branch', self.BANK_BRANCH)
+        
+        # Quotation number override (per-user auto-increment)
+        self.quotation_number = quotation_number or getattr(order, 'quotation_number', None)
+        
+        # Terms and conditions override
+        self.terms_and_conditions = terms_and_conditions or self.DEFAULT_TERMS
     
     def _setup_custom_styles(self):
         """Setup custom paragraph styles."""
@@ -307,8 +329,8 @@ class EstimatePDFGenerator:
         """Build estimate information table."""
         elements = []
         
-        # Use order number for #
-        estimate_number = self.order.order_number
+        # Use quotation_number if set (per-user auto-increment), else fall back to order_number
+        estimate_number = str(self.quotation_number) if self.quotation_number else self.order.order_number
         estimate_date = datetime.now().strftime('%d.%m.%Y')
         place_of_supply = self.customer.state or 'N/A'
         
@@ -584,13 +606,7 @@ class EstimatePDFGenerator:
         """Build terms and conditions section."""
         elements = []
         
-        terms_text = (
-            '1) Delivery within 12-16 weeks after receiving the confirmed Purchase Order and payment.<br/>'
-            '2) Prices are mentioned in the Quote.<br/>'
-            '3) Payment shall be made 100% in advance along with Purchase Order.<br/>'
-            '4) 3 years warranty.<br/>'
-            '5) Freight Included.'
-        )
+        terms_text = self.terms_and_conditions.replace('\n', '<br/>')
         
         data = [
             [Paragraph('<font color="#3d6b9e"><b>TERMS &amp; CONDITIONS</b></font>', self.styles['SmallText'])],
@@ -611,16 +627,19 @@ class EstimatePDFGenerator:
 
 
 
-def generate_estimate_pdf(order: Order, expiry_date=None) -> BytesIO:
+def generate_estimate_pdf(order: Order, expiry_date=None, bank_details: dict = None, quotation_number: int = None, terms_and_conditions: str = None) -> BytesIO:
     """
     Generate an ESTIMATE PDF for the given order.
 
     Args:
         order: Order model instance with loaded relationships (customer, items, inventory)
         expiry_date: Optional date object for quotation validity
+        bank_details: Optional dict with bank account details to override defaults
+        quotation_number: Optional int to override the displayed quotation number
+        terms_and_conditions: Optional string to override the default T&C text
 
     Returns:
         BytesIO buffer containing the PDF
     """
-    generator = EstimatePDFGenerator(order, expiry_date=expiry_date)
+    generator = EstimatePDFGenerator(order, expiry_date=expiry_date, bank_details=bank_details, quotation_number=quotation_number, terms_and_conditions=terms_and_conditions)
     return generator.generate()

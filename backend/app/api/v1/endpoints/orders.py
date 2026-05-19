@@ -964,8 +964,12 @@ def generate_quotation_preview_pdf(
             except (ValueError, TypeError):
                 expiry_date = None
         
+        # Extract bank details and terms from request
+        bank_details = quotation_data.get('bank_details') or None
+        terms_and_conditions = quotation_data.get('terms_and_conditions') or None
+
         # Generate PDF with modified prices
-        pdf_buffer = generate_order_quotation_pdf(order, expiry_date=expiry_date)
+        pdf_buffer = generate_order_quotation_pdf(order, expiry_date=expiry_date, bank_details=bank_details, terms_and_conditions=terms_and_conditions)
         
         # Return as downloadable file
         filename = f"Quotation_Preview_{order.order_number}.pdf"
@@ -986,6 +990,68 @@ def generate_quotation_preview_pdf(
         order.discount_percentage = original_discount
         # Explicitly expire the session to prevent accidental commits
         db.expire_all()
+
+
+@router.post("/{order_id}/estimate-pdf")
+def generate_estimate_pdf_post(
+    order_id: UUID,
+    request_data: dict = Body(default={}),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate ESTIMATE PDF with bank details and valid_till passed in request body.
+    """
+    from fastapi.responses import StreamingResponse
+    from app.services.estimate_pdf_generator import generate_estimate_pdf
+    from app.models.price_list import PriceList, PriceListItem
+
+    order = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.inventory_item),
+        joinedload(Order.customer)
+    ).filter(Order.id == order_id).first()
+
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    # Parse valid_till date
+    from datetime import date as date_type
+    expiry_date = None
+    valid_till = request_data.get('valid_till')
+    if valid_till:
+        try:
+            expiry_date = date_type.fromisoformat(valid_till)
+        except ValueError:
+            pass
+
+    # Extract bank details and terms
+    bank_details = request_data.get('bank_details') or None
+    terms_and_conditions = request_data.get('terms_and_conditions') or None
+
+    # Increment user's quotation counter and stamp the order
+    current_user.quotation_counter = (current_user.quotation_counter or 0) + 1
+    order.quotation_number = current_user.quotation_counter
+    order.quotation_created_by = current_user.id
+    db.commit()
+
+    # Use saved discount
+    order.discount_percentage = order.discount_percentage or 0
+
+    # Generate PDF
+    pdf_buffer = generate_estimate_pdf(
+        order,
+        expiry_date=expiry_date,
+        bank_details=bank_details,
+        quotation_number=order.quotation_number,
+        terms_and_conditions=terms_and_conditions,
+    )
+
+    filename = f"Estimate_{order.order_number}.pdf"
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @router.get("/{order_id}/estimate-pdf")
@@ -1350,6 +1416,11 @@ def mark_quotation_generated(
     if 'subject' in quotation_data:
         order.subject = quotation_data['subject'] or None
     
+    # Increment user's counter and assign as quotation number
+    current_user.quotation_counter = (current_user.quotation_counter or 0) + 1
+    order.quotation_number = current_user.quotation_counter
+    order.quotation_created_by = current_user.id
+
     # Update order workflow
     order.workflow_stage = "quotation_generated"
     order.status = "pending_quotation_approval"
@@ -1364,7 +1435,7 @@ def mark_quotation_generated(
     
     db.commit()
     
-    return {"message": "Quotation generated and submitted for approval"}
+    return {"message": "Quotation generated and submitted for approval", "quotation_number": order.quotation_number}
 
 
 @router.post("/{order_id}/approve-po", response_model=dict)

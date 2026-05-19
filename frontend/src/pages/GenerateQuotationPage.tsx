@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Edit2, X, Check } from 'lucide-react';
 import api from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
+import QuotationPDFModal, { QuotationPDFFormData } from '@/components/QuotationPDFModal';
 
 interface PriceList {
   id: string;
@@ -86,6 +87,8 @@ export default function GenerateQuotationPage() {
   const [customUnitPrices, setCustomUnitPrices] = useState<Record<string, number>>({});
   const [rawPriceInputs, setRawPriceInputs] = useState<Record<string, string>>({});
   const [subject, setSubject] = useState<string>('');
+  const [showPDFModal, setShowPDFModal] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   // Check role access
   const canAccess = user?.role_name === 'quoter' || user?.role_name === 'executive';
@@ -299,6 +302,34 @@ export default function GenerateQuotationPage() {
       return;
     }
     saveQuotationMutation.mutate();
+  };
+
+  const handleGeneratePDF = async (formData: QuotationPDFFormData) => {
+    setIsGeneratingPDF(true);
+    try {
+      const blob = await api.generateQuotationPreviewPDF(orderId!, {
+        price_list_id: selectedPriceListId || null,
+        discount_percent: discountPercent,
+        custom_prices: customUnitPrices,
+        expiry_date: formData.valid_till || null,
+        bank_details: formData.bank_details,
+        terms_and_conditions: formData.terms_and_conditions,
+      });
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `Quotation_Preview_${order?.order_number || 'quotation'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      setShowPDFModal(false);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   if (!canAccess) {
@@ -573,30 +604,7 @@ export default function GenerateQuotationPage() {
               {saveQuotationMutation.isPending ? 'Submitting…' : 'Save & Submit'}
             </button>
             <button
-              onClick={async () => {
-                try {
-                  // Generate PDF preview with custom prices
-                  const blob = await api.generateQuotationPreviewPDF(orderId!, {
-                    price_list_id: selectedPriceListId || null,
-                    discount_percent: discountPercent,
-                    custom_prices: customUnitPrices,
-                    expiry_date: expiryDate || null,
-                  });
-                  
-                  // Download the PDF
-                  const blobUrl = window.URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.href = blobUrl;
-                  link.download = `Quotation_Preview_${order.order_number}.pdf`;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  window.URL.revokeObjectURL(blobUrl);
-                } catch (error) {
-                  console.error('Error generating PDF:', error);
-                  alert('Failed to generate PDF. Please try again.');
-                }
-              }}
+              onClick={() => setShowPDFModal(true)}
               className="btn btn-secondary btn-sm w-full text-xs py-2"
             >
               <FileText size={14} className="mr-1" />
@@ -606,6 +614,15 @@ export default function GenerateQuotationPage() {
         </div>
         </div>
       </div>
+      {/* Quotation PDF Modal */}
+      {showPDFModal && (
+        <QuotationPDFModal
+          onClose={() => setShowPDFModal(false)}
+          onSubmit={handleGeneratePDF}
+          isSubmitting={isGeneratingPDF}
+          title="Generate Quotation PDF"
+        />
+      )}
     </div>
   );
 }
