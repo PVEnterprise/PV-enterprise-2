@@ -1,7 +1,7 @@
 """
 User and Role database models.
 """
-from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -40,6 +40,7 @@ class User(BaseModel):
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False, index=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
     last_login = Column(DateTime, nullable=True)
+    quotation_counter = Column(Integer, nullable=False, default=0, comment="Auto-incrementing quotation number counter per user")
     
     # Relationships
     role = relationship("Role", back_populates="users", foreign_keys=[role_id])

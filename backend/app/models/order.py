@@ -30,6 +30,10 @@ class Order(BaseModel):
     
     subject = Column(String(255), nullable=True, comment="Quotation subject line shown below Bill To")
     
+    # Quotation number - auto-incremented per quotation generator (logged-in user)
+    quotation_number = Column(Integer, nullable=True, comment="Auto-incremented quotation number per generating user")
+    quotation_created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, comment="User who generated the quotation")
+    
     # Quotation details
     price_list_id = Column(UUID(as_uuid=True), ForeignKey("price_lists.id"), nullable=True)
     discount_percentage = Column(Numeric(5, 2), default=0)

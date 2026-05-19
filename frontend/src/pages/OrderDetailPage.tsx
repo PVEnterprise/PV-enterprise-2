@@ -13,6 +13,7 @@ import AttachmentManager from '@/components/common/AttachmentManager';
 import DispatchModal, { DispatchFormData } from '@/components/DispatchModal';
 import DispatchDetailModal from '@/components/DispatchDetailModal';
 import OrderNotesPanel from '@/components/OrderNotesPanel';
+import QuotationPDFModal, { QuotationPDFFormData } from '@/components/QuotationPDFModal';
 
 export default function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -31,12 +32,8 @@ export default function OrderDetailPage() {
   }>>([]);
   const [currentQuantity, setCurrentQuantity] = useState<number>(1);
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [showValidTillModal, setShowValidTillModal] = useState(false);
-  const [validTillDate, setValidTillDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return d.toISOString().split('T')[0];
-  });
+  const [showQuotationPDFModal, setShowQuotationPDFModal] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ['order', orderId],
@@ -316,24 +313,17 @@ export default function OrderDetailPage() {
   };
 
   const handleGetQuotation = () => {
-    setShowValidTillModal(true);
+    setShowQuotationPDFModal(true);
   };
 
-  const handleDownloadQuotationPDF = async () => {
-    setShowValidTillModal(false);
+  const handleDownloadQuotationPDF = async (formData: QuotationPDFFormData) => {
+    setIsGeneratingPDF(true);
     try {
-      const url = `/api/v1/orders/${orderId}/estimate-pdf${validTillDate ? `?valid_till=${validTillDate}` : ''}`;
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
+      const blob = await api.generateEstimatePDF(orderId!, {
+        valid_till: formData.valid_till,
+        bank_details: formData.bank_details,
+        terms_and_conditions: formData.terms_and_conditions,
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate quotation');
-      }
-
-      const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -342,9 +332,12 @@ export default function OrderDetailPage() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
+      setShowQuotationPDFModal(false);
     } catch (error) {
       console.error('Error downloading quotation:', error);
       alert('Failed to generate quotation. Please try again.');
+    } finally {
+      setIsGeneratingPDF(false);
     }
   };
 
@@ -1413,36 +1406,14 @@ export default function OrderDetailPage() {
       {/* Order Notes Panel - Expandable from right side */}
       <OrderNotesPanel notes={order.notes || null} />
 
-      {/* Valid Till Modal for Quotation PDF */}
-      {showValidTillModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">Generate Estimate</h3>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Valid Till</label>
-              <input
-                type="date"
-                value={validTillDate}
-                onChange={(e) => setValidTillDate(e.target.value)}
-                className="input w-full"
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setShowValidTillModal(false)}
-                className="btn btn-secondary btn-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDownloadQuotationPDF}
-                className="btn btn-primary btn-sm"
-              >
-                Download PDF
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Quotation PDF Modal */}
+      {showQuotationPDFModal && (
+        <QuotationPDFModal
+          onClose={() => setShowQuotationPDFModal(false)}
+          onSubmit={handleDownloadQuotationPDF}
+          isSubmitting={isGeneratingPDF}
+          title="Generate Estimate PDF"
+        />
       )}
     </div>
   );

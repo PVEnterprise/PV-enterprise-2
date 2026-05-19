@@ -286,6 +286,14 @@ class ApiService {
     });
     return response.data;
   }
+
+  // Generate estimate PDF (POST) with bank_details and valid_till in body
+  generateEstimatePDF = async (orderId: string, data: { valid_till?: string; bank_details?: Record<string, string>; terms_and_conditions?: string }) => {
+    const response = await this.client.post(`/orders/${orderId}/estimate-pdf`, data, {
+      responseType: 'blob'
+    });
+    return response.data;
+  }
   
   // Attachments
   uploadAttachment = async (entityType: string, entityId: string, formData: FormData) => {
