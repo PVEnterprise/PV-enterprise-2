@@ -222,7 +222,7 @@ export default function DecodePage() {
     if (!orderId || decodedItems.length === 0) return;
 
     try {
-      const items = decodedItems.map(item => ({
+      const items = [...decodedItems].reverse().map(item => ({
         inventory_id: item.inventory_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
