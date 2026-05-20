@@ -261,12 +261,32 @@ export default function InventoryPage() {
           // Read with defval to handle empty cells
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
             defval: null,
-            raw: false // Convert all values to strings first
+            raw: false
           }) as any[];
 
-          console.log('Total rows read:', jsonData.length);
-          console.log('First row keys:', Object.keys(jsonData[0] || {}));
-          console.log('First 3 rows from Excel:', jsonData.slice(0, 3));
+          // Detect which column groups are present in the Excel headers
+          const excelColumns = new Set<string>();
+          for (const row of jsonData) {
+            Object.keys(row).forEach(k => excelColumns.add(k));
+          }
+
+          const hasCatalogNo = excelColumns.has('Catalog No') || excelColumns.has('SKU') || excelColumns.has('sku');
+          const hasDescription = excelColumns.has('Description') || excelColumns.has('description');
+          const hasBatchNo = excelColumns.has('Batch No') || excelColumns.has('Batch no') || excelColumns.has('batch_no');
+          const hasUnitPrice = excelColumns.has('Unit Price') || excelColumns.has('unit_price') || excelColumns.has('Price');
+          const hasStockQty = excelColumns.has('Stock Quantity') || excelColumns.has('stock_quantity') || excelColumns.has('Stock');
+          const hasHsnCode = excelColumns.has('HSN Code') || excelColumns.has('hsn_code') || excelColumns.has('HSN');
+          const hasTax = excelColumns.has('Tax %') || excelColumns.has('Tax') || excelColumns.has('tax');
+          const hasMdBag = excelColumns.has('MD Bag') || excelColumns.has('md_bag');
+          const hasNaniBag = excelColumns.has('Nani Bag') || excelColumns.has('nani_bag');
+          const hasSrinuBag = excelColumns.has('Srinu Bag') || excelColumns.has('srinu_bag');
+          const hasPraneethBag = excelColumns.has('Praneeth Bag') || excelColumns.has('praneeth_bag');
+          const hasPrasannaBag = excelColumns.has('Prasanna Bag') || excelColumns.has('prasanna_bag');
+
+          if (!hasCatalogNo) {
+            alert('Excel file must have a "Catalog No" column.');
+            return;
+          }
 
           let createdCount = 0;
           let updatedCount = 0;
@@ -276,63 +296,71 @@ export default function InventoryPage() {
           // Process each row
           for (const row of jsonData) {
             const sku = row['Catalog No'] || row['SKU'] || row['sku'];
-            const description = row['Description'] || row['description'];
-            const batchNo = row['Batch No'] || row['Batch no'] || row['batch_no'];
-            const unitPrice = row['Unit Price'] || row['unit_price'] || row['Price'];
-            const stockQuantity = row['Stock Quantity'] || row['stock_quantity'] || row['Stock'];
-            const hsnCode = row['HSN Code'] || row['hsn_code'] || row['HSN'];
-            const tax = row['Tax %'] || row['Tax'] || row['tax'];
-            const mdBag = row['MD Bag'] || row['md_bag'];
-            const naniBag = row['Nani Bag'] || row['nani_bag'];
-            const srinuBag = row['Srinu Bag'] || row['srinu_bag'];
-            const praneethBag = row['Praneeth Bag'] || row['praneeth_bag'];
-            const prasannaBag = row['Prasanna Bag'] || row['prasanna_bag'];
-            
-            console.log('Processing row:', { sku, description, unitPrice, stockQuantity, hsnCode, tax });
 
-            // Skip completely empty rows
-            if (!sku && !description && !unitPrice && !hsnCode && tax === undefined) {
+            // Skip rows without a Catalog No
+            if (!sku || String(sku).trim() === '' || String(sku) === 'nan') {
               skippedCount++;
               continue;
             }
 
-            if (!sku || !unitPrice || !hsnCode || tax === undefined) {
-              if (errors.length < 10) { // Only show first 10 detailed errors
-                errors.push(`Row with SKU "${sku || 'N/A'}": Missing ${!sku ? 'Catalog No' : !unitPrice ? 'Unit Price' : !hsnCode ? 'HSN Code' : 'Tax %'}`);
+            // Build payload with only the columns present in this Excel file
+            const payload: any = { sku: String(sku).trim() };
+
+            if (hasDescription) {
+              const val = row['Description'] || row['description'];
+              if (val && String(val) !== 'nan') payload.description = String(val);
+            }
+            if (hasBatchNo) {
+              const val = row['Batch No'] || row['Batch no'] || row['batch_no'];
+              if (val && String(val) !== 'nan') payload.batch_no = String(val);
+            }
+            if (hasUnitPrice) {
+              const raw = row['Unit Price'] || row['unit_price'] || row['Price'];
+              const val = parseFloat(raw);
+              payload.unit_price = isNaN(val) || val < 0 ? 1000 : val;
+            }
+            if (hasStockQty) {
+              const raw = row['Stock Quantity'] || row['stock_quantity'] || row['Stock'];
+              const val = parseInt(raw);
+              payload.stock_quantity = isNaN(val) || val < 0 ? 0 : val;
+            }
+            if (hasHsnCode) {
+              const raw = row['HSN Code'] || row['hsn_code'] || row['HSN'];
+              const hsnStr = raw ? String(raw).padStart(8, '0') : '90189023';
+              if (!/^[0-9]{8}$/.test(hsnStr)) {
+                errors.push(`Invalid HSN code for ${sku}: ${raw}`);
+                continue;
               }
-              skippedCount++;
-              continue;
+              payload.hsn_code = hsnStr;
             }
-
-            // Validate HSN code
-            const hsnStr = String(hsnCode).padStart(8, '0');
-            if (!/^[0-9]{8}$/.test(hsnStr)) {
-              errors.push(`Invalid HSN code for ${sku}: ${hsnCode}`);
-              continue;
+            if (hasTax) {
+              const raw = row['Tax %'] || row['Tax'] || row['tax'];
+              const val = parseFloat(raw);
+              payload.tax = isNaN(val) || val < 0 || val > 100 ? 5 : val;
             }
-
-            // Validate tax
-            const taxNum = parseFloat(tax);
-            if (isNaN(taxNum) || taxNum < 0 || taxNum > 100) {
-              errors.push(`Invalid tax for ${sku}: ${tax}`);
-              continue;
+            if (hasMdBag) {
+              const raw = row['MD Bag'] || row['md_bag'];
+              if (raw != null && String(raw) !== 'nan') payload.md_bag = parseInt(raw);
+            }
+            if (hasNaniBag) {
+              const raw = row['Nani Bag'] || row['nani_bag'];
+              if (raw != null && String(raw) !== 'nan') payload.nani_bag = parseInt(raw);
+            }
+            if (hasSrinuBag) {
+              const raw = row['Srinu Bag'] || row['srinu_bag'];
+              if (raw != null && String(raw) !== 'nan') payload.srinu_bag = parseInt(raw);
+            }
+            if (hasPraneethBag) {
+              const raw = row['Praneeth Bag'] || row['praneeth_bag'];
+              if (raw != null && String(raw) !== 'nan') payload.praneeth_bag = parseInt(raw);
+            }
+            if (hasPrasannaBag) {
+              const raw = row['Prasanna Bag'] || row['prasanna_bag'];
+              if (raw != null && String(raw) !== 'nan') payload.prasanna_bag = parseInt(raw);
             }
 
             try {
-              const result = await api.upsertInventoryItem({
-                sku: String(sku),
-                description: description ? String(description) : undefined,
-                batch_no: batchNo ? String(batchNo) : undefined,
-                unit_price: parseFloat(unitPrice),
-                stock_quantity: stockQuantity ? parseInt(stockQuantity) : 0,
-                hsn_code: hsnStr,
-                tax: taxNum,
-                md_bag: mdBag != null ? parseInt(mdBag) : undefined,
-                nani_bag: naniBag != null ? parseInt(naniBag) : undefined,
-                srinu_bag: srinuBag != null ? parseInt(srinuBag) : undefined,
-                praneeth_bag: praneethBag != null ? parseInt(praneethBag) : undefined,
-                prasanna_bag: prasannaBag != null ? parseInt(prasannaBag) : undefined,
-              });
+              const result = await api.upsertInventoryItem(payload);
               if (result.created) {
                 createdCount++;
               } else {
@@ -350,7 +378,7 @@ export default function InventoryPage() {
           // Show results
           let message = `Import complete!\n\n✅ Created: ${createdCount} new item(s)\n🔄 Updated: ${updatedCount} existing item(s)`;
           if (skippedCount > 0) {
-            message += `\n⏭️ Skipped: ${skippedCount} row(s) (empty or missing required fields)`;
+            message += `\n⏭️ Skipped: ${skippedCount} row(s) (missing Catalog No)`;
           }
           if (errors.length > 0) {
             message += `\n\n❌ Errors:\n${errors.slice(0, 10).join('\n')}`;
@@ -629,13 +657,13 @@ export default function InventoryPage() {
                   Upload an Excel file with the following columns:
                 </p>
                 <ul className="text-sm text-gray-600 list-disc list-inside space-y-1 mb-4">
-                  <li><strong>Catalog No</strong> - Unique SKU (required)</li>
+                  <li><strong>Catalog No</strong> - Unique SKU <span className="text-red-600 font-semibold">(required)</span></li>
                   <li><strong>Description</strong> - Item description (optional)</li>
                   <li><strong>Batch No</strong> - Batch number (optional)</li>
-                  <li><strong>Unit Price</strong> - Price in rupees (required)</li>
+                  <li><strong>Unit Price</strong> - Price in rupees (optional, default 1000)</li>
                   <li><strong>Stock Quantity</strong> - Current stock (optional, default 0)</li>
-                  <li><strong>HSN Code</strong> - 8-digit HSN code (required)</li>
-                  <li><strong>Tax %</strong> - Tax percentage 0-100 (required)</li>
+                  <li><strong>HSN Code</strong> - 8-digit HSN code (optional, default 90189023)</li>
+                  <li><strong>Tax %</strong> - Tax percentage 0-100 (optional, default 5)</li>
                   <li><strong>MD Bag</strong> - MD bag quantity (optional)</li>
                   <li><strong>Nani Bag</strong> - Nani bag quantity (optional)</li>
                   <li><strong>Srinu Bag</strong> - Srinu bag quantity (optional)</li>
@@ -643,7 +671,7 @@ export default function InventoryPage() {
                   <li><strong>Prasanna Bag</strong> - Prasanna bag quantity (optional)</li>
                 </ul>
                 <p className="text-xs text-gray-500 italic">
-                  Items with existing SKUs will be updated with the new values.
+                  Only columns present in the file will be imported. Existing items are updated only for the columns provided.
                 </p>
               </div>
               
