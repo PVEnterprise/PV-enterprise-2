@@ -325,6 +325,21 @@ def list_categories(
     return [cat[0] for cat in categories if cat[0]]
 
 
+class InventoryUpsert(BaseModel):
+    sku: str = Field(..., max_length=100, description="Catalog Number")
+    description: Optional[str] = Field(default=None, description="Item description")
+    batch_no: Optional[str] = Field(default=None, max_length=100, description="Batch number")
+    unit_price: Optional[Decimal] = Field(default=None, ge=0, description="Unit price in rupees")
+    stock_quantity: Optional[int] = Field(default=None, ge=0, description="Current stock quantity")
+    hsn_code: Optional[str] = Field(default=None, min_length=8, max_length=8, pattern="^[0-9]{8}$", description="HSN code (8 digits)")
+    tax: Optional[Decimal] = Field(default=None, ge=0, le=100, description="Tax percentage")
+    md_bag: Optional[int] = Field(default=None, ge=0, description="MD bag quantity")
+    nani_bag: Optional[int] = Field(default=None, ge=0, description="Nani bag quantity")
+    srinu_bag: Optional[int] = Field(default=None, ge=0, description="Srinu bag quantity")
+    praneeth_bag: Optional[int] = Field(default=None, ge=0, description="Praneeth bag quantity")
+    prasanna_bag: Optional[int] = Field(default=None, ge=0, description="Prasanna bag quantity")
+
+
 class UpsertResponse(BaseModel):
     """Response for upsert operation."""
     item: InventoryResponse
@@ -333,36 +348,51 @@ class UpsertResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+_DEFAULT_UNIT_PRICE = Decimal('1000')
+_DEFAULT_STOCK_QUANTITY = 0
+_DEFAULT_HSN_CODE = '90189023'
+_DEFAULT_TAX = Decimal('5')
+
+
 @router.post("/upsert", response_model=UpsertResponse)
 def upsert_inventory_item(
-    item_data: InventoryCreate,
+    item_data: InventoryUpsert,
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(Permission.INVENTORY_CREATE))
 ):
     """
     Create or update an inventory item by SKU.
     
-    If SKU exists, updates the existing item.
-    If SKU doesn't exist, creates a new item.
-    
-    Used for bulk import from Excel.
+    Only Catalog No is required. All other fields are optional.
+    For existing items: only fields present in the payload are updated.
+    For new items: missing required fields are filled with defaults
+    (unit_price=1000, stock_quantity=0, hsn_code=90189023, tax=5).
     """
-    # Check if SKU already exists
     existing = db.query(Inventory).filter(Inventory.sku == item_data.sku).first()
     
     if existing:
-        # Update existing item
-        update_data = item_data.model_dump()
+        # Only update fields that were explicitly provided in the payload
+        update_data = item_data.model_dump(exclude_unset=True)
+        update_data.pop('sku', None)
         for field, value in update_data.items():
             setattr(existing, field, value)
-        existing.is_active = True  # Reactivate if it was soft-deleted
+        existing.is_active = True
         existing.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(existing)
         return UpsertResponse(item=existing, created=False)
     else:
-        # Create new item
-        inventory = Inventory(**item_data.model_dump())
+        # Create new item, applying defaults for missing required fields
+        create_data = item_data.model_dump(exclude_unset=True)
+        if 'unit_price' not in create_data:
+            create_data['unit_price'] = _DEFAULT_UNIT_PRICE
+        if 'stock_quantity' not in create_data:
+            create_data['stock_quantity'] = _DEFAULT_STOCK_QUANTITY
+        if 'hsn_code' not in create_data:
+            create_data['hsn_code'] = _DEFAULT_HSN_CODE
+        if 'tax' not in create_data:
+            create_data['tax'] = _DEFAULT_TAX
+        inventory = Inventory(**create_data)
         db.add(inventory)
         db.commit()
         db.refresh(inventory)
