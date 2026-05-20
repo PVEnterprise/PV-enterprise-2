@@ -418,8 +418,11 @@ class EstimatePDFGenerator:
                 ['', '', '', '', '', '', 'Tax%', 'Amt', '']
             ]
 
-        # Group decoded items by section_name
-        decoded_items = [item for item in self.order.items if item.inventory_id]
+        # Group decoded items by section_name (sorted by creation order asc)
+        decoded_items = sorted(
+            [item for item in self.order.items if item.inventory_id],
+            key=lambda x: x.created_at
+        )
         sections_order = []
         sections_items = {}
         for item in decoded_items:

@@ -239,6 +239,7 @@ def get_order(
                     detail="Access denied"
                 )
     
+    order.items.sort(key=lambda x: x.created_at)
     return order
 
 
