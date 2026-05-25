@@ -64,6 +64,9 @@ interface QuotationItem extends OrderItem {
   total_amount: number;
 }
 
+const formatINR = (amount: number) =>
+  new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+
 export default function GenerateQuotationPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -532,10 +535,10 @@ export default function GenerateQuotationPage() {
                     </td>
                     <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">{item.quantity}</td>
                     <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{discountPercent}%</td>
-                    <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">₹{Number(item.amount).toFixed(2)}</td>
+                    <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.amount))}</td>
                     <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{item.tax_percent}%</td>
-                    <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">₹{Number(item.tax_amount).toFixed(2)}</td>
-                    <td className="p-3 text-xs text-right font-bold text-gray-900 whitespace-nowrap">₹{Number(item.total_amount).toFixed(2)}</td>
+                    <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.tax_amount))}</td>
+                    <td className="p-3 text-xs text-right font-bold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.total_amount))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -550,30 +553,30 @@ export default function GenerateQuotationPage() {
             <div className="space-y-2">
               <div className="flex justify-between items-center py-1 border-b">
                 <span className="text-xs font-medium text-gray-700">Sub Total:</span>
-                <span className="text-xs font-semibold text-gray-900">₹{subTotal.toFixed(2)}</span>
+                <span className="text-xs font-semibold text-gray-900">₹{formatINR(subTotal)}</span>
               </div>
               
               {discountPercent > 0 && (
                 <>
                   <div className="flex justify-between items-center py-1">
                     <span className="text-xs text-gray-600">Disc ({discountPercent}%):</span>
-                    <span className="text-xs font-medium text-red-600">-₹{discountAmount.toFixed(2)}</span>
+                    <span className="text-xs font-medium text-red-600">-₹{formatINR(discountAmount)}</span>
                   </div>
                   <div className="flex justify-between items-center py-1">
                     <span className="text-xs text-gray-600">After Disc:</span>
-                    <span className="text-xs font-medium text-gray-900">₹{(subTotal - discountAmount).toFixed(2)}</span>
+                    <span className="text-xs font-medium text-gray-900">₹{formatINR(subTotal - discountAmount)}</span>
                   </div>
                 </>
               )}
               
               <div className="flex justify-between items-center py-1">
                 <span className="text-xs text-gray-600">Total Tax:</span>
-                <span className="text-xs font-medium text-gray-900">₹{totalTaxAmount.toFixed(2)}</span>
+                <span className="text-xs font-medium text-gray-900">₹{formatINR(totalTaxAmount)}</span>
               </div>
               
               <div className="flex justify-between items-center py-2 border-t-2 border-gray-300 mt-2">
                 <span className="text-sm font-bold text-gray-900">Grand Total:</span>
-                <span className="text-sm font-bold text-blue-600">₹{grandTotal.toFixed(2)}</span>
+                <span className="text-sm font-bold text-blue-600">₹{formatINR(grandTotal)}</span>
               </div>
             </div>
           </div>
