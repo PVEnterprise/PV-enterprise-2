@@ -356,7 +356,9 @@ class InvoicePDFGenerator:
     # ---------- Terms ----------
     def _terms(self):
         dispatch_terms = getattr(self.dispatch, 'terms', None) or ''
-        combined = dispatch_terms.replace('\n', '<br/>') if dispatch_terms else ''
+        if not dispatch_terms.strip():
+            return None
+        combined = dispatch_terms.replace('\n', '<br/>')
         data = [[Paragraph('<font color="#3d6b9e"><b>TERMS &amp; CONDITIONS</b></font>', self.styles["NormalText"])],
                 [Paragraph(combined, self.styles["NormalText"])]]
         t = Table(data, colWidths=[180*mm])
@@ -375,13 +377,14 @@ class InvoicePDFGenerator:
         doc = SimpleDocTemplate(buf, pagesize=A4,
                                 leftMargin=15*mm, rightMargin=15*mm,
                                 topMargin=15*mm, bottomMargin=15*mm)
+        terms_section = self._terms()
         story = [
             self._header(), *self._accent_bars(), Spacer(1, 4*mm),
             self._invoice_info(), Spacer(1, 4*mm),
             self._bill_to(), Spacer(1, 5*mm),
             self._items_table(), Spacer(1, 6*mm),
             self._footer(), Spacer(1, 6*mm),
-            self._terms(), Spacer(1, 6*mm),
+            *([terms_section, Spacer(1, 6*mm)] if terms_section is not None else []),
             Paragraph("<font size=8 color='#666'><i>Sreedevi Life Sciences</i></font>",
                       self.styles["RightText"])
         ]
