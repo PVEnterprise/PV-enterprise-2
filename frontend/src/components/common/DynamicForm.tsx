@@ -64,7 +64,7 @@ export default function DynamicForm({
     }
 
     if (field.validation) {
-      if (field.validation.pattern && !field.validation.pattern.test(value)) {
+      if (field.validation.pattern && value && !field.validation.pattern.test(value)) {
         return field.validation.message || `Invalid ${field.label}`;
       }
 
