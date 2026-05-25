@@ -1029,9 +1029,20 @@ def generate_estimate_pdf_post(
     bank_details = request_data.get('bank_details') or None
     terms_and_conditions = request_data.get('terms_and_conditions') or None
 
-    # Increment user's quotation counter and stamp the order
-    current_user.quotation_counter = (current_user.quotation_counter or 0) + 1
-    order.quotation_number = current_user.quotation_counter
+    # Insert QuotationLog — sequence atomically assigns the next quotation_number
+    from app.models.quotation_log import QuotationLog
+    from datetime import datetime as dt
+    log_entry = QuotationLog(
+        order_id=order.id,
+        generated_by=current_user.id,
+        discount_percentage=order.discount_percentage,
+        valid_until=expiry_date,
+        created_at=dt.utcnow(),
+        updated_at=dt.utcnow(),
+    )
+    db.add(log_entry)
+    db.flush()  # DB assigns quotation_number via sequence
+    order.quotation_number = log_entry.quotation_number
     order.quotation_created_by = current_user.id
     db.commit()
 
@@ -1417,9 +1428,20 @@ def mark_quotation_generated(
     if 'subject' in quotation_data:
         order.subject = quotation_data['subject'] or None
     
-    # Increment user's counter and assign as quotation number
-    current_user.quotation_counter = (current_user.quotation_counter or 0) + 1
-    order.quotation_number = current_user.quotation_counter
+    # Insert QuotationLog — sequence atomically assigns the next quotation_number
+    from app.models.quotation_log import QuotationLog
+    from datetime import datetime as dt
+    log_entry = QuotationLog(
+        order_id=order.id,
+        generated_by=current_user.id,
+        discount_percentage=order.discount_percentage,
+        valid_until=None,
+        created_at=dt.utcnow(),
+        updated_at=dt.utcnow(),
+    )
+    db.add(log_entry)
+    db.flush()  # DB assigns quotation_number via sequence
+    order.quotation_number = log_entry.quotation_number
     order.quotation_created_by = current_user.id
 
     # Update order workflow

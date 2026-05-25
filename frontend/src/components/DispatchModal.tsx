@@ -149,6 +149,7 @@ export default function DispatchModal({
   const [trackingNumber, setTrackingNumber] = useState('');
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState(DEFAULT_TERMS);
+  const [includeTerms, setIncludeTerms] = useState(false);
   const [paymentTerms, setPaymentTerms] = useState('Due on Receipt');
   const [bankAccountName, setBankAccountName] = useState('Sreedevi Life Sciences');
   const [bankAccountNumber, setBankAccountNumber] = useState('42285740549');
@@ -258,7 +259,7 @@ export default function DispatchModal({
       courier_name: courierName,
       tracking_number: trackingNumber,
       notes,
-      terms,
+      terms: includeTerms ? terms : '',
       payment_terms: paymentTerms,
       bank_account_name: bankAccountName,
       bank_account_number: bankAccountNumber,
@@ -333,8 +334,23 @@ export default function DispatchModal({
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Terms &amp; Conditions</label>
-                <textarea value={terms} onChange={(e) => setTerms(e.target.value)} rows={5} className="input w-full text-xs py-1 resize-none font-mono" />
+                <div className="flex items-center gap-2 mb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIncludeTerms(v => !v)}
+                    className={`relative inline-flex h-4 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                      includeTerms ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow transition duration-200 ${
+                      includeTerms ? 'translate-x-4' : 'translate-x-0'
+                    }`} />
+                  </button>
+                  <label className="text-xs font-medium text-gray-600">Add Terms &amp; Conditions</label>
+                </div>
+                {includeTerms && (
+                  <textarea value={terms} onChange={(e) => setTerms(e.target.value)} rows={5} className="input w-full text-xs py-1 resize-none font-mono" />
+                )}
               </div>
             </div>
           </div>
