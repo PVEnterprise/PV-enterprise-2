@@ -18,6 +18,7 @@ from app.models.demo_request import DemoRequest
 from app.models.demo_item import DemoItem
 from app.models.payment import Payment
 from app.models.procurement import Procurement, ProcurementItem
+from app.models.quotation_log import QuotationLog
 
 __all__ = [
     "User",
@@ -43,4 +44,5 @@ __all__ = [
     "Payment",
     "Procurement",
     "ProcurementItem",
+    "QuotationLog",
 ]
