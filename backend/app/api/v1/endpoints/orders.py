@@ -17,6 +17,7 @@ from app.models.inventory import Inventory
 from app.models.approval import Approval
 from app.models.attachment import Attachment
 from app.models.quotation import Quotation, QuotationItem
+from app.models.quotation_log import QuotationLog
 from app.models.invoice import Invoice, InvoiceItem
 from app.models.dispatch import Dispatch, DispatchItem
 from app.utils.order_tracking import add_order_action
@@ -327,22 +328,25 @@ def delete_order(
         # 6. Delete quotations
         db.query(Quotation).filter(Quotation.order_id == order_id).delete(synchronize_session=False)
         
-        # 7. Delete order items
+        # 7. Delete quotation logs
+        db.query(QuotationLog).filter(QuotationLog.order_id == order_id).delete(synchronize_session=False)
+        
+        # 8. Delete order items
         db.query(OrderItem).filter(OrderItem.order_id == order_id).delete(synchronize_session=False)
         
-        # 8. Delete approvals (polymorphic - entity_type = 'order')
+        # 9. Delete approvals (polymorphic - entity_type = 'order')
         db.query(Approval).filter(
             Approval.entity_type == 'order',
             Approval.entity_id == order_id
         ).delete(synchronize_session=False)
         
-        # 9. Delete attachments (polymorphic - entity_type = 'order')
+        # 10. Delete attachments (polymorphic - entity_type = 'order')
         db.query(Attachment).filter(
             Attachment.entity_type == 'order',
             Attachment.entity_id == order_id
         ).delete(synchronize_session=False)
         
-        # 10. Finally, delete the order itself
+        # 11. Finally, delete the order itself
         db.delete(order)
         
         db.commit()
@@ -1030,7 +1034,6 @@ def generate_estimate_pdf_post(
     terms_and_conditions = request_data.get('terms_and_conditions') or None
 
     # Insert QuotationLog — sequence atomically assigns the next quotation_number
-    from app.models.quotation_log import QuotationLog
     from datetime import datetime as dt
     log_entry = QuotationLog(
         order_id=order.id,
@@ -1429,7 +1432,6 @@ def mark_quotation_generated(
         order.subject = quotation_data['subject'] or None
     
     # Insert QuotationLog — sequence atomically assigns the next quotation_number
-    from app.models.quotation_log import QuotationLog
     from datetime import datetime as dt
     log_entry = QuotationLog(
         order_id=order.id,
