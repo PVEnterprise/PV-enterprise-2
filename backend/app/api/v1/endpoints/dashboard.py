@@ -132,7 +132,7 @@ def get_dashboard_stats(
     # --- Quotations ---
     total_quotations = db.query(Quotation).count()
     # Quotation value = decoded orders at any pre-PO stage (before inventory_check)
-    _pre_po_stages = ['order_request', 'pending_approval', 'approved', 'waiting_purchase_order']
+    _pre_po_stages = ['order_request', 'decoding_approval', 'quotation', 'quotation_generated', 'waiting_purchase_order', 'po_approval', 'inventory_check']
     pending_quotations = db.query(func.count(func.distinct(Order.id))).join(
         OrderItem, OrderItem.order_id == Order.id
     ).filter(
