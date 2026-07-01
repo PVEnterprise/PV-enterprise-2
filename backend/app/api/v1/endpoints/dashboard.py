@@ -24,6 +24,17 @@ from typing import Dict, List
 
 router = APIRouter()
 
+# Single source of truth for "pending" order workflow stages, shared by every
+# widget below. An order is terminal (no longer pending) only once it reaches
+# 'completed'. PRE_PO_STAGES covers everything up to and including PO approval;
+# POST_PO_STAGES covers approved orders still awaiting dispatch/payment.
+PRE_PO_STAGES = [
+    'order_request', 'decoding_approval', 'decoding',
+    'quotation', 'quotation_generated', 'waiting_purchase_order', 'po_approval',
+]
+POST_PO_STAGES = ['inventory_check', 'payment_pending']
+PENDING_WORKFLOW_STAGES = PRE_PO_STAGES + POST_PO_STAGES
+
 
 class DashboardStats(BaseModel):
     # Orders
@@ -131,12 +142,11 @@ def get_dashboard_stats(
 
     # --- Quotations ---
     total_quotations = db.query(Quotation).count()
-    # Quotation value = decoded orders at any pre-PO stage (before inventory_check)
-    _pre_po_stages = ['order_request', 'decoding_approval', 'quotation', 'quotation_generated', 'waiting_purchase_order', 'po_approval', 'inventory_check']
+    # Quotation value = decoded orders at any pre-PO stage (before PO approval)
     pending_quotations = db.query(func.count(func.distinct(Order.id))).join(
         OrderItem, OrderItem.order_id == Order.id
     ).filter(
-        Order.workflow_stage.in_(_pre_po_stages),
+        Order.workflow_stage.in_(PRE_PO_STAGES),
         OrderItem.unit_price.isnot(None)
     ).scalar() or 0
     pending_quotation_value = db.query(
@@ -147,7 +157,7 @@ def get_dashboard_stats(
             * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
         )
     ).join(Order, Order.id == OrderItem.order_id).filter(
-        Order.workflow_stage.in_(_pre_po_stages),
+        Order.workflow_stage.in_(PRE_PO_STAGES),
         OrderItem.unit_price.isnot(None),
         OrderItem.inventory_id.isnot(None)
     ).scalar() or Decimal(0)
@@ -170,8 +180,7 @@ def get_dashboard_stats(
         OrderItem.unit_price.isnot(None)
     ).scalar() or Decimal(0)
 
-    # Pending order value = outstanding (undelivered) qty for PO-approved orders
-    # stages: inventory_check (PO approved) + payment_pending (partially dispatched)
+    # Pending order value = outstanding (undelivered) qty across every non-terminal stage
     _dispatched_subq = db.query(
         DispatchItem.order_item_id,
         func.sum(DispatchItem.quantity).label('dispatched_qty')
@@ -187,7 +196,7 @@ def get_dashboard_stats(
     ).join(Order, Order.id == OrderItem.order_id
     ).outerjoin(_dispatched_subq, _dispatched_subq.c.order_item_id == OrderItem.id
     ).filter(
-        Order.workflow_stage.in_(['inventory_check', 'payment_pending']),
+        Order.workflow_stage.in_(PENDING_WORKFLOW_STAGES),
         OrderItem.unit_price.isnot(None),
         OrderItem.inventory_id.isnot(None)
     ).scalar() or Decimal(0)
@@ -397,7 +406,7 @@ def get_inventory_insights(
     ).join(Order, Order.id == OrderItem.order_id
     ).filter(
         Inventory.stock_quantity < 5,
-        Order.status.notin_(['completed', 'cancelled']),
+        Order.workflow_stage.in_(PENDING_WORKFLOW_STAGES),
         OrderItem.unit_price.isnot(None)
     ).group_by(Inventory.id, Inventory.sku, Inventory.description, Inventory.unit_price, Inventory.stock_quantity
     ).order_by(func.sum(OrderItem.quantity * OrderItem.unit_price).desc()
@@ -416,7 +425,6 @@ def get_inventory_insights(
     ]
 
     # 3) Top 10 low-stock (<5) items in pre-PO decoded stages (decoded but no PO yet)
-    _pre_po = ['order_request', 'pending_approval', 'approved', 'waiting_purchase_order']
     quotation_rows = db.query(
         Inventory.sku,
         Inventory.description,
@@ -432,7 +440,7 @@ def get_inventory_insights(
     ).join(OrderItem, OrderItem.inventory_id == Inventory.id
     ).join(Order, Order.id == OrderItem.order_id
     ).filter(
-        Order.workflow_stage.in_(_pre_po),
+        Order.workflow_stage.in_(PRE_PO_STAGES),
         OrderItem.unit_price.isnot(None),
         Inventory.stock_quantity < 5
     ).group_by(Inventory.id, Inventory.sku, Inventory.description, Inventory.unit_price, Inventory.stock_quantity
@@ -514,13 +522,6 @@ def get_customer_insights(
     ]
 
     # 3) Top 10 customers with highest pending order value
-    # Includes every stage up to and including PO approval, plus the stages
-    # that follow it (inventory_check, payment_pending) — i.e. every non-terminal stage.
-    _pending_stages = [
-        'order_request', 'decoding_approval', 'decoding',
-        'quotation', 'quotation_generated', 'waiting_purchase_order',
-        'po_approval', 'inventory_check', 'payment_pending',
-    ]
     _dispatched_subq = db.query(
         DispatchItem.order_item_id,
         func.sum(DispatchItem.quantity).label('dispatched_qty')
@@ -540,7 +541,7 @@ def get_customer_insights(
     ).join(OrderItem, OrderItem.order_id == Order.id
     ).outerjoin(_dispatched_subq, _dispatched_subq.c.order_item_id == OrderItem.id
     ).filter(
-        Order.workflow_stage.in_(_pending_stages),
+        Order.workflow_stage.in_(PENDING_WORKFLOW_STAGES),
         OrderItem.unit_price.isnot(None),
         OrderItem.inventory_id.isnot(None)
     ).group_by(Customer.id, Customer.name, Customer.hospital_name
