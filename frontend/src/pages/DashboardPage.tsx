@@ -212,18 +212,16 @@ function InventoryView({ data }: { data: InventoryInsights; }) {
 function CustomerView({ data }: { data: CustomerInsights; }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
-      <Panel title="Last 10 New Customers" icon={UserPlus} iconBg="bg-blue-500">
-        {data.new_customers.length === 0
-          ? <p className="text-xs text-gray-400 italic py-2">No customers yet</p>
-          : data.new_customers.map((c, i) => (
+      <Panel title="Top 10 Pending Order Value" icon={Clock} iconBg="bg-orange-500">
+        {data.top_pending_customers.length === 0
+          ? <p className="text-xs text-gray-400 italic py-2">No pending orders</p>
+          : data.top_pending_customers.map((c, i) => (
             <Row
               key={c.id} rank={i + 1}
               primary={c.hospital_name}
-              secondary={[c.name, c.city].filter(Boolean).join(' · ')}
-              right={c.created_at
-                ? new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-                : ''}
-              accent="blue"
+              secondary={c.name}
+              right={fmt(c.pending_value)}
+              accent="orange"
             />
           ))
         }
@@ -242,16 +240,18 @@ function CustomerView({ data }: { data: CustomerInsights; }) {
           ))
         }
       </Panel>
-      <Panel title="Top 10 Pending Order Value" icon={Clock} iconBg="bg-orange-500">
-        {data.top_pending_customers.length === 0
-          ? <p className="text-xs text-gray-400 italic py-2">No pending orders</p>
-          : data.top_pending_customers.map((c, i) => (
+      <Panel title="Last 10 New Customers" icon={UserPlus} iconBg="bg-blue-500">
+        {data.new_customers.length === 0
+          ? <p className="text-xs text-gray-400 italic py-2">No customers yet</p>
+          : data.new_customers.map((c, i) => (
             <Row
               key={c.id} rank={i + 1}
               primary={c.hospital_name}
-              secondary={c.name}
-              right={fmt(c.pending_value)}
-              accent="orange"
+              secondary={[c.name, c.city].filter(Boolean).join(' · ')}
+              right={c.created_at
+                ? new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                : ''}
+              accent="blue"
             />
           ))
         }
