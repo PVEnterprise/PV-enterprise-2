@@ -473,8 +473,8 @@ def get_customer_insights(
     fy_start_year = now.year if now.month >= 4 else now.year - 1
     fy_start = datetime(fy_start_year, 4, 1)
 
-    # 1) Last 5 new customers
-    new_cust_rows = db.query(Customer).order_by(Customer.created_at.desc()).limit(5).all()
+    # 1) Last 10 new customers
+    new_cust_rows = db.query(Customer).order_by(Customer.created_at.desc()).limit(10).all()
     new_customers = [
         {
             "id": str(c.id),
@@ -486,7 +486,7 @@ def get_customer_insights(
         for c in new_cust_rows
     ]
 
-    # 2) Top 5 customers by revenue this FY (sum of dispatched item values)
+    # 2) Top 10 customers by revenue this FY (sum of dispatched item values)
     revenue_rows = db.query(
         Customer.id,
         Customer.name,
@@ -501,7 +501,7 @@ def get_customer_insights(
         OrderItem.unit_price.isnot(None)
     ).group_by(Customer.id, Customer.name, Customer.hospital_name
     ).order_by(func.sum(DispatchItem.quantity * OrderItem.unit_price).desc()
-    ).limit(5).all()
+    ).limit(10).all()
 
     top_revenue = [
         {
@@ -513,7 +513,14 @@ def get_customer_insights(
         for r in revenue_rows
     ]
 
-    # 3) Top 5 customers with highest pending order value
+    # 3) Top 10 customers with highest pending order value
+    # Includes every stage up to and including PO approval, plus the stages
+    # that follow it (inventory_check, payment_pending) — i.e. every non-terminal stage.
+    _pending_stages = [
+        'order_request', 'decoding_approval', 'decoding',
+        'quotation', 'quotation_generated', 'waiting_purchase_order',
+        'po_approval', 'inventory_check', 'payment_pending',
+    ]
     _dispatched_subq = db.query(
         DispatchItem.order_item_id,
         func.sum(DispatchItem.quantity).label('dispatched_qty')
@@ -533,7 +540,7 @@ def get_customer_insights(
     ).join(OrderItem, OrderItem.order_id == Order.id
     ).outerjoin(_dispatched_subq, _dispatched_subq.c.order_item_id == OrderItem.id
     ).filter(
-        Order.workflow_stage.in_(['inventory_check', 'payment_pending']),
+        Order.workflow_stage.in_(_pending_stages),
         OrderItem.unit_price.isnot(None),
         OrderItem.inventory_id.isnot(None)
     ).group_by(Customer.id, Customer.name, Customer.hospital_name
@@ -543,7 +550,7 @@ def get_customer_insights(
         * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
         * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
     ).desc()
-    ).limit(5).all()
+    ).limit(10).all()
 
     top_pending = [
         {

@@ -212,7 +212,7 @@ function InventoryView({ data }: { data: InventoryInsights; }) {
 function CustomerView({ data }: { data: CustomerInsights; }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
-      <Panel title="Last 5 New Customers" icon={UserPlus} iconBg="bg-blue-500">
+      <Panel title="Last 10 New Customers" icon={UserPlus} iconBg="bg-blue-500">
         {data.new_customers.length === 0
           ? <p className="text-xs text-gray-400 italic py-2">No customers yet</p>
           : data.new_customers.map((c, i) => (
@@ -228,7 +228,7 @@ function CustomerView({ data }: { data: CustomerInsights; }) {
           ))
         }
       </Panel>
-      <Panel title="Top 5 Revenue — This FY" icon={TrendingUp} iconBg="bg-green-500">
+      <Panel title="Top 10 Revenue — This FY" icon={TrendingUp} iconBg="bg-green-500">
         {data.top_revenue_customers.length === 0
           ? <p className="text-xs text-gray-400 italic py-2">No revenue data this FY</p>
           : data.top_revenue_customers.map((c, i) => (
@@ -242,7 +242,7 @@ function CustomerView({ data }: { data: CustomerInsights; }) {
           ))
         }
       </Panel>
-      <Panel title="Top 5 Pending Order Value" icon={Clock} iconBg="bg-orange-500">
+      <Panel title="Top 10 Pending Order Value" icon={Clock} iconBg="bg-orange-500">
         {data.top_pending_customers.length === 0
           ? <p className="text-xs text-gray-400 italic py-2">No pending orders</p>
           : data.top_pending_customers.map((c, i) => (
