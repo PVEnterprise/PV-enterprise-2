@@ -19,7 +19,7 @@ const fmt = (n: number) =>
   : n >= 1_000 ? `₹${(n / 1_000).toFixed(1)}K`
   : `₹${n.toFixed(0)}`;
 
-const AUTO_SLIDE_MS = 15_000;
+const AUTO_SLIDE_MS = 60_000;
 
 interface FyPoint { month: string; invoice_value: number; pending_order_value: number; }
 
