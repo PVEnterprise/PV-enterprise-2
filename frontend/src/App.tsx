@@ -19,6 +19,8 @@ import DemosPage from '@/pages/DemosPage';
 import DemoRequestDetailPage from '@/pages/DemoRequestDetailPage';
 import AccountsPage from '@/pages/AccountsPage';
 import ProcurementPage from '@/pages/ProcurementPage';
+import LogVisitPage from '@/pages/LogVisitPage';
+import SalesPerformancePage from '@/pages/SalesPerformancePage';
 import Layout from '@/components/Layout';
 import SessionExpiredModal from '@/components/SessionExpiredModal';
 
@@ -117,6 +119,10 @@ const HomePage = () => {
   
   if (user?.role_name === 'accountant') {
     return <Navigate to="/accounts" replace />;
+  }
+
+  if (user?.role_name === 'data_entry') {
+    return <Navigate to="/log-visit" replace />;
   }
   
   // Executives and admins go to dashboard if they have permission
@@ -253,13 +259,29 @@ function AppRoutes() {
             </PermissionRoute>
           } 
         />
-        <Route 
-          path="procurement" 
+        <Route
+          path="procurement"
           element={
             <RoleRoute allowedRoles={['executive']}>
               <ProcurementPage />
             </RoleRoute>
-          } 
+          }
+        />
+        <Route
+          path="log-visit"
+          element={
+            <PermissionRoute permission="field_visit:create">
+              <LogVisitPage />
+            </PermissionRoute>
+          }
+        />
+        <Route
+          path="sales-performance"
+          element={
+            <PermissionRoute permission="reporting:view">
+              <SalesPerformancePage />
+            </PermissionRoute>
+          }
         />
       </Route>
     </Routes>

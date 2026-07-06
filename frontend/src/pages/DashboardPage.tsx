@@ -7,10 +7,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import api from '@/services/api';
-import { DashboardStats } from '@/types';
+import { DashboardStats, ManagementSummary } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 import {
   ShoppingCart, DollarSign, FileText, BarChart2,
-  Package, Users, TrendingUp, AlertCircle, Send, UserPlus, Clock
+  Package, Users, TrendingUp, AlertCircle, Send, UserPlus, Clock, Activity
 } from 'lucide-react';
 
 const fmt = (n: number) =>
@@ -260,15 +261,67 @@ function CustomerView({ data }: { data: CustomerInsights; }) {
   );
 }
 
+function SalesPerformanceView({ data }: { data: ManagementSummary; }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+      <Panel title="Top Reps by Visits — This Month" icon={Activity} iconBg="bg-teal-500">
+        {data.reps.length === 0
+          ? <p className="text-xs text-gray-400 italic py-2">No sales reps found</p>
+          : data.reps.map((r, i) => (
+            <Row
+              key={r.sales_rep_id} rank={i + 1}
+              primary={r.sales_rep_name}
+              secondary={r.city}
+              right={`${r.visit_count} visits`}
+              accent="blue"
+            />
+          ))
+        }
+      </Panel>
+      <Panel title="Orders by Rep — This Month" icon={ShoppingCart} iconBg="bg-green-500">
+        {data.reps.length === 0
+          ? <p className="text-xs text-gray-400 italic py-2">No sales reps found</p>
+          : data.reps.map((r, i) => (
+            <Row
+              key={r.sales_rep_id} rank={i + 1}
+              primary={r.sales_rep_name}
+              secondary={`${r.orders_completed} completed`}
+              right={`${r.orders_created} orders`}
+              accent="green"
+            />
+          ))
+        }
+      </Panel>
+      <Panel title="Rollup by City" icon={Users} iconBg="bg-purple-500">
+        {data.by_city.length === 0
+          ? <p className="text-xs text-gray-400 italic py-2">No city data</p>
+          : data.by_city.map((c, i) => (
+            <Row
+              key={c.city} rank={i + 1}
+              primary={c.city}
+              secondary={`${c.total_reps} reps · ${c.total_orders} orders`}
+              right={`${c.total_visits} visits`}
+              accent="purple"
+            />
+          ))
+        }
+      </Panel>
+    </div>
+  );
+}
+
 const VIEW_META = [
   { label: 'Revenue',   dotColor: 'bg-blue-600',   textColor: 'text-blue-700',   icon: BarChart2 },
   { label: 'Inventory', dotColor: 'bg-green-600',  textColor: 'text-green-700',  icon: Package   },
   { label: 'Customers', dotColor: 'bg-purple-600', textColor: 'text-purple-700', icon: Users     },
+  { label: 'Sales',     dotColor: 'bg-teal-600',    textColor: 'text-teal-700',   icon: Activity  },
 ] as const;
 
 export default function DashboardPage() {
   const [view, setView] = useState(0);
   const [timerKey, setTimerKey] = useState(0);
+  const { user } = useAuth();
+  const canViewReporting = user?.role?.permissions?.['reporting:view'] === true;
 
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
@@ -286,6 +339,14 @@ export default function DashboardPage() {
     queryKey: ['dashboard-customer-insights'],
     queryFn: () => api.getDashboardCustomerInsights(),
   });
+  const { data: salesPerformance } = useQuery<ManagementSummary>({
+    queryKey: ['dashboard-sales-performance'],
+    queryFn: () => api.getManagementSummary(),
+    enabled: canViewReporting,
+  });
+
+  const viewMeta = canViewReporting ? VIEW_META : VIEW_META.slice(0, 3);
+  const viewCount = viewMeta.length;
 
   const goTo = useCallback((idx: number) => {
     setView(idx);
@@ -293,9 +354,9 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => setView(prev => (prev + 1) % 3), AUTO_SLIDE_MS);
+    const timer = setInterval(() => setView(prev => (prev + 1) % viewCount), AUTO_SLIDE_MS);
     return () => clearInterval(timer);
-  }, [timerKey]);
+  }, [timerKey, viewCount]);
 
   if (isLoading) {
     return (
@@ -354,12 +415,26 @@ export default function DashboardPage() {
               )
             }
           </div>
+
+          {/* View 3: Sales Performance (executive only) */}
+          {canViewReporting && (
+            <div className="w-full flex-shrink-0 h-full">
+              {salesPerformance
+                ? <SalesPerformanceView data={salesPerformance} />
+                : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600" />
+                  </div>
+                )
+              }
+            </div>
+          )}
         </div>
       </div>
 
       {/* Dot navigation */}
       <div className="flex items-center justify-center gap-6 pt-1">
-        {VIEW_META.map((m, i) => (
+        {viewMeta.map((m, i) => (
           <button
             key={i}
             onClick={() => goTo(i)}
