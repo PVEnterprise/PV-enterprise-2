@@ -426,6 +426,50 @@ class ApiService {
   receiveProcurement = async (id: string, data: any) => {
     return (await this.client.post(`/procurement/${id}/receive`, data)).data;
   }
+
+  // Leads
+  getLeads = async (params: { city: string; search?: string; status?: string; skip?: number; limit?: number }) => {
+    return (await this.client.get('/leads/', { params })).data;
+  }
+  createLead = async (data: any) => {
+    return (await this.client.post('/leads/', data)).data;
+  }
+  updateLead = async (id: string, data: any) => {
+    return (await this.client.put(`/leads/${id}`, data)).data;
+  }
+  getLeadCities = async (search?: string) => {
+    return (await this.client.get('/leads/cities', { params: { search } })).data;
+  }
+
+  // Field Visits
+  getFieldVisits = async (params?: any) => {
+    return (await this.client.get('/field-visits/', { params })).data;
+  }
+  createFieldVisit = async (data: any) => {
+    return (await this.client.post('/field-visits/', data)).data;
+  }
+  updateFieldVisit = async (id: string, data: any) => {
+    return (await this.client.put(`/field-visits/${id}`, data)).data;
+  }
+  getSalesRepsForVisitLogging = async (search?: string) => {
+    return (await this.client.get('/field-visits/sales-reps', { params: { search } })).data;
+  }
+
+  // Attendance
+  getAttendance = async (params?: any) => {
+    return (await this.client.get('/attendance/', { params })).data;
+  }
+  createAttendance = async (data: any) => {
+    return (await this.client.post('/attendance/', data)).data;
+  }
+
+  // Reporting
+  getRepSummary = async (params: { sales_rep_id: string; month?: number; year?: number }) => {
+    return (await this.client.get('/reporting/rep-summary', { params })).data;
+  }
+  getManagementSummary = async (params?: { month?: number; year?: number; city?: string }) => {
+    return (await this.client.get('/reporting/management-summary', { params })).data;
+  }
 }
 
 export default new ApiService();

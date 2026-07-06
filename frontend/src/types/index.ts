@@ -11,6 +11,7 @@ export interface User {
   role_name?: string; // Role name for quick access
   phone?: string;
   department?: string;
+  city?: string;
   is_active: boolean;
   last_login?: string | null;
   created_at: string;
@@ -300,4 +301,87 @@ export interface AuthResponse {
   token_type: string;
 }
 
-export type RoleName = 'executive' | 'sales_rep' | 'decoder' | 'quoter' | 'inventory_admin';
+export type RoleName = 'executive' | 'sales_rep' | 'decoder' | 'quoter' | 'inventory_admin' | 'accountant' | 'data_entry';
+
+export interface Lead {
+  id: string;
+  name: string;
+  city: string;
+  hospital_name?: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  state?: string;
+  notes?: string;
+  status: 'active' | 'converted' | 'dropped';
+  converted_customer_id?: string;
+}
+
+export interface FieldVisit {
+  id: string;
+  sales_rep_id: string;
+  visit_date: string;
+  customer_id?: string;
+  lead_id?: string;
+  customer_name?: string;
+  lead_name?: string;
+  in_time?: string;
+  out_time?: string;
+  notes?: string;
+}
+
+export interface SalesAttendance {
+  id: string;
+  sales_rep_id: string;
+  attendance_date: string;
+  status: 'present' | 'leave' | 'holiday';
+  notes?: string;
+}
+
+export interface RepSummaryOrder {
+  order_number: string;
+  customer_name: string;
+  workflow_stage: string;
+  created_at: string;
+  po_amount?: number;
+}
+
+export interface RepSummary {
+  sales_rep_id: string;
+  sales_rep_name: string;
+  city?: string;
+  month: number;
+  year: number;
+  visit_count: number;
+  leave_days: number;
+  holiday_days: number;
+  orders_created: number;
+  orders_by_stage: Record<string, number>;
+  orders: RepSummaryOrder[];
+}
+
+export interface RepRollupItem {
+  sales_rep_id: string;
+  sales_rep_name: string;
+  city?: string;
+  visit_count: number;
+  leave_days: number;
+  orders_created: number;
+  orders_completed: number;
+  pending_order_value: number;
+}
+
+export interface CityRollupItem {
+  city: string;
+  total_visits: number;
+  total_reps: number;
+  total_orders: number;
+}
+
+export interface ManagementSummary {
+  month: number;
+  year: number;
+  reps: RepRollupItem[];
+  by_city: CityRollupItem[];
+}

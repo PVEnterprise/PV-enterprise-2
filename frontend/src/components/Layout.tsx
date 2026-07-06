@@ -16,7 +16,9 @@ import {
   DollarSign,
   Beaker,
   Landmark,
-  ShoppingBag
+  ShoppingBag,
+  MapPin,
+  Activity
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -87,6 +89,18 @@ export default function Layout() {
       href: '/procurement',
       icon: ShoppingBag,
       roleOnly: 'executive'
+    },
+    {
+      name: 'Log Visit',
+      href: '/log-visit',
+      icon: MapPin,
+      permission: 'field_visit:create'
+    },
+    {
+      name: 'Sales Performance',
+      href: '/sales-performance',
+      icon: Activity,
+      permission: 'reporting:view'
     },
   ];
 
