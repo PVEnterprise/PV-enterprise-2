@@ -30,6 +30,7 @@ class Customer(BaseModel):
     creator = relationship("User", back_populates="created_customers", foreign_keys=[created_by])
     orders = relationship("Order", back_populates="customer")
     demo_requests = relationship("DemoRequest", back_populates="hospital")
+    field_visits = relationship("FieldVisit", back_populates="customer")
     
     def __repr__(self) -> str:
         return f"<Customer {self.hospital_name}>"

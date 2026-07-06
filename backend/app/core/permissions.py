@@ -15,6 +15,7 @@ class Role(str, Enum):
     QUOTER = "quoter"
     INVENTORY_ADMIN = "inventory_admin"
     ACCOUNTANT = "accountant"
+    DATA_ENTRY = "data_entry"
 
 
 class Permission(str, Enum):
@@ -83,6 +84,23 @@ class Permission(str, Enum):
     PROCUREMENT_UPDATE = "procurement:update"
     PROCUREMENT_DELETE = "procurement:delete"
 
+    # Lead permissions
+    LEAD_CREATE = "lead:create"
+    LEAD_READ = "lead:read"
+    LEAD_UPDATE = "lead:update"
+
+    # Field visit permissions
+    FIELD_VISIT_CREATE = "field_visit:create"
+    FIELD_VISIT_READ = "field_visit:read"
+    FIELD_VISIT_READ_ALL = "field_visit:read_all"
+
+    # Attendance permissions
+    ATTENDANCE_CREATE = "attendance:create"
+    ATTENDANCE_READ = "attendance:read"
+
+    # Reporting permissions (field visit / sales performance reporting)
+    REPORTING_VIEW = "reporting:view"
+
 
 # Role-based permission mapping
 ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
@@ -150,18 +168,33 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         Permission.PROCUREMENT_READ,
         Permission.PROCUREMENT_UPDATE,
         Permission.PROCUREMENT_DELETE,
+
+        # Field visit tracking - full access
+        Permission.LEAD_CREATE,
+        Permission.LEAD_READ,
+        Permission.LEAD_UPDATE,
+        Permission.FIELD_VISIT_CREATE,
+        Permission.FIELD_VISIT_READ,
+        Permission.FIELD_VISIT_READ_ALL,
+        Permission.ATTENDANCE_CREATE,
+        Permission.ATTENDANCE_READ,
+        Permission.REPORTING_VIEW,
     },
-    
+
     Role.SALES_REP: {
         # Can create orders and view own orders
         Permission.ORDER_CREATE,
         Permission.ORDER_READ,  # Limited to own orders
-        
+
         # Can only view customers (read-only)
         Permission.CUSTOMER_READ,
-        
+
         # Basic dashboard view
         Permission.DASHBOARD_VIEW,
+
+        # Field visit tracking - read own visits/attendance only (no create; data_entry keys these in for now)
+        Permission.FIELD_VISIT_READ,
+        Permission.ATTENDANCE_READ,
     },
     
     Role.DECODER: {
@@ -240,6 +273,25 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         
         # Dashboard access
         Permission.DASHBOARD_VIEW,
+    },
+
+    Role.DATA_ENTRY: {
+        # Look up existing hospitals when logging a visit
+        Permission.CUSTOMER_READ,
+
+        # Manage leads (hospitals/surgeons not yet customers)
+        Permission.LEAD_CREATE,
+        Permission.LEAD_READ,
+        Permission.LEAD_UPDATE,
+
+        # Key in field visits and attendance on behalf of sales reps.
+        # READ_ALL is needed (not just READ) because data_entry has no visits
+        # of their own — they need to see every rep's visits to avoid duplicate entry.
+        Permission.FIELD_VISIT_CREATE,
+        Permission.FIELD_VISIT_READ,
+        Permission.FIELD_VISIT_READ_ALL,
+        Permission.ATTENDANCE_CREATE,
+        Permission.ATTENDANCE_READ,
     },
 }
 
@@ -352,11 +404,24 @@ def can_approve(user_role: str) -> bool:
 def can_access_all_orders(user_role: str) -> bool:
     """
     Check if user can access all orders or only their own.
-    
+
     Args:
         user_role: User's role as string
-        
+
     Returns:
         True if user can access all orders, False if limited to own orders
     """
     return has_permission(user_role, Permission.ORDER_READ_ALL)
+
+
+def can_access_all_field_visits(user_role: str) -> bool:
+    """
+    Check if user can access all sales reps' field visits/attendance or only their own.
+
+    Args:
+        user_role: User's role as string
+
+    Returns:
+        True if user can access all reps' records, False if limited to own records
+    """
+    return has_permission(user_role, Permission.FIELD_VISIT_READ_ALL)
