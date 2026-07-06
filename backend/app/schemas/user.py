@@ -48,6 +48,7 @@ class UserCreate(UserBase):
     """Schema for creating a new user."""
     password: str = Field(..., min_length=8)
     role_id: UUID
+    city: Optional[str] = Field(None, max_length=100)
 
 
 class UserUpdate(BaseModel):
@@ -56,6 +57,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=255)
     role_id: Optional[UUID] = None
     is_active: Optional[bool] = None
+    city: Optional[str] = Field(None, max_length=100)
 
 
 class UserPasswordUpdate(BaseModel):
@@ -69,10 +71,11 @@ class UserResponse(UserBase):
     id: UUID
     role_id: UUID
     is_active: bool
+    city: Optional[str] = None
     last_login: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -32,7 +32,8 @@ def create_user(
         email=user_data.email,
         hashed_password=get_password_hash(user_data.password),
         full_name=user_data.full_name,
-        role_id=user_data.role_id
+        role_id=user_data.role_id,
+        city=user_data.city
     )
     db.add(user)
     db.commit()
@@ -43,12 +44,13 @@ def create_user(
 @router.get("/")
 def list_users(
     search: str = Query(None, description="Search by name or email"),
+    role: str = Query(None, description="Filter by role name, e.g. 'sales_rep'"),
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(Permission.USER_READ))
 ):
     """List all users with role information."""
     query = db.query(User).options(joinedload(User.role))
-    
+
     # Apply search filter
     if search:
         search_filter = f"%{search}%"
@@ -56,9 +58,12 @@ def list_users(
             (User.full_name.ilike(search_filter)) |
             (User.email.ilike(search_filter))
         )
-    
+
+    if role:
+        query = query.join(Role, User.role_id == Role.id).filter(Role.name == role)
+
     users = query.all()
-    
+
     # Build response with name and role_name for frontend compatibility
     result = []
     for user in users:
@@ -69,6 +74,7 @@ def list_users(
             "full_name": user.full_name,
             "role_id": str(user.role_id),
             "role_name": user.role.name if user.role else None,  # Frontend expects 'role_name'
+            "city": user.city,
             "is_active": user.is_active,
             "last_login": user.last_login,
             "created_at": user.created_at,

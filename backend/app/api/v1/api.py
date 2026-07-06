@@ -3,7 +3,7 @@ API v1 router that includes all endpoint routers.
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, orders, inventory, customers, quotations, invoices, dashboard, users, attachments, dispatches, outstanding, price_lists, demo_requests, demo_items, payments, procurement
+from app.api.v1.endpoints import auth, orders, inventory, customers, quotations, invoices, dashboard, users, attachments, dispatches, outstanding, price_lists, demo_requests, demo_items, payments, procurement, leads, field_visits, attendance, reporting
 
 
 api_router = APIRouter()
@@ -25,3 +25,7 @@ api_router.include_router(demo_requests.router, prefix="/demo-requests", tags=["
 api_router.include_router(demo_items.router, prefix="/demo-requests", tags=["Demo Items"])
 api_router.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api_router.include_router(procurement.router, prefix="/procurement", tags=["Procurement"])
+api_router.include_router(leads.router, prefix="/leads", tags=["Leads"])
+api_router.include_router(field_visits.router, prefix="/field-visits", tags=["Field Visits"])
+api_router.include_router(attendance.router, prefix="/attendance", tags=["Attendance"])
+api_router.include_router(reporting.router, prefix="/reporting", tags=["Reporting"])
