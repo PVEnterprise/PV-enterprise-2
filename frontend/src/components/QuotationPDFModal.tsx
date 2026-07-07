@@ -22,6 +22,10 @@ interface QuotationPDFModalProps {
   onSubmit: (data: QuotationPDFFormData) => void;
   isSubmitting?: boolean;
   title?: string;
+  // When provided, shows an editable "Quotation Date" field that persists
+  // immediately on change (independent of Download PDF).
+  quotationDate?: string;
+  onQuotationDateChange?: (date: string) => void;
 }
 
 const DEFAULT_TERMS = `1) Delivery within 10-12 weeks after receiving the confirmed Purchase Order and payment.
@@ -49,6 +53,8 @@ export default function QuotationPDFModal({
   onSubmit,
   isSubmitting = false,
   title = 'Generate Estimate PDF',
+  quotationDate,
+  onQuotationDateChange,
 }: QuotationPDFModalProps) {
   const [validTill, setValidTill] = useState(defaultValidTill());
   const [bankAccountName, setBankAccountName] = useState(DEFAULT_BANK.bank_account_name);
@@ -88,6 +94,22 @@ export default function QuotationPDFModal({
 
         {/* Content */}
         <div className="px-4 py-3 space-y-4 overflow-y-auto">
+          {/* Quotation Date */}
+          {onQuotationDateChange && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                Quotation Date
+              </label>
+              <input
+                type="date"
+                value={quotationDate || ''}
+                onChange={(e) => onQuotationDateChange(e.target.value)}
+                className="input w-full text-sm"
+                title="Quotation date — defaults to order creation date, saved automatically when changed"
+              />
+            </div>
+          )}
+
           {/* Valid Until */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">

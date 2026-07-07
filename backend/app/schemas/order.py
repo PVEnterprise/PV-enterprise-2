@@ -166,9 +166,10 @@ class OrderSummary(BaseModel):
     workflow_stage: str
     priority: str
     total_items: int
+    quotation_date: Optional[date] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[UUID] = None
     updated_by: Optional[UUID] = None
-    
+
     model_config = ConfigDict(from_attributes=True)

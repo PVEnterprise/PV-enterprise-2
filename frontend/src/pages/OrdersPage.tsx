@@ -297,7 +297,7 @@ export default function OrdersPage() {
       key: 'created_at',
       label: 'Date',
       width: '15%',
-      render: (value: string) => new Date(value).toLocaleDateString(),
+      render: (_value: string, row: Order) => new Date(row.quotation_date || row.created_at).toLocaleDateString(),
     },
   ];
 
