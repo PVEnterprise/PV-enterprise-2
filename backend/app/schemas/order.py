@@ -139,6 +139,7 @@ class OrderResponse(OrderBase):
     subject: Optional[str] = None
     price_list_id: Optional[UUID] = None
     discount_percentage: Optional[Decimal] = None
+    quotation_date: Optional[date] = None
     po_number: Optional[str] = None
     po_date: Optional[date] = None
     po_amount: Optional[Decimal] = None
@@ -165,9 +166,10 @@ class OrderSummary(BaseModel):
     workflow_stage: str
     priority: str
     total_items: int
+    quotation_date: Optional[date] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[UUID] = None
     updated_by: Optional[UUID] = None
-    
+
     model_config = ConfigDict(from_attributes=True)

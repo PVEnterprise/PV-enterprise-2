@@ -5,7 +5,7 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session, joinedload
-from datetime import datetime
+from datetime import datetime, date
 
 from app.db.session import get_db
 from app.api.deps import get_current_user, PermissionChecker
@@ -1283,6 +1283,52 @@ def request_po_approval(
     return {"message": "PO approval requested successfully"}
 
 
+@router.patch("/{order_id}/quotation-date", response_model=dict)
+def update_quotation_date(
+    order_id: UUID,
+    quotation_date: Optional[str] = Body(None, embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update the date shown on the quotation document for an order.
+    Persists immediately (independent of Save Draft / Save & Submit) so the
+    change is not lost if the user navigates away without saving the rest
+    of the quotation. Defaults to the order's creation date until changed.
+    Available for quoter and executive roles.
+    """
+    if current_user.role_name not in ['quoter', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only quoters and executives can update the quotation date"
+        )
+
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    if quotation_date:
+        try:
+            order.quotation_date = date.fromisoformat(quotation_date)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="quotation_date must be in YYYY-MM-DD format"
+            )
+    else:
+        order.quotation_date = None
+
+    db.commit()
+
+    return {
+        "message": "Quotation date updated successfully",
+        "quotation_date": order.quotation_date.isoformat() if order.quotation_date else None,
+    }
+
+
 @router.post("/{order_id}/quotation-draft", response_model=dict)
 def save_quotation_draft(
     order_id: UUID,
@@ -1346,6 +1392,11 @@ def save_quotation_draft(
     # Save subject
     if 'subject' in quotation_data:
         order.subject = quotation_data['subject'] or None
+
+    # Save quotation date (defaults to order creation date on the frontend;
+    # persisted here too in case it was changed as part of the draft save)
+    if 'quotation_date' in quotation_data:
+        order.quotation_date = date.fromisoformat(quotation_data['quotation_date']) if quotation_data['quotation_date'] else None
 
     add_order_action(
         order=order,
@@ -1430,7 +1481,12 @@ def mark_quotation_generated(
     # Save subject
     if 'subject' in quotation_data:
         order.subject = quotation_data['subject'] or None
-    
+
+    # Save quotation date (defaults to order creation date on the frontend;
+    # persisted here too in case it was changed as part of generating the quotation)
+    if 'quotation_date' in quotation_data:
+        order.quotation_date = date.fromisoformat(quotation_data['quotation_date']) if quotation_data['quotation_date'] else None
+
     # Insert QuotationLog — sequence atomically assigns the next quotation_number
     from datetime import datetime as dt
     log_entry = QuotationLog(

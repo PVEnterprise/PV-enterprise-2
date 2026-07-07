@@ -278,6 +278,9 @@ class ApiService {
   saveQuotationDraft = async (orderId: string, data: any) => {
     return (await this.client.post(`/orders/${orderId}/quotation-draft`, data)).data;
   }
+  updateQuotationDate = async (orderId: string, quotationDate: string) => {
+    return (await this.client.patch(`/orders/${orderId}/quotation-date`, { quotation_date: quotationDate })).data;
+  }
   
   // Generate quotation preview PDF with custom prices
   generateQuotationPreviewPDF = async (orderId: string, data: any) => {

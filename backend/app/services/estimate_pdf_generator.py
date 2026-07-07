@@ -331,7 +331,10 @@ class EstimatePDFGenerator:
         
         # Use quotation_number if set (per-user auto-increment), else fall back to order_number
         estimate_number = str(self.quotation_number) if self.quotation_number else self.order.order_number
-        estimate_date = datetime.now().strftime('%d.%m.%Y')
+        # Quotation date defaults to the order's creation date until the user
+        # explicitly sets one on the Generate Quotation page.
+        quotation_date = getattr(self.order, 'quotation_date', None) or self.order.created_at.date()
+        estimate_date = quotation_date.strftime('%d.%m.%Y')
         place_of_supply = self.customer.state or 'N/A'
         
         valid_until_str = self.expiry_date.strftime('%d.%m.%Y') if self.expiry_date else ''

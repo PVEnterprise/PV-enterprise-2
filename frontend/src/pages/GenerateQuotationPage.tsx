@@ -46,6 +46,8 @@ interface Order {
   price_list_id?: string | null;
   discount_percentage?: number | null;
   subject?: string | null;
+  quotation_date?: string | null;
+  created_at: string;
 }
 
 interface PriceListItem {
@@ -76,6 +78,7 @@ export default function GenerateQuotationPage() {
 
   const [selectedPriceListId, setSelectedPriceListId] = useState<string>('');
   const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [quotationDate, setQuotationDate] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
@@ -110,6 +113,11 @@ export default function GenerateQuotationPage() {
       if (order.price_list_id) setSelectedPriceListId(String(order.price_list_id));
       if (order.discount_percentage != null) setDiscountPercent(Number(order.discount_percentage));
       if (order.subject) setSubject(order.subject);
+      // Quotation date defaults to the order's creation date until the user changes it
+      const defaultQuotationDate = order.quotation_date
+        ? order.quotation_date.split('T')[0]
+        : order.created_at.split('T')[0];
+      setQuotationDate(defaultQuotationDate);
     }
   }, [order]);
 
@@ -191,6 +199,25 @@ export default function GenerateQuotationPage() {
     [quotationItems]
   );
 
+  // Update quotation date mutation — saves immediately when the user changes the date,
+  // independent of Save as Draft / Save & Submit
+  const updateQuotationDateMutation = useMutation({
+    mutationFn: (newDate: string) => api.updateQuotationDate(orderId!, newDate),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+    onError: (error: any) => {
+      alert(`Error updating quotation date: ${error.response?.data?.detail || error.message || 'Unknown error'}`);
+    },
+  });
+
+  const handleQuotationDateChange = (newDate: string) => {
+    setQuotationDate(newDate);
+    if (newDate) {
+      updateQuotationDateMutation.mutate(newDate);
+    }
+  };
+
   // Save as draft mutation — persists data, stays on page
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -198,6 +225,7 @@ export default function GenerateQuotationPage() {
         price_list_id: selectedPriceListId || null,
         discount_percent: discountPercent,
         subject,
+        quotation_date: quotationDate || null,
         sub_total: subTotal,
         discount_amount: discountAmount,
         tax_amount: totalTaxAmount,
@@ -226,6 +254,7 @@ export default function GenerateQuotationPage() {
         price_list_id: selectedPriceListId || null,
         discount_percent: discountPercent,
         subject,
+        quotation_date: quotationDate || null,
         sub_total: subTotal,
         discount_amount: discountAmount,
         tax_amount: totalTaxAmount,
@@ -436,6 +465,18 @@ export default function GenerateQuotationPage() {
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Optional subject"
               className="input input-sm text-xs flex-1 min-w-0"
+            />
+          </div>
+
+          {/* Quotation Date */}
+          <div className="flex items-center gap-1">
+            <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Date</label>
+            <input
+              type="date"
+              value={quotationDate}
+              onChange={(e) => handleQuotationDateChange(e.target.value)}
+              className="input input-sm text-xs w-32"
+              title="Quotation date — defaults to order creation date, saved automatically when changed"
             />
           </div>
 

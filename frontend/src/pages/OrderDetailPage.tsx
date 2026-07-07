@@ -34,6 +34,7 @@ export default function OrderDetailPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showQuotationPDFModal, setShowQuotationPDFModal] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [quotationDate, setQuotationDate] = useState('');
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ['order', orderId],
@@ -313,7 +314,21 @@ export default function OrderDetailPage() {
   };
 
   const handleGetQuotation = () => {
+    setQuotationDate((order?.quotation_date || order?.created_at || '').split('T')[0]);
     setShowQuotationPDFModal(true);
+  };
+
+  // Persist quotation date as soon as it's changed — independent of Download PDF
+  const updateQuotationDateMutation = useMutation({
+    mutationFn: (date: string) => api.updateQuotationDate(orderId!, date),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+  });
+
+  const handleQuotationDateChange = (date: string) => {
+    setQuotationDate(date);
+    if (date) updateQuotationDateMutation.mutate(date);
   };
 
   const handleDownloadQuotationPDF = async (formData: QuotationPDFFormData) => {
@@ -1413,6 +1428,8 @@ export default function OrderDetailPage() {
           onSubmit={handleDownloadQuotationPDF}
           isSubmitting={isGeneratingPDF}
           title="Generate Estimate PDF"
+          quotationDate={quotationDate}
+          onQuotationDateChange={handleQuotationDateChange}
         />
       )}
     </div>

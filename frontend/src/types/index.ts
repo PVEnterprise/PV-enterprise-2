@@ -58,6 +58,7 @@ export interface Order {
   source?: string;
   sales_rep_description?: string; // Requirements from sales rep
   subject?: string;
+  quotation_date?: string; // Date shown on the quotation document; defaults to created_at until changed
   po_number?: string;
   po_date?: string;
   po_amount?: number;
