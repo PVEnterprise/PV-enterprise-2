@@ -26,7 +26,15 @@ class CustomerBasic(BaseModel):
     id: UUID
     name: str
     hospital_name: str
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SalesRepBasic(BaseModel):
+    """Basic sales rep info for nested responses."""
+    id: UUID
+    full_name: str
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -102,6 +110,7 @@ class OrderBase(BaseModel):
 class OrderCreate(OrderBase):
     """Schema for creating an order."""
     order_number: Optional[str] = None  # If provided, use it; otherwise auto-generate
+    sales_person_id: Optional[UUID] = None  # Required when creator is not a sales rep
 
 
 class OrderUpdate(BaseModel):
@@ -133,6 +142,7 @@ class OrderResponse(OrderBase):
     id: UUID
     order_number: str
     sales_rep_id: UUID
+    sales_rep: Optional[SalesRepBasic] = None  # Nested sales rep data
     customer: Optional[CustomerBasic] = None  # Nested customer data
     status: str
     workflow_stage: str

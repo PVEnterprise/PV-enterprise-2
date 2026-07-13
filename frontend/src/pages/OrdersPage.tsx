@@ -30,7 +30,7 @@ export default function OrdersPage() {
   const [itemsPerPage] = useState(100); // Match backend default
   const [formError, setFormError] = useState('');
   const [editOrderError, setEditOrderError] = useState('');
-  const { data: nextOrderNumberData } = useQuery<{ order_number: string }>({
+  const { data: nextOrderNumberData, isLoading: isOrderNumberLoading } = useQuery<{ order_number: string }>({
     queryKey: ['next-order-number'],
     queryFn: () => api.getNextOrderNumber(),
     enabled: showForm,
@@ -38,6 +38,19 @@ export default function OrdersPage() {
   });
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isSalesRep = user?.role_name === 'sales_rep';
+
+  const { data: salesReps } = useQuery<{ value: string; label: string }[]>({
+    queryKey: ['sales-reps'],
+    queryFn: async () => {
+      const employees = await api.getEmployees();
+      return employees
+        .filter((e: any) => e.role_name === 'sales_rep')
+        .map((e: any) => ({ value: e.id, label: e.name || e.full_name }));
+    },
+    enabled: showForm && !isSalesRep,
+    staleTime: 0,
+  });
 
   const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: ['orders', selectedStatus, currentPage, debouncedSearch],
@@ -80,7 +93,8 @@ export default function OrdersPage() {
       label: 'Order ID',
       type: 'text',
       required: true,
-      placeholder: 'Auto-generated order ID',
+      placeholder: isOrderNumberLoading ? 'Generating order number...' : 'Auto-generated order ID',
+      disabled: isOrderNumberLoading,
     },
     {
       name: 'customer_id',
@@ -90,6 +104,21 @@ export default function OrdersPage() {
       fetchOptions: fetchCustomers,
       placeholder: 'Search customer...',
     },
+    isSalesRep
+      ? {
+          name: 'sales_person_id',
+          label: 'Sales Person',
+          type: 'text',
+          disabled: true,
+          defaultValue: user?.full_name || user?.name || '',
+        }
+      : {
+          name: 'sales_person_id',
+          label: 'Sales Person',
+          type: 'select',
+          placeholder: 'Select sales person (optional)',
+          options: salesReps || [],
+        },
     {
       name: 'notes',
       label: 'Additional Notes',
@@ -187,6 +216,7 @@ export default function OrdersPage() {
         order_number: data.order_number || undefined,
         customer_id: data.customer_id,
         notes: data.notes,
+        sales_person_id: isSalesRep ? undefined : (data.sales_person_id || undefined),
       };
       
       // Create the order first
@@ -400,6 +430,7 @@ export default function OrdersPage() {
 
       {showForm && (
         <DynamicForm
+          key={isOrderNumberLoading ? 'pending' : 'ready'}
           title="Order"
           fields={getOrderFields()}
           onSubmit={handleSubmit}
