@@ -9,7 +9,7 @@ from datetime import datetime, date
 
 from app.db.session import get_db
 from app.api.deps import get_current_user, PermissionChecker
-from app.core.permissions import Permission, can_access_all_orders
+from app.core.permissions import Permission, Role, can_access_all_orders
 from app.models.user import User
 from app.models.order import Order, OrderItem
 from app.models.customer import Customer
@@ -100,11 +100,27 @@ def create_order(
     else:
         final_order_number = generate_order_number(db)
 
+    # Determine sales rep: sales reps are always attributed to themselves.
+    # Other creators (e.g. executives) may optionally assign a sales rep;
+    # if left blank, the order defaults to the creator, as before.
+    if current_user.role_name == Role.SALES_REP.value:
+        final_sales_rep_id = current_user.id
+    elif order_data.sales_person_id:
+        sales_person = db.query(User).filter(User.id == order_data.sales_person_id).first()
+        if not sales_person or sales_person.role_name != Role.SALES_REP.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Selected sales person must have the Sales Rep role"
+            )
+        final_sales_rep_id = sales_person.id
+    else:
+        final_sales_rep_id = current_user.id
+
     # Create order
     order = Order(
         order_number=final_order_number,
         customer_id=order_data.customer_id,
-        sales_rep_id=current_user.id,
+        sales_rep_id=final_sales_rep_id,
         status="draft",
         workflow_stage="order_request",
         priority=order_data.priority,
