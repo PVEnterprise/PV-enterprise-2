@@ -3,7 +3,7 @@
  * Shows read-only dispatch information including items and tracking details
  */
 import { useState } from 'react';
-import { X, Truck, Package, FileText, Download, Trash2 } from 'lucide-react';
+import { X, Truck, Package, Eye, Download, Trash2 } from 'lucide-react';
 import { Dispatch } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
@@ -39,7 +39,7 @@ export default function DispatchDetailModal({
     }
   };
 
-  const handleDownloadInvoice = async () => {
+  const handlePreviewInvoice = async () => {
     try {
       const response = await fetch(`/api/v1/dispatches/${dispatch.id}/invoice/pdf`, {
         headers: {
@@ -48,21 +48,15 @@ export default function DispatchDetailModal({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to download invoice');
+        throw new Error('Failed to preview invoice');
       }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Invoice_${dispatch.dispatch_number}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      window.open(url, '_blank');
     } catch (error) {
-      console.error('Error downloading invoice:', error);
-      alert('Failed to download invoice. Please try again.');
+      console.error('Error previewing invoice:', error);
+      alert('Failed to preview invoice. Please try again.');
     }
   };
 
@@ -322,9 +316,9 @@ export default function DispatchDetailModal({
         <div className="px-4 py-2.5 border-t border-gray-200 bg-gray-50 flex justify-between items-center flex-shrink-0">
           {canDownload ? (
             <div className="flex gap-2">
-              <button onClick={handleDownloadInvoice} className="btn btn-primary btn-sm flex items-center gap-1.5">
-                <FileText size={14} />
-                Download Invoice
+              <button onClick={handlePreviewInvoice} className="btn btn-primary btn-sm flex items-center gap-1.5">
+                <Eye size={14} />
+                Preview Invoice
               </button>
               <button onClick={handleDownloadDC} className="btn btn-secondary btn-sm flex items-center gap-1.5">
                 <Download size={14} />
