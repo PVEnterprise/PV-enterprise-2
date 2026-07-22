@@ -167,6 +167,9 @@ class ApiService {
   createInvoice = async (data: any) => {
     return (await this.client.post('/invoices/', data)).data;
   }
+  getInvoicedDispatches = async () => {
+    return (await this.client.get('/dispatches/invoices')).data;
+  }
 
   // Dashboard
   getDashboardStats = async () => {

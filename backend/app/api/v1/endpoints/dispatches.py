@@ -12,7 +12,7 @@ from app.models.dispatch import Dispatch, DispatchItem
 from app.models.order import Order, OrderItem
 from app.models.inventory import Inventory
 from app.models.user import User
-from app.schemas.dispatch import DispatchCreate, DispatchResponse
+from app.schemas.dispatch import DispatchCreate, DispatchResponse, InvoiceListItem
 from app.api.deps import get_db, get_current_user
 from app.utils.order_tracking import add_order_action
 
@@ -235,6 +235,43 @@ def create_dispatch(
     ).filter(Dispatch.id == dispatch.id).first()
     
     return dispatch
+
+
+@router.get("/invoices", response_model=List[InvoiceListItem])
+def list_invoiced_dispatches(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    List all dispatches that have a generated invoice, latest first.
+    Available to executive, quoter, and decoder roles.
+    """
+    if current_user.role_name not in ['executive', 'quoter', 'decoder']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to view invoices"
+        )
+
+    dispatches = db.query(Dispatch).options(
+        joinedload(Dispatch.order).joinedload(Order.customer)
+    ).filter(
+        Dispatch.invoice_number.isnot(None),
+        Dispatch.invoice_number != ''
+    ).order_by(Dispatch.created_at.desc()).all()
+
+    return [
+        InvoiceListItem(
+            dispatch_id=d.id,
+            dispatch_number=d.dispatch_number,
+            invoice_number=d.invoice_number,
+            dispatch_date=d.dispatch_date,
+            order_id=d.order_id,
+            order_number=d.order.order_number,
+            customer_name=d.order.customer.name,
+            created_at=d.created_at,
+        )
+        for d in dispatches
+    ]
 
 
 @router.get("/{dispatch_id}", response_model=DispatchResponse)

@@ -16,7 +16,8 @@ import {
   DollarSign,
   Beaker,
   Landmark,
-  ShoppingBag
+  ShoppingBag,
+  FileText
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -64,9 +65,15 @@ export default function Layout() {
       icon: DollarSign,
       roles: ['executive', 'quoter']
     },
-    { 
-      name: 'Customers', 
-      href: '/customers', 
+    {
+      name: 'Invoices',
+      href: '/invoices',
+      icon: FileText,
+      roles: ['executive', 'quoter', 'decoder']
+    },
+    {
+      name: 'Customers',
+      href: '/customers',
       icon: Users,
       permission: 'customer:read'
     },
