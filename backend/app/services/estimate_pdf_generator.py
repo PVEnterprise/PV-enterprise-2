@@ -19,6 +19,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 from app.models.order import Order
 from app.models.customer import Customer
+from app.utils.tax import get_tax_label
 
 
 # ---------- Register font with ₹ symbol ----------
@@ -409,15 +410,16 @@ class EstimatePDFGenerator:
         discount_percentage = float(getattr(self.order, 'discount_percentage', 0) or 0)
         show_discount_col = discount_percentage > 0
         num_cols = 10 if show_discount_col else 9
+        tax_label = get_tax_label(self.customer.state)
 
         if show_discount_col:
             header = [
-                ['Sr No', 'Item Description', 'HSN/SAC', 'Unit Price', 'Qty', 'Discount\n%', 'Amount', 'IGST', '', 'Total'],
+                ['Sr No', 'Item Description', 'HSN/SAC', 'Unit Price', 'Qty', 'Discount\n%', 'Amount', tax_label, '', 'Total'],
                 ['', '', '', '', '', '', '', 'Tax%', 'Amt', '']
             ]
         else:
             header = [
-                ['Sr No', 'Item Description', 'HSN/SAC', 'Unit Price', 'Qty', 'Amount', 'IGST', '', 'Total'],
+                ['Sr No', 'Item Description', 'HSN/SAC', 'Unit Price', 'Qty', 'Amount', tax_label, '', 'Total'],
                 ['', '', '', '', '', '', 'Tax%', 'Amt', '']
             ]
 
@@ -490,7 +492,7 @@ class EstimatePDFGenerator:
         subtotal_after_discount = subtotal - discount_amount
         grand_total = subtotal_after_discount + total_igst
 
-        igst_label = f'IGST ({float(total_igst / subtotal_after_discount * 100) if subtotal_after_discount > 0 else 0:.0f}%)'
+        igst_label = f'{tax_label} ({float(total_igst / subtotal_after_discount * 100) if subtotal_after_discount > 0 else 0:.0f}%)'
         final_rows_start = len(table_data)
 
         if not has_named_sections:
