@@ -14,6 +14,8 @@ from decimal import Decimal
 import os
 import math
 
+from app.utils.tax import get_tax_label
+
 
 # ---------- Register font with ₹ symbol ----------
 def _register_unicode_font():
@@ -209,7 +211,8 @@ class InvoicePDFGenerator:
 
     # ---------- Items Table ----------
     def _items_table(self):
-        headers = ["#", "Item & Description", "HSN/SAC", "Qty", "Rate", "IGST%", "IGST Amt", "Amount"]
+        tax_label = get_tax_label(self.order.customer.state)
+        headers = ["#", "Item & Description", "HSN/SAC", "Qty", "Rate", f"{tax_label}%", f"{tax_label} Amt", "Amount"]
         data = [headers]
         subtotal, total_igst = Decimal("0.00"), Decimal("0.00")
         num_cols = 8
@@ -269,7 +272,7 @@ class InvoicePDFGenerator:
 
         grand = subtotal + total_igst
         igst_row = len(data)
-        data.append(["IGST"] + [''] * (num_cols - 2) + [format_indian_number(total_igst)])
+        data.append([tax_label] + [''] * (num_cols - 2) + [format_indian_number(total_igst)])
         data.append(["Grand Total"] + [''] * (num_cols - 2) + [f"{RUPEE}{format_indian_number(grand)}"])
         final_totals_rows = list(range(igst_row - (0 if has_named_sections else 1), len(data)))
 
