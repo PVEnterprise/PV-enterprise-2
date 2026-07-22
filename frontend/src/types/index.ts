@@ -214,6 +214,17 @@ export interface Dispatch {
   updated_at: string;
 }
 
+export interface InvoiceListItem {
+  dispatch_id: string;
+  dispatch_number: string;
+  invoice_number: string;
+  dispatch_date: string;
+  order_id: string;
+  order_number: string;
+  customer_name: string;
+  created_at: string;
+}
+
 export interface DemoItem {
   id: string;
   demo_request_id: string;

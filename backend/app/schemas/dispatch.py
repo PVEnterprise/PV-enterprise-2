@@ -77,3 +77,17 @@ class DispatchResponse(DispatchBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class InvoiceListItem(BaseModel):
+    """Summary of an invoiced dispatch, for the Invoices module list view."""
+    dispatch_id: UUID
+    dispatch_number: str
+    invoice_number: str
+    dispatch_date: date
+    order_id: UUID
+    order_number: str
+    customer_name: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
