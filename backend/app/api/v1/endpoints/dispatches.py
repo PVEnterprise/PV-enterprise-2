@@ -257,7 +257,7 @@ def list_invoiced_dispatches(
     ).filter(
         Dispatch.invoice_number.isnot(None),
         Dispatch.invoice_number != ''
-    ).order_by(Dispatch.created_at.desc()).all()
+    ).order_by(Dispatch.dispatch_date.desc(), Dispatch.created_at.desc()).all()
 
     return [
         InvoiceListItem(
