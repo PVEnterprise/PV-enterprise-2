@@ -367,6 +367,24 @@ export default function OrderDetailPage() {
     },
   });
 
+  // Change Quotation - send order back to quotation stage for editing
+  const changeQuotationMutation = useMutation({
+    mutationFn: () => api.post(`/orders/${orderId}/change-quotation`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      navigate(`/generate-quotation?order_id=${orderId}`);
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.detail || 'Failed to change quotation');
+    },
+  });
+
+  const handleChangeQuotation = () => {
+    if (window.confirm('This will send the order back to the quotation stage for editing. Continue?')) {
+      changeQuotationMutation.mutate();
+    }
+  };
+
   // Request PO approval
   const requestPOApprovalMutation = useMutation({
     mutationFn: () => api.post(`/orders/${orderId}/request-po-approval`),
@@ -866,6 +884,16 @@ export default function OrderDetailPage() {
                     </div>
                   </>
                 )}
+                {(user?.role_name === 'executive' || user?.role_name === 'quoter') && (
+                  <button
+                    onClick={handleChangeQuotation}
+                    disabled={changeQuotationMutation.isPending}
+                    className="btn btn-secondary btn-sm w-full text-xs"
+                  >
+                    <Edit size={14} className="mr-1" />
+                    {changeQuotationMutation.isPending ? 'Reopening...' : 'Change Quotation'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -888,7 +916,18 @@ export default function OrderDetailPage() {
                     Get Quotation PDF
                   </button>
                 )}
-                
+
+                {(user?.role_name === 'executive' || user?.role_name === 'quoter') && (
+                  <button
+                    onClick={handleChangeQuotation}
+                    disabled={changeQuotationMutation.isPending}
+                    className="btn btn-secondary btn-sm w-full text-xs"
+                  >
+                    <Edit size={14} className="mr-1" />
+                    {changeQuotationMutation.isPending ? 'Reopening...' : 'Change Quotation'}
+                  </button>
+                )}
+
                 {(user?.role_name === 'sales_rep' && order.sales_rep_id === user?.id) && (
                   <>
                     <button

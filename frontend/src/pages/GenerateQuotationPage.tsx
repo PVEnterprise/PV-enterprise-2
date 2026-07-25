@@ -4,9 +4,10 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, FileText, Edit2, X, Check } from 'lucide-react';
+import { ArrowLeft, FileText, Edit2, X, Check, Plus, Search } from 'lucide-react';
 import api from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
+import { Inventory as InventoryFull } from '@/types';
 import QuotationPDFModal, { QuotationPDFFormData } from '@/components/QuotationPDFModal';
 
 interface PriceList {
@@ -31,6 +32,7 @@ interface OrderItem {
   quantity: number;
   unit_price: number;
   gst_percentage?: number;
+  section_name?: string;
 }
 
 interface Order {
@@ -96,6 +98,14 @@ export default function GenerateQuotationPage() {
   const [showPDFModal, setShowPDFModal] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
+  // Add item state
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<InventoryFull[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedCatalog, setSelectedCatalog] = useState<InventoryFull | null>(null);
+  const [addQuantity, setAddQuantity] = useState<number>(1);
+
   // Check role access
   const canAccess = user?.role_name === 'quoter' || user?.role_name === 'executive';
 
@@ -134,6 +144,27 @@ export default function GenerateQuotationPage() {
     queryFn: () => api.getPriceListItems(selectedPriceListId),
     enabled: !!selectedPriceListId,
   });
+
+  // Search inventory for the Add Item form
+  useEffect(() => {
+    const searchInventory = async () => {
+      if (catalogSearch.length > 0 && !selectedCatalog) {
+        try {
+          const data = await api.getInventory({ search: catalogSearch });
+          setSearchResults((data as any).items ?? data);
+          setShowDropdown(true);
+        } catch (error) {
+          console.error('Error searching inventory:', error);
+          setSearchResults([]);
+        }
+      } else {
+        setSearchResults([]);
+        setShowDropdown(false);
+      }
+    };
+    const debounce = setTimeout(searchInventory, 250);
+    return () => clearTimeout(debounce);
+  }, [catalogSearch, selectedCatalog]);
 
   // Calculate quotation items whenever order, price list, discount, or custom prices change
   const quotationItems = useMemo(() => {
@@ -271,6 +302,86 @@ export default function GenerateQuotationPage() {
       alert('Failed to save quotation. Please try again.');
     },
   });
+
+  // Add/remove items — persists the full item list immediately via the same
+  // endpoint the Decode screen uses.
+  const updateItemsMutation = useMutation({
+    mutationFn: (items: any[]) => api.updateDecodedItems(orderId!, items),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.detail || 'Failed to update items');
+    },
+  });
+
+  const buildItemsPayload = (opts: {
+    removeId?: string;
+    addItem?: { inventory_id: string; quantity: number; unit_price: number; gst_percentage: number };
+  } = {}) => {
+    const kept = (order?.items || [])
+      .filter((item) => item.id !== opts.removeId)
+      .map((item) => ({
+        inventory_id: item.inventory_id,
+        quantity: item.quantity,
+        unit_price: customUnitPrices[item.id] !== undefined ? customUnitPrices[item.id] : item.unit_price,
+        gst_percentage: item.gst_percentage,
+        section_name: item.section_name || null,
+      }));
+    if (opts.addItem) {
+      kept.push({ ...opts.addItem, section_name: null });
+    }
+    return kept;
+  };
+
+  const handleDeleteItem = (item: OrderItem) => {
+    if (quotationItems.length <= 1) {
+      alert('A quotation must have at least one item.');
+      return;
+    }
+    if (!window.confirm(`Remove ${item.inventory.sku} from this quotation?`)) return;
+    updateItemsMutation.mutate(buildItemsPayload({ removeId: item.id }));
+  };
+
+  const handleSelectCatalog = (item: InventoryFull) => {
+    setSelectedCatalog(item);
+    setCatalogSearch(item.sku);
+    setShowDropdown(false);
+    setSearchResults([]);
+  };
+
+  const handleCancelAddItem = () => {
+    setShowAddItem(false);
+    setSelectedCatalog(null);
+    setCatalogSearch('');
+    setAddQuantity(1);
+  };
+
+  const handleAddItem = () => {
+    if (!selectedCatalog || addQuantity <= 0) return;
+
+    let unitPrice = Number(selectedCatalog.unit_price);
+    let taxPercent = Number(selectedCatalog.tax || 5);
+    if (selectedPriceListId && priceListItems.length > 0) {
+      const pli = priceListItems.find((p) => p.inventory_id === selectedCatalog.id);
+      if (pli) {
+        unitPrice = Number(pli.unit_price);
+        taxPercent = Number(pli.tax_percentage || taxPercent);
+      }
+    }
+
+    updateItemsMutation.mutate(
+      buildItemsPayload({
+        addItem: {
+          inventory_id: selectedCatalog.id,
+          quantity: addQuantity,
+          unit_price: unitPrice,
+          gst_percentage: taxPercent,
+        },
+      }),
+      { onSuccess: handleCancelAddItem }
+    );
+  };
 
   // Update order number mutation
   const updateOrderNumberMutation = useMutation({
@@ -543,11 +654,12 @@ export default function GenerateQuotationPage() {
                   <th className="text-right p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Tax %</th>
                   <th className="text-right p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Tax Amt</th>
                   <th className="text-right p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Total</th>
+                  <th className="p-3 w-8"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {quotationItems.map((item, index) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr key={item.id} className="hover:bg-gray-50 group">
                     <td className="p-3 text-xs text-gray-900 whitespace-nowrap">{index + 1}</td>
                     <td className="p-3 text-xs font-mono text-gray-900 whitespace-nowrap">{item.inventory.sku}</td>
                     <td className="p-3 text-xs text-gray-700 max-w-[200px]">
@@ -580,8 +692,87 @@ export default function GenerateQuotationPage() {
                     <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{item.tax_percent}%</td>
                     <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.tax_amount))}</td>
                     <td className="p-3 text-xs text-right font-bold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.total_amount))}</td>
+                    <td className="p-1 text-center">
+                      <button
+                        onClick={() => handleDeleteItem(item)}
+                        disabled={updateItemsMutation.isPending}
+                        className="p-1 rounded text-gray-300 group-hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Remove item"
+                      >
+                        <X size={14} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
+
+                {/* Add Item row */}
+                <tr className="bg-gray-50/50">
+                  <td colSpan={12} className="p-2">
+                    {!showAddItem ? (
+                      <button
+                        onClick={() => setShowAddItem(true)}
+                        className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded hover:bg-blue-50 transition-colors"
+                      >
+                        <Plus size={14} />
+                        Add Item
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="relative w-64">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={catalogSearch}
+                              onChange={(e) => { setCatalogSearch(e.target.value); setSelectedCatalog(null); }}
+                              onFocus={() => catalogSearch && !selectedCatalog && setShowDropdown(true)}
+                              placeholder="Search catalog no or description…"
+                              autoFocus
+                              className="input input-sm w-full text-xs pr-7"
+                            />
+                            <Search className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" size={13} />
+                          </div>
+                          {showDropdown && searchResults.length > 0 && (
+                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-56 overflow-auto">
+                              {searchResults.map((inv, i) => (
+                                <button
+                                  key={inv.id}
+                                  onClick={() => handleSelectCatalog(inv)}
+                                  className={`w-full text-left px-2 py-1.5 hover:bg-blue-50 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                                >
+                                  <div className="font-mono text-xs font-medium text-gray-900">{inv.sku}</div>
+                                  <div className="text-xs text-gray-500 truncate">{inv.description}</div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          min={1}
+                          value={addQuantity}
+                          onChange={(e) => setAddQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="input input-sm w-16 text-xs text-center"
+                          title="Quantity"
+                        />
+                        <button
+                          onClick={handleAddItem}
+                          disabled={!selectedCatalog || updateItemsMutation.isPending}
+                          className="btn btn-primary btn-sm text-xs px-3 py-1.5 disabled:opacity-40"
+                        >
+                          <Check size={13} className="mr-1" />
+                          {updateItemsMutation.isPending ? 'Adding…' : 'Add'}
+                        </button>
+                        <button
+                          onClick={handleCancelAddItem}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                          title="Cancel"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
