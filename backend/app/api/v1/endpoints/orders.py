@@ -1531,8 +1531,60 @@ def mark_quotation_generated(
     )
     
     db.commit()
-    
+
     return {"message": "Quotation generated and submitted for approval", "quotation_number": order.quotation_number}
+
+
+@router.post("/{order_id}/change-quotation", response_model=dict)
+def change_quotation(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reopen a submitted quotation for editing.
+
+    Sends the order back to the 'quotation' stage so Generate Quotation can be
+    used again. Items, prices, discount, subject, and quotation date are left
+    untouched — they're already persisted on the order and its items, so
+    Generate Quotation picks them back up as-is.
+
+    Available from the quotation_generated (pending approval) and
+    waiting_purchase_order stages, for quoter and executive roles.
+    """
+    if current_user.role_name not in ['quoter', 'executive']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only quoters and executives can change the quotation"
+        )
+
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    if order.workflow_stage not in ("quotation_generated", "waiting_purchase_order"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Quotation can only be changed while pending approval or waiting for PO"
+        )
+
+    previous_stage = order.workflow_stage
+    order.workflow_stage = "quotation"
+    order.status = "approved"
+
+    add_order_action(
+        order=order,
+        action="Quotation Reopened for Editing",
+        user=current_user,
+        details=f"Sent back from {previous_stage.replace('_', ' ')} to the quotation stage for changes"
+    )
+
+    db.commit()
+
+    return {"message": "Order sent back to quotation stage for editing"}
 
 
 @router.post("/{order_id}/approve-po", response_model=dict)
