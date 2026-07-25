@@ -19,7 +19,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 from app.models.order import Order
 from app.models.customer import Customer
-from app.utils.tax import get_tax_label
+from app.utils.tax import get_tax_label, compute_round_off
 
 
 # ---------- Register font with ₹ symbol ----------
@@ -490,7 +490,7 @@ class EstimatePDFGenerator:
 
         discount_amount = subtotal * (Decimal(str(discount_percentage)) / 100)
         subtotal_after_discount = subtotal - discount_amount
-        grand_total = subtotal_after_discount + total_igst
+        grand_total, round_off = compute_round_off(subtotal_after_discount + total_igst)
 
         igst_label = f'{tax_label} ({float(total_igst / subtotal_after_discount * 100) if subtotal_after_discount > 0 else 0:.0f}%)'
         final_rows_start = len(table_data)
@@ -500,6 +500,9 @@ class EstimatePDFGenerator:
             if discount_percentage > 0:
                 table_data.append([f'Discount({discount_percentage:.2f}%)'] + [''] * (num_cols - 2) + [f'(-){format_indian_number(float(discount_amount))}'])
         table_data.append([igst_label] + [''] * (num_cols - 2) + [format_indian_number(float(total_igst))])
+        if round_off != 0:
+            sign = '-' if round_off < 0 else '+'
+            table_data.append(['Rounding'] + [''] * (num_cols - 2) + [f'{sign}{format_indian_number(float(abs(round_off)))}'])
         table_data.append(['Total'] + [''] * (num_cols - 2) + [f'{RUPEE}{format_indian_number(float(grand_total))}'])
 
         if show_discount_col:
