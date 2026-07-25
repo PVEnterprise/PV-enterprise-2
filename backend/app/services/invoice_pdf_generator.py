@@ -14,7 +14,7 @@ from decimal import Decimal
 import os
 import math
 
-from app.utils.tax import get_tax_label
+from app.utils.tax import get_tax_label, compute_round_off
 
 
 # ---------- Register font with ₹ symbol ----------
@@ -270,9 +270,12 @@ class InvoicePDFGenerator:
         if not has_named_sections:
             data.append(["Sub Total"] + [''] * (num_cols - 2) + [format_indian_number(subtotal)])
 
-        grand = subtotal + total_igst
+        grand, round_off = compute_round_off(subtotal + total_igst)
         igst_row = len(data)
         data.append([tax_label] + [''] * (num_cols - 2) + [format_indian_number(total_igst)])
+        if round_off != 0:
+            sign = '-' if round_off < 0 else '+'
+            data.append(["Rounding"] + [''] * (num_cols - 2) + [f"{sign}{format_indian_number(abs(round_off))}"])
         data.append(["Grand Total"] + [''] * (num_cols - 2) + [f"{RUPEE}{format_indian_number(grand)}"])
         final_totals_rows = list(range(igst_row - (0 if has_named_sections else 1), len(data)))
 

@@ -225,10 +225,16 @@ export default function GenerateQuotationPage() {
     [quotationItems]
   );
   
-  const grandTotal = useMemo(() => 
+  const preRoundGrandTotal = useMemo(() =>
     quotationItems.reduce((sum, item) => sum + Number(item.total_amount), 0),
     [quotationItems]
   );
+
+  // Round to the nearest whole rupee, matching Zoho's "Round Off" behaviour on the PDF.
+  // Snap to paise first so floating-point drift doesn't produce a fake non-zero round off.
+  const preRoundGrandTotalPaise = Math.round(preRoundGrandTotal * 100) / 100;
+  const grandTotal = Math.round(preRoundGrandTotalPaise);
+  const roundOff = Math.round((grandTotal - preRoundGrandTotalPaise) * 100) / 100;
 
   // Update quotation date mutation — saves immediately when the user changes the date,
   // independent of Save as Draft / Save & Submit
@@ -805,7 +811,14 @@ export default function GenerateQuotationPage() {
                 <span className="text-xs text-gray-600">Total Tax:</span>
                 <span className="text-xs font-medium text-gray-900">₹{formatINR(totalTaxAmount)}</span>
               </div>
-              
+
+              {roundOff !== 0 && (
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-xs text-gray-600">Rounding:</span>
+                  <span className="text-xs font-medium text-gray-900">{roundOff < 0 ? '-' : '+'}₹{formatINR(Math.abs(roundOff))}</span>
+                </div>
+              )}
+
               <div className="flex justify-between items-center py-2 border-t-2 border-gray-300 mt-2">
                 <span className="text-sm font-bold text-gray-900">Grand Total:</span>
                 <span className="text-sm font-bold text-blue-600">₹{formatINR(grandTotal)}</span>
