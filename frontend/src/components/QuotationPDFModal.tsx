@@ -26,6 +26,10 @@ interface QuotationPDFModalProps {
   // immediately on change (independent of Download PDF).
   quotationDate?: string;
   onQuotationDateChange?: (date: string) => void;
+  // Seeds the fields from the customer's last-saved values (falls back to the
+  // hardcoded defaults below for a customer with none saved yet).
+  initialBankDetails?: Partial<QuotationPDFFormData['bank_details']>;
+  initialTerms?: string;
 }
 
 const DEFAULT_TERMS = `1) Delivery within 10-12 weeks after receiving the confirmed Purchase Order and payment.
@@ -55,14 +59,16 @@ export default function QuotationPDFModal({
   title = 'Generate Estimate PDF',
   quotationDate,
   onQuotationDateChange,
+  initialBankDetails,
+  initialTerms,
 }: QuotationPDFModalProps) {
   const [validTill, setValidTill] = useState(defaultValidTill());
-  const [bankAccountName, setBankAccountName] = useState(DEFAULT_BANK.bank_account_name);
-  const [bankAccountNumber, setBankAccountNumber] = useState(DEFAULT_BANK.bank_account_number);
-  const [bankName, setBankName] = useState(DEFAULT_BANK.bank_name);
-  const [bankIfsc, setBankIfsc] = useState(DEFAULT_BANK.bank_ifsc);
-  const [bankBranch, setBankBranch] = useState(DEFAULT_BANK.bank_branch);
-  const [termsAndConditions, setTermsAndConditions] = useState(DEFAULT_TERMS);
+  const [bankAccountName, setBankAccountName] = useState(initialBankDetails?.bank_account_name || DEFAULT_BANK.bank_account_name);
+  const [bankAccountNumber, setBankAccountNumber] = useState(initialBankDetails?.bank_account_number || DEFAULT_BANK.bank_account_number);
+  const [bankName, setBankName] = useState(initialBankDetails?.bank_name || DEFAULT_BANK.bank_name);
+  const [bankIfsc, setBankIfsc] = useState(initialBankDetails?.bank_ifsc || DEFAULT_BANK.bank_ifsc);
+  const [bankBranch, setBankBranch] = useState(initialBankDetails?.bank_branch || DEFAULT_BANK.bank_branch);
+  const [termsAndConditions, setTermsAndConditions] = useState(initialTerms || DEFAULT_TERMS);
 
   const handleSubmit = () => {
     onSubmit({
