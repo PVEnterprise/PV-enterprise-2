@@ -4,6 +4,7 @@ User management endpoints.
 from typing import List
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
@@ -24,7 +25,13 @@ def create_user(
     current_user: User = Depends(PermissionChecker(Permission.USER_CREATE))
 ):
     """Create new user (executives only)."""
-    existing = db.query(User).filter(User.email == user_data.email).first()
+    # Case-insensitive, and it must stay that way: login now matches on
+    # lower(email), so allowing "Foo@x.com" alongside "foo@x.com" would create
+    # two accounts that both match one sign-in, and which one you get would be
+    # arbitrary.
+    existing = db.query(User).filter(
+        func.lower(User.email) == user_data.email
+    ).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     
@@ -123,8 +130,10 @@ def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     
     # Check if email is being changed and if it's already taken
-    if user_data.email and user_data.email != user.email:
-        existing = db.query(User).filter(User.email == user_data.email).first()
+    if user_data.email and user_data.email != user.email.lower():
+        existing = db.query(User).filter(
+            func.lower(User.email) == user_data.email
+        ).first()
         if existing:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     

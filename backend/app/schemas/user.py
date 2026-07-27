@@ -5,7 +5,18 @@ Used for request validation and response serialization.
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+
+
+def _normalise_email(value):
+    """Lower-case an email so casing never decides whether a user matches.
+
+    Email local-parts are technically case-sensitive per RFC 5321, but no mail
+    provider in practice treats them that way, and phone keyboards
+    auto-capitalise the first letter. Storing and comparing a single canonical
+    form is what stops "Foo@bar.com" and "foo@bar.com" being different accounts.
+    """
+    return value.strip().lower() if isinstance(value, str) else value
 
 
 # Role Schemas
@@ -43,6 +54,8 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str = Field(..., max_length=255)
 
+    _normalise_email = field_validator('email')(_normalise_email)
+
 
 class UserCreate(UserBase):
     """Schema for creating a new user."""
@@ -56,6 +69,8 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=255)
     role_id: Optional[UUID] = None
     is_active: Optional[bool] = None
+
+    _normalise_email = field_validator('email')(_normalise_email)
 
 
 class UserPasswordUpdate(BaseModel):
@@ -104,6 +119,8 @@ class LoginRequest(BaseModel):
     """Schema for login request."""
     email: EmailStr
     password: str
+
+    _normalise_email = field_validator('email')(_normalise_email)
 
 
 class RefreshTokenRequest(BaseModel):
