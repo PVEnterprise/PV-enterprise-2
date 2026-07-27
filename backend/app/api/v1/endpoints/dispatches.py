@@ -23,13 +23,16 @@ def generate_dispatch_number(db: Session) -> str:
     """Generate unique dispatch number."""
     today = date.today()
     prefix = f"DISP-{today.year}-"
-    
-    # Get count of dispatches created today
-    count = db.query(Dispatch).filter(
+
+    # Base the next number on the highest one ever issued, not a row count —
+    # a deleted dispatch leaves a gap that a count would collide into.
+    last_number = db.query(Dispatch.dispatch_number).filter(
         Dispatch.dispatch_number.like(f"{prefix}%")
-    ).count()
-    
-    return f"{prefix}{count + 1:04d}"
+    ).order_by(Dispatch.dispatch_number.desc()).first()
+
+    next_seq = int(last_number[0].split('-')[-1]) + 1 if last_number else 1
+
+    return f"{prefix}{next_seq:04d}"
 
 
 @router.post("/", response_model=DispatchResponse, status_code=status.HTTP_201_CREATED)
