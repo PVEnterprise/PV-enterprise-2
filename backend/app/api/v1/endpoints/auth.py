@@ -3,6 +3,7 @@ Authentication endpoints for login, logout, and token refresh.
 """
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -47,8 +48,13 @@ def login(
     Raises:
         HTTPException: If credentials are invalid
     """
-    # Find user by email
-    user = db.query(User).filter(User.email == login_data.email).first()
+    # Find user by email. LoginRequest already lower-cases the address, and
+    # func.lower() covers any row stored before that normalisation existed —
+    # without it a single capital letter returns no rows, and the 401 below
+    # tells the user their password is wrong when it is not.
+    user = db.query(User).filter(
+        func.lower(User.email) == login_data.email
+    ).first()
     
     if not user:
         raise HTTPException(
