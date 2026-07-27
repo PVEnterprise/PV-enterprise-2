@@ -989,6 +989,20 @@ def generate_quotation_preview_pdf(
         bank_details = quotation_data.get('bank_details') or None
         terms_and_conditions = quotation_data.get('terms_and_conditions') or None
 
+        # Remember these on the customer so future quotations default to them
+        # instead of the hardcoded fallback. Committed here (separately from the
+        # temporary price/discount mutations below, which are reverted and never
+        # committed) so it survives the db.expire_all() in the finally block.
+        if bank_details or terms_and_conditions:
+            customer = order.customer
+            if bank_details:
+                for field in ('bank_account_name', 'bank_account_number', 'bank_name', 'bank_ifsc', 'bank_branch'):
+                    if bank_details.get(field):
+                        setattr(customer, field, bank_details[field])
+            if terms_and_conditions:
+                customer.terms_and_conditions = terms_and_conditions
+            db.commit()
+
         # Generate PDF with modified prices
         pdf_buffer = generate_order_quotation_pdf(order, expiry_date=expiry_date, bank_details=bank_details, terms_and_conditions=terms_and_conditions)
         
@@ -1048,6 +1062,17 @@ def generate_estimate_pdf_post(
     # Extract bank details and terms
     bank_details = request_data.get('bank_details') or None
     terms_and_conditions = request_data.get('terms_and_conditions') or None
+
+    # Remember these on the customer so future quotations/estimates default to
+    # them instead of the hardcoded fallback.
+    if bank_details or terms_and_conditions:
+        customer = order.customer
+        if bank_details:
+            for field in ('bank_account_name', 'bank_account_number', 'bank_name', 'bank_ifsc', 'bank_branch'):
+                if bank_details.get(field):
+                    setattr(customer, field, bank_details[field])
+        if terms_and_conditions:
+            customer.terms_and_conditions = terms_and_conditions
 
     # Insert QuotationLog — sequence atomically assigns the next quotation_number
     from datetime import datetime as dt

@@ -1469,6 +1469,14 @@ export default function OrderDetailPage() {
           title="Generate Estimate PDF"
           quotationDate={quotationDate}
           onQuotationDateChange={handleQuotationDateChange}
+          initialBankDetails={{
+            bank_account_name: order.customer?.bank_account_name,
+            bank_account_number: order.customer?.bank_account_number,
+            bank_name: order.customer?.bank_name,
+            bank_ifsc: order.customer?.bank_ifsc,
+            bank_branch: order.customer?.bank_branch,
+          }}
+          initialTerms={order.customer?.terms_and_conditions}
         />
       )}
     </div>

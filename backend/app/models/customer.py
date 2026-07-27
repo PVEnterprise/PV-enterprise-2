@@ -25,6 +25,15 @@ class Customer(BaseModel):
     pincode = Column(String(20))
     gst_number = Column(String(50), index=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    # Quotation defaults — remembered from the last quotation/estimate generated
+    # for this customer so the modal doesn't reset to hardcoded values every time.
+    bank_account_name = Column(String(100))
+    bank_account_number = Column(String(50))
+    bank_name = Column(String(100))
+    bank_ifsc = Column(String(20))
+    bank_branch = Column(String(100))
+    terms_and_conditions = Column(Text)
     
     # Relationships
     creator = relationship("User", back_populates="created_customers", foreign_keys=[created_by])

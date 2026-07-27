@@ -26,6 +26,12 @@ class CustomerBasic(BaseModel):
     id: UUID
     name: str
     hospital_name: str
+    bank_account_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_branch: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

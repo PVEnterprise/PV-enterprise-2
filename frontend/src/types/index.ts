@@ -42,6 +42,12 @@ export interface Customer {
   pincode?: string;
   gst_number?: string;
   created_by?: string;
+  bank_account_name?: string;
+  bank_account_number?: string;
+  bank_name?: string;
+  bank_ifsc?: string;
+  bank_branch?: string;
+  terms_and_conditions?: string;
   created_at: string;
   updated_at: string;
 }

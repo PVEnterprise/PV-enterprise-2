@@ -49,11 +49,23 @@ class CustomerUpdate(BaseModel):
     state: Optional[str] = None
     pincode: Optional[str] = None
     gst_number: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_branch: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
 
 
 class CustomerResponse(CustomerBase):
     id: UUID
-    
+    bank_account_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_branch: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -41,6 +41,12 @@ interface Order {
   customer: {
     id: string;
     name: string;
+    bank_account_name?: string;
+    bank_account_number?: string;
+    bank_name?: string;
+    bank_ifsc?: string;
+    bank_branch?: string;
+    terms_and_conditions?: string;
   };
   items: OrderItem[];
   status: string;
@@ -869,6 +875,14 @@ export default function GenerateQuotationPage() {
           onSubmit={handleGeneratePDF}
           isSubmitting={isGeneratingPDF}
           title="Generate Quotation PDF"
+          initialBankDetails={{
+            bank_account_name: order?.customer.bank_account_name,
+            bank_account_number: order?.customer.bank_account_number,
+            bank_name: order?.customer.bank_name,
+            bank_ifsc: order?.customer.bank_ifsc,
+            bank_branch: order?.customer.bank_branch,
+          }}
+          initialTerms={order?.customer.terms_and_conditions}
         />
       )}
     </div>
