@@ -38,19 +38,27 @@ from app.schemas.order import (
 router = APIRouter()
 
 
-# Stages at or after the point the quotation document actually exists.
+# Stages at or after the point the quotation has actually been approved to
+# send to the customer.
 #
 # Ordered pipeline for reference:
 #   order_request -> decoding -> decoding_approval -> quotation ->
 #   quotation_generated -> waiting_purchase_order -> po_approval ->
 #   inventory_check -> payment_pending -> completed
 #
-# "quotation" is deliberately excluded: that is the stage where the quoter is
-# still applying pricing, so any PDF produced then would be incomplete. Every
-# stage from "quotation_generated" onward is included so a rep can resend the
-# quotation for as long as the order is live.
+# Both "quotation" and "quotation_generated" are excluded, and for the same
+# underlying reason even though the two look different:
+#   - "quotation": the quoter is still applying pricing, so no complete
+#     document exists yet.
+#   - "quotation_generated" (status "pending_quotation_approval"): pricing is
+#     complete, but only an executive can move it forward from here, via
+#     POST /orders/{id}/approve (Permission.ORDER_APPROVE). Sharing the PDF at
+#     this stage would put unapproved pricing in front of a customer before
+#     anyone with sign-off authority has seen it.
+# Only once an executive approves does the order reach
+# "waiting_purchase_order", which is the first stage where the quotation is
+# actually meant to be with the customer.
 QUOTATION_DOWNLOADABLE_STAGES = {
-    "quotation_generated",
     "waiting_purchase_order",
     "po_approval",
     "inventory_check",
@@ -920,18 +928,15 @@ def generate_quotation_pdf(
             detail="Order not found"
         )
     
-    # Gate on workflow stage, not status.
-    #
-    # The previous status check allowed "approved", which is the status while
-    # the order sits in the "quotation" stage — i.e. before the quoter has
-    # priced anything — so a rep could send a customer an empty quotation. It
-    # also excluded "quote_sent", which is the stage right after the quotation
-    # goes out and precisely when a rep is asked to resend it.
+    # Gate on workflow stage, not status — see QUOTATION_DOWNLOADABLE_STAGES
+    # above for why "quotation" and "quotation_generated" are both excluded.
     if order.workflow_stage not in QUOTATION_DOWNLOADABLE_STAGES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The quotation has not been generated for this order yet"
+        detail = (
+            "This quotation is awaiting internal approval and cannot be shared yet"
+            if order.workflow_stage == "quotation_generated"
+            else "The quotation has not been generated for this order yet"
         )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
     
     # Generate PDF
     pdf_buffer = generate_order_quotation_pdf(order)
