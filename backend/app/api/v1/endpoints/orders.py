@@ -38,6 +38,27 @@ from app.schemas.order import (
 router = APIRouter()
 
 
+# Stages at or after the point the quotation document actually exists.
+#
+# Ordered pipeline for reference:
+#   order_request -> decoding -> decoding_approval -> quotation ->
+#   quotation_generated -> waiting_purchase_order -> po_approval ->
+#   inventory_check -> payment_pending -> completed
+#
+# "quotation" is deliberately excluded: that is the stage where the quoter is
+# still applying pricing, so any PDF produced then would be incomplete. Every
+# stage from "quotation_generated" onward is included so a rep can resend the
+# quotation for as long as the order is live.
+QUOTATION_DOWNLOADABLE_STAGES = {
+    "quotation_generated",
+    "waiting_purchase_order",
+    "po_approval",
+    "inventory_check",
+    "payment_pending",
+    "completed",
+}
+
+
 def generate_order_number(db: Session) -> str:
     """Generate unique order number with collision handling."""
     import uuid as uuid_module
@@ -899,11 +920,17 @@ def generate_quotation_pdf(
             detail="Order not found"
         )
     
-    # Check if order is approved or quotation is generated
-    if order.status not in ["approved", "pending_quotation_approval"]:
+    # Gate on workflow stage, not status.
+    #
+    # The previous status check allowed "approved", which is the status while
+    # the order sits in the "quotation" stage — i.e. before the quoter has
+    # priced anything — so a rep could send a customer an empty quotation. It
+    # also excluded "quote_sent", which is the stage right after the quotation
+    # goes out and precisely when a rep is asked to resend it.
+    if order.workflow_stage not in QUOTATION_DOWNLOADABLE_STAGES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Order must be approved or have quotation generated before downloading PDF"
+            detail="The quotation has not been generated for this order yet"
         )
     
     # Generate PDF
