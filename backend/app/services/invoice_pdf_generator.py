@@ -212,11 +212,16 @@ class InvoicePDFGenerator:
     # ---------- Items Table ----------
     def _items_table(self):
         tax_label = get_tax_label(self.order.customer.state)
-        headers = ["#", "Item & Description", "HSN/SAC", "Qty", "Rate", f"{tax_label}%", f"{tax_label} Amt", "Amount"]
+        discount_percentage = float(getattr(self.order, 'discount_percentage', 0) or 0)
+        show_discount_col = discount_percentage > 0
+        if show_discount_col:
+            headers = ["#", "Item & Description", "HSN/SAC", "Qty", "Unit Price", "Discount\n%", "Rate", f"{tax_label}%", f"{tax_label} Amt", "Amount"]
+            num_cols = 10
+        else:
+            headers = ["#", "Item & Description", "HSN/SAC", "Qty", "Rate", f"{tax_label}%", f"{tax_label} Amt", "Amount"]
+            num_cols = 8
         data = [headers]
         subtotal, total_igst = Decimal("0.00"), Decimal("0.00")
-        num_cols = 8
-        discount_percentage = float(getattr(self.order, 'discount_percentage', 0) or 0)
 
         # Group items by section_name
         sections_order = []
@@ -253,16 +258,30 @@ class InvoicePDFGenerator:
                 sec_subtotal += amt
                 subtotal += amt
                 total_igst += igst
-                data.append([
-                    str(i),
-                    Paragraph(f"<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}", self.styles["NormalText"]),
-                    item.inventory_item.hsn_code or "",
-                    f"{qty}",
-                    format_indian_number(discounted_rate),
-                    f"{gst:.0f}%",
-                    format_indian_number(igst),
-                    format_indian_number(amt + igst)
-                ])
+                if show_discount_col:
+                    data.append([
+                        str(i),
+                        Paragraph(f"<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}", self.styles["NormalText"]),
+                        item.inventory_item.hsn_code or "",
+                        f"{qty}",
+                        format_indian_number(rate),
+                        f"{discount_percentage:.0f}%",
+                        format_indian_number(discounted_rate),
+                        f"{gst:.0f}%",
+                        format_indian_number(igst),
+                        format_indian_number(amt + igst)
+                    ])
+                else:
+                    data.append([
+                        str(i),
+                        Paragraph(f"<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}", self.styles["NormalText"]),
+                        item.inventory_item.hsn_code or "",
+                        f"{qty}",
+                        format_indian_number(discounted_rate),
+                        f"{gst:.0f}%",
+                        format_indian_number(igst),
+                        format_indian_number(amt + igst)
+                    ])
             if has_named_sections and sec:
                 section_subtotal_rows.append(len(data))
                 data.append(["Sub Total"] + [''] * (num_cols - 2) + [format_indian_number(sec_subtotal)])
@@ -279,7 +298,10 @@ class InvoicePDFGenerator:
         data.append(["Grand Total"] + [''] * (num_cols - 2) + [f"{RUPEE}{format_indian_number(grand)}"])
         final_totals_rows = list(range(igst_row - (0 if has_named_sections else 1), len(data)))
 
-        col_widths = [8*mm, 51*mm, 18*mm, 10*mm, 27*mm, 14*mm, 22*mm, 30*mm]
+        if show_discount_col:
+            col_widths = [8*mm, 36*mm, 15*mm, 9*mm, 17*mm, 16*mm, 17*mm, 12*mm, 18*mm, 32*mm]
+        else:
+            col_widths = [8*mm, 51*mm, 18*mm, 10*mm, 27*mm, 14*mm, 22*mm, 30*mm]
         t = Table(data, colWidths=col_widths)
 
         item_start = 1
