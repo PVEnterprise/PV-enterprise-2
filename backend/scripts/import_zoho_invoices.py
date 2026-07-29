@@ -162,10 +162,10 @@ def sku_candidates(raw_sku: str) -> list:
     Zoho's exported item code and this app's Inventory.sku don't always
     match verbatim. Confirmed against the real catalog: numeric codes are
     stored with a space after the first 2 digits ('120006' in Zoho is
-    '12 0006' here), and any trailing letter suffix (CC/Ti/...) is
-    concatenated directly onto the digits with no space of its own, even
-    when Zoho's PDF renders a space before it ('120004 CC' -> '12 0004CC').
-    Try the exact value first, then that transform, in that order.
+    '12 0006' here). Any trailing letter suffix (CC/Ti/A/...) is
+    inconsistently spaced in the catalog itself - '12 0004CC' has no space,
+    but '17 0502 A' does - so both variants are tried rather than guessing
+    one rule. Exact value first, then the transforms, in that order.
     """
     raw_sku = raw_sku.strip()
     candidates = [raw_sku]
@@ -173,9 +173,12 @@ def sku_candidates(raw_sku: str) -> list:
     m = re.match(r"^(\d{2})(\d+)([A-Za-z].*)?$", compact)
     if m:
         digits_head, digits_tail, suffix = m.group(1), m.group(2), m.group(3) or ""
-        candidate = f"{digits_head} {digits_tail}{suffix}"
-        if candidate not in candidates:
-            candidates.append(candidate)
+        for candidate in (
+            f"{digits_head} {digits_tail}{suffix}",
+            f"{digits_head} {digits_tail} {suffix}" if suffix else None,
+        ):
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
     return candidates
 
 
