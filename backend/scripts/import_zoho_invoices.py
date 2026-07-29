@@ -309,6 +309,13 @@ DESCRIPTION_SKU_OVERRIDES = {
     normalize_description('Magnetic Sheet Autoclavable'): "SK-31-5-1",
     # User created this as a new catalog item specifically for this line.
     normalize_description('Omniterck Retractor'): "SI 9000",
+    # Confirmed directly by the user.
+    normalize_description('Mosquito Forceps Curved 5.5"'): "SI 104",
+    normalize_description('Mosquito Forcep Cvd 4"'): "SI 102",
+    normalize_description('Tenotomy Scissors'): "SI 262",
+    # Catalog spells this 'Rider', not 'Ryder' - price match confirms
+    # (Rs 21,792.00 exact, both invoice and catalog).
+    normalize_description('Needle Holder 8" (Ryder)'): "12 1504",
 }
 
 
