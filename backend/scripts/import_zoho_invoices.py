@@ -206,6 +206,15 @@ def sku_candidates(raw_sku: str) -> list:
             if candidate not in candidates:
                 candidates.append(candidate)
 
+    # Catalog casing on trailing letter suffixes is inconsistent too - both
+    # '12 0004CC' and '14 0140cc' exist. Try a lowercase-suffix variant of
+    # every candidate found so far (cheap and safe: it only adds a new
+    # exact-match attempt, never changes which one wins).
+    for candidate in list(candidates):
+        lowered = re.sub(r"[A-Za-z]+$", lambda mo: mo.group(0).lower(), candidate)
+        if lowered not in candidates:
+            candidates.append(lowered)
+
     return candidates
 
 
