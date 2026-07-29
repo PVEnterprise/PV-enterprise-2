@@ -251,6 +251,20 @@ DESCRIPTION_SKU_OVERRIDES = {
     # Catalog description carries extra trailing text ('(Skin)/Sen Retractor')
     # that a plain normalized-text match can't bridge.
     normalize_description('Catspaw Retractor'): "SI 330",
+    # Catalog description carries an extra leading qualifier ('Ross/Vein/').
+    normalize_description('Sreedevi Eye Lid Retractor'): "SI 371",
+    # Catalog has no space before the trailing Cvd/Str/Ang abbreviation
+    # ('91/2"Cvd'), Zoho's export does ('91/2" Cvd') - same spacing
+    # inconsistency as SKU suffixes, just on description text this time.
+    normalize_description('Sreedevi Codman Leksell Rongeur 91/2" Cvd'): "SI 416",
+    normalize_description('Sreedevi Codman Leksell Rongeur 81/2" Cvd'): "SI 413",
+    # Catalog description carries an extra qualifier ('( Set of 10)') and a
+    # double space.
+    normalize_description('Sreedevi Heggars Dilators Set Aluminium'): "SI 325",
+    # 'Scalpel handle round 15cm' has no matching text anywhere in the
+    # catalog - confirmed with the user this is the scalpel handle sold as
+    # a generic B.P (Bard-Parker) handle, size No.3.
+    normalize_description('Sreedevi scalpel hdl rd 15cm'): "SI 591",
 }
 
 
