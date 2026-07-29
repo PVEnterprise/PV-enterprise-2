@@ -265,6 +265,14 @@ DESCRIPTION_SKU_OVERRIDES = {
     # catalog - confirmed with the user this is the scalpel handle sold as
     # a generic B.P (Bard-Parker) handle, size No.3.
     normalize_description('Sreedevi scalpel hdl rd 15cm'): "SI 591",
+    # Multi-line kit descriptions (verified by exact unit-price match
+    # against the invoice, not just text similarity).
+    normalize_description('LA RETRACTOR SET CONSISTING INTERCOSTAL (SREEDEVI)'): "si 683",
+    normalize_description('MICS ARCH RETRACTOR SET WITH CONTAINER UPPER CURVED(SREEDEVI)'): "SI 675",
+    normalize_description('MICS SCOPE HOLDER TITANIUM ARM (SREEDEVI)'): "si 685",
+    # Catalog description has the words in a different order.
+    normalize_description('SREEDEVI Hook Nerve Vessel Fine'): "SI 585",
+    normalize_description('SREEDEVI Hook nerve Vessel Blunt'): "SI 586",
 }
 
 
