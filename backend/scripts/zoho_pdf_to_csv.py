@@ -93,6 +93,99 @@ def join_wrapped_number(cell) -> str:
     return "".join(numeric_frags)
 
 
+INDIAN_STATES_AND_UTS = {
+    "andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh",
+    "goa", "gujarat", "haryana", "himachal pradesh", "jharkhand", "karnataka",
+    "kerala", "madhya pradesh", "maharashtra", "manipur", "meghalaya",
+    "mizoram", "nagaland", "odisha", "punjab", "rajasthan", "sikkim",
+    "tamil nadu", "telangana", "tripura", "uttar pradesh", "uttarakhand",
+    "west bengal", "andaman and nicobar islands", "chandigarh",
+    "dadra and nagar haveli and daman and diu", "delhi", "jammu and kashmir",
+    "ladakh", "lakshadweep", "puducherry",
+}
+
+
+def is_plausible_city(s: str) -> bool:
+    """Letters/spaces, optionally a trailing numbered-locality suffix like
+    'Vijayawada-2' (common in Indian addresses) - never digit-led (a
+    pincode), comma-bearing (a street-address fragment), or an Indian
+    state/UT name on its own line (seen when Zoho renders state without a
+    pincode - that's state, not city, even though it fits the same shape)."""
+    s = s.rstrip(",").strip()
+    if s.lower() in INDIAN_STATES_AND_UTS:
+        return False
+    return bool(re.match(r"^[A-Za-z][A-Za-z\s]*(-\d+)?$", s)) and len(s.split()) <= 4
+
+
+def parse_bill_to(text: str) -> dict:
+    """
+    The 'Bill To' table cell is the customer's full address block as one
+    string, e.g.:
+        SRI VENKATESWARA AGENCIES
+        Plot No.259,Flat No:03,1st Floor,Akhila Residency,phase 2
+        Kamalapuri Colony
+        Hyderabad
+        500073 Telangana
+        India
+        GSTIN 36AAVFS4628M1ZB
+    Peel off known trailing lines (GSTIN, country, pincode[+state], city)
+    from the end; whatever's left in the middle is the street address.
+    Any single step can come up empty (no GSTIN, no separate state) -
+    that's fine, the corresponding field is just left blank rather than
+    guessed.
+    """
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    if not lines:
+        return {}
+    name = lines[0]
+    rest = lines[1:]
+
+    gst_number = ""
+    if rest:
+        m = re.match(r"^GSTIN\s+(\S+)$", rest[-1], re.IGNORECASE)
+        if m:
+            gst_number = m.group(1)
+            rest = rest[:-1]
+
+    if rest and rest[-1].strip().lower() == "india":
+        rest = rest[:-1]
+
+    pincode, state, city = "", "", ""
+    if rest and rest[-1].strip().rstrip(",").lower() in INDIAN_STATES_AND_UTS:
+        # State on its own line, no pincode on this invoice at all.
+        state = rest[-1].strip().rstrip(",")
+        rest = rest[:-1]
+    if rest:
+        m = re.match(r"^(\d{5,6})(?:\s+(.+))?$", rest[-1])
+        if m:
+            # Pincode-led line, e.g. '500073 Telangana' or '673008'.
+            pincode = m.group(1)
+            state = (m.group(2) or "").strip()
+            rest = rest[:-1]
+        else:
+            # City-led line fused with its pincode, no space before the
+            # digits, e.g. 'Hyderabad- 500482' or 'Vijayawada-500010'.
+            m = re.match(r"^([A-Za-z][A-Za-z\s]*)[\s\-,]+(\d{5,6})$", rest[-1])
+            if m:
+                city = m.group(1).strip()
+                pincode = m.group(2)
+                rest = rest[:-1]
+
+    if not city and rest and is_plausible_city(rest[-1]):
+        city = rest[-1].rstrip(",").strip()
+        rest = rest[:-1]
+
+    address = " ".join(l.rstrip(",").strip() for l in rest)
+    return {
+        "name": name,
+        "address": address,
+        "city": city,
+        "state": state,
+        "pincode": pincode,
+        "gst_number": gst_number,
+    }
+
+
 def is_item_row(row) -> bool:
     if len(row) < 4:
         return False
@@ -238,20 +331,21 @@ def extract_invoice(block: InvoiceBlock, flags: list):
             f"missing Sub Total / Total in text - importer will compute from line items"
         )
 
-    # Customer name: find the 'Bill To' marker cell in any table, use the
-    # next row's first populated cell, first line.
-    customer_name = ""
+    # 'Bill To' marker cell -> next row's first populated cell holds the
+    # full customer block (name + address + city + state + pincode + GST).
+    bill_to = {}
     for table in block.tables:
         for ridx, row in enumerate(table):
             if any(c is not None and str(c).strip() == "Bill To" for c in row):
                 if ridx + 1 < len(table):
                     for c in table[ridx + 1]:
                         if c:
-                            customer_name = str(c).split("\n")[0].strip()
+                            bill_to = parse_bill_to(str(c))
                             break
                 break
-        if customer_name:
+        if bill_to:
             break
+    customer_name = bill_to.get("name", "")
     if not customer_name:
         flags.append(f"invoice {invoice_number}: could not find customer name")
 
@@ -293,6 +387,11 @@ def extract_invoice(block: InvoiceBlock, flags: list):
         "po_number": po_number,
         "payment_terms": payment_terms,
         "customer_name": customer_name,
+        "customer_address": bill_to.get("address", ""),
+        "customer_city": bill_to.get("city", ""),
+        "customer_state": bill_to.get("state", ""),
+        "customer_pincode": bill_to.get("pincode", ""),
+        "customer_gst": bill_to.get("gst_number", ""),
         "invoice_subtotal": invoice_subtotal,
         "invoice_total": invoice_total,
         "balance": balance_due,
@@ -327,6 +426,11 @@ def main():
                 "Due Date": inv["due_date"],
                 "Invoice Status": inv["invoice_status"],
                 "Customer Name": inv["customer_name"],
+                "Customer Address": inv["customer_address"],
+                "Customer City": inv["customer_city"],
+                "Customer State": inv["customer_state"],
+                "Customer Pincode": inv["customer_pincode"],
+                "Customer GST Number": inv["customer_gst"],
                 "PO Number": inv["po_number"],
                 "Payment Terms": inv["payment_terms"],
                 "SKU": item["sku"],
