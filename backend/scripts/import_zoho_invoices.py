@@ -165,16 +165,27 @@ def parse_date(value) -> date:
 def sku_candidates(raw_sku: str) -> list:
     """
     Zoho's exported item code and this app's Inventory.sku don't always
-    match verbatim. Confirmed against the real catalog: numeric codes are
-    stored with a space after the first 2 digits ('120006' in Zoho is
-    '12 0006' here). Any trailing letter suffix (CC/Ti/A/...) is
-    inconsistently spaced in the catalog itself - '12 0004CC' has no space,
-    but '17 0502 A' does - so both variants are tried rather than guessing
-    one rule. Exact value first, then the transforms, in that order.
+    match verbatim. Confirmed against the real catalog:
+    - Numeric codes are stored with a space after the first 2 digits
+      ('120006' in Zoho is '12 0006' here). Any trailing letter suffix
+      (CC/Ti/A/...) is inconsistently spaced in the catalog itself -
+      '12 0004CC' has no space, but '17 0502 A' does - so both variants
+      are tried rather than guessing one rule.
+    - Spacing around any code is inconsistent catalog-wide (single space,
+      double space, or none - e.g. 'SLS 11600' is 'SLS11600', 'SLS 9110'
+      is 'SLS  9110' with two spaces) - so the fully space-stripped
+      "compact" form is always tried too.
+    - Purely numeric codes with no letter prefix at all sometimes belong
+      to the 'SLS' catalog family (anaesthesia/perfusion consumables) with
+      the prefix just missing from Zoho's export - tried as a last resort.
+    Exact value first, then the transforms, in that order.
     """
     raw_sku = raw_sku.strip()
     candidates = [raw_sku]
     compact = raw_sku.replace(" ", "")
+    if compact not in candidates:
+        candidates.append(compact)
+
     m = re.match(r"^(\d{2})(\d+)([A-Za-z].*)?$", compact)
     if m:
         digits_head, digits_tail, suffix = m.group(1), m.group(2), m.group(3) or ""
@@ -184,7 +195,80 @@ def sku_candidates(raw_sku: str) -> list:
         ):
             if candidate and candidate not in candidates:
                 candidates.append(candidate)
+
+    if compact.isdigit():
+        for candidate in (f"SLS {compact}", f"SLS{compact}", f"SLS  {compact}"):
+            if candidate not in candidates:
+                candidates.append(candidate)
+
     return candidates
+
+
+DESCRIPTION_NOISE_RE_LIST = [
+    (re.compile(r"\(SREEDEVI\)", re.IGNORECASE), ""),
+    (re.compile(r"SREEDEVI[- ]INDIA", re.IGNORECASE), ""),
+    (re.compile(r"^Sreedevi\s+", re.IGNORECASE), ""),
+    (re.compile(r"\(SGS\d+\)", re.IGNORECASE), ""),
+    (re.compile(r"\bCVD\b|\bCurved\b", re.IGNORECASE), "Cvd"),
+    (re.compile(r"\bSTR\b|\bStraight\b", re.IGNORECASE), "Str"),
+    (re.compile(r"\bDouble Action\b", re.IGNORECASE), "D/A"),
+    (re.compile(r"\bFiber Handle\b", re.IGNORECASE), "F.H"),
+    (re.compile(r"\bVentriculo Peritoneal\b", re.IGNORECASE), "V.P."),
+    (re.compile(r"\bStainless Steel\b", re.IGNORECASE), "(S.S)"),
+]
+
+
+def normalize_description(s: str) -> str:
+    """
+    Some Zoho line items carry no catalog code at all (rare, but real) -
+    just a free-text description. Many of these turn out to be catalog
+    items sold under this app's own 'SI ####' Sreedevi-branded line, with
+    the Zoho description differing only by a brand tag ('(SREEDEVI)',
+    'Sreedevi <name>', '<name> SREEDEVI-INDIA') or spelled-out Cvd/Str.
+    Strip that noise so both sides can be compared as plain text.
+    """
+    for pattern, repl in DESCRIPTION_NOISE_RE_LIST:
+        s = pattern.sub(repl, s)
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+# Descriptions that either (a) resolve to more than one catalog SKU under
+# normalize_description() - genuine duplicate catalog entries with the same
+# description text but different SKU/price/stock, where a human judgment
+# call was made (see git history for the reasoning) - or (b) use different
+# wording from the catalog entry entirely, so no text-similarity match is
+# possible. Checked first, before the live description search.
+DESCRIPTION_SKU_OVERRIDES = {
+    normalize_description('Ventilator Tubing with double water trap (SGS25007)'): "SLS 1020",
+    normalize_description('Backhaus Towel Clips 5"'): "SI 327",
+    normalize_description('Sreedevi Allis Tissue Grasping Forceps 10"'): "SI 139",
+    normalize_description('Standard Diss. Forceps Toothed 6"(SREEDEVI)'): "SI 90",
+    # Catalog description carries extra trailing text ('(Skin)/Sen Retractor')
+    # that a plain normalized-text match can't bridge.
+    normalize_description('Catspaw Retractor'): "SI 330",
+}
+
+
+def build_description_index(db) -> dict:
+    """normalized description -> list of SKUs sharing that normalized text."""
+    index = {}
+    for sku, desc in db.query(Inventory.sku, Inventory.description).filter(Inventory.description.isnot(None)).all():
+        index.setdefault(normalize_description(desc), []).append(sku)
+    return index
+
+
+def resolve_by_description(db, description_index: dict, description: str):
+    """Returns (sku_or_None, note_or_None) for a line item with no SKU at all."""
+    normalized = normalize_description(description)
+    override = DESCRIPTION_SKU_OVERRIDES.get(normalized)
+    if override:
+        return override, f"matched by description override to '{override}'"
+    matches = description_index.get(normalized, [])
+    if len(matches) == 1:
+        return matches[0], f"matched by description to '{matches[0]}'"
+    if len(matches) > 1:
+        return None, f"description matches {len(matches)} catalog SKUs ({', '.join(matches)}) - ambiguous, add to DESCRIPTION_SKU_OVERRIDES to resolve"
+    return None, None
 
 
 def resolve_inventory(db, raw_sku: str):
@@ -240,7 +324,7 @@ def build_groups(df: pd.DataFrame, cols: dict) -> "list[InvoiceGroup]":
     return [groups_by_number[n] for n in order]
 
 
-def process_group(db, group: InvoiceGroup, cols: dict, script_user: User, report: list):
+def process_group(db, group: InvoiceGroup, cols: dict, script_user: User, report: list, description_index: dict):
     invoice_number = group.invoice_number
 
     existing_dispatch = db.query(Dispatch).filter(
@@ -301,13 +385,22 @@ def process_group(db, group: InvoiceGroup, cols: dict, script_user: User, report
     line_items = []
     for row in group.rows:
         sku = str(row.get(cols["sku"], "")).strip()
+        item_description_raw = str(row.get(cols["item_description"], "")).strip()
         if not sku or sku.lower() == "nan":
+            matched_sku, note = resolve_by_description(db, description_index, item_description_raw)
+            if not matched_sku:
+                report.append({
+                    "invoice_number": invoice_number,
+                    "action": "skipped_error",
+                    "detail": f"Row missing SKU: {item_description_raw!r}" + (f" ({note})" if note else ""),
+                })
+                return
             report.append({
                 "invoice_number": invoice_number,
-                "action": "skipped_error",
-                "detail": f"Row missing SKU: {row.get(cols['item_description'])!r}",
+                "action": "note",
+                "detail": f"No SKU for {item_description_raw!r} - {note}",
             })
-            return
+            sku = matched_sku
         inventory, matched_as = resolve_inventory(db, sku)
         if not inventory:
             report.append({
@@ -578,11 +671,12 @@ def main():
         if args.limit:
             groups = groups[:args.limit]
 
+        description_index = build_description_index(db)
         report = []
         for group in groups:
             try:
                 with db.begin_nested():
-                    process_group(db, group, cols, script_user, report)
+                    process_group(db, group, cols, script_user, report, description_index)
             except IntegrityError as exc:
                 db.rollback()
                 report.append({
