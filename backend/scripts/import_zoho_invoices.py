@@ -316,6 +316,9 @@ DESCRIPTION_SKU_OVERRIDES = {
     # Catalog spells this 'Rider', not 'Ryder' - price match confirms
     # (Rs 21,792.00 exact, both invoice and catalog).
     normalize_description('Needle Holder 8" (Ryder)'): "12 1504",
+    # User created this as a new catalog item specifically for this line.
+    normalize_description('Cups'): "SI 90003",
+    normalize_description('Small & Medium Sizes Disposable Bulldog'): "SI 90004",
 }
 
 
