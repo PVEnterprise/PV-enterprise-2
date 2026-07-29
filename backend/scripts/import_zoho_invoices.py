@@ -175,9 +175,12 @@ def sku_candidates(raw_sku: str) -> list:
       double space, or none - e.g. 'SLS 11600' is 'SLS11600', 'SLS 9110'
       is 'SLS  9110' with two spaces) - so the fully space-stripped
       "compact" form is always tried too.
-    - Purely numeric codes with no letter prefix at all sometimes belong
-      to the 'SLS' catalog family (anaesthesia/perfusion consumables) with
-      the prefix just missing from Zoho's export - tried as a last resort.
+    - The digits alone (whether bare, e.g. '9100', or under a wrong/stale
+      brand prefix Zoho still uses internally, e.g. 'BHC 9100') often
+      belong to the 'SLS' catalog family (anaesthesia/perfusion
+      consumables) - 'BHC' does not exist as a prefix in Inventory at all
+      (confirmed: zero rows), every 'BHC ####' code checked so far is
+      really 'SLS ####' with the same digits. Tried as a last resort.
     Exact value first, then the transforms, in that order.
     """
     raw_sku = raw_sku.strip()
@@ -196,8 +199,10 @@ def sku_candidates(raw_sku: str) -> list:
             if candidate and candidate not in candidates:
                 candidates.append(candidate)
 
-    if compact.isdigit():
-        for candidate in (f"SLS {compact}", f"SLS{compact}", f"SLS  {compact}"):
+    m = re.search(r"(\d+)$", compact)
+    if m:
+        digits = m.group(1)
+        for candidate in (f"SLS {digits}", f"SLS{digits}", f"SLS  {digits}"):
             if candidate not in candidates:
                 candidates.append(candidate)
 
