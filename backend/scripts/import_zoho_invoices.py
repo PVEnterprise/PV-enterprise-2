@@ -215,6 +215,14 @@ def sku_candidates(raw_sku: str) -> list:
         if lowered not in candidates:
             candidates.append(lowered)
 
+    # The 'SK-' catalog series uses hyphens throughout ('SK-19-5-2(f)'),
+    # but Zoho's export sometimes renders the same code with spaces
+    # ('SK 19-5 2(f)') - try swapping spaces for hyphens.
+    if " " in raw_sku:
+        hyphenated = raw_sku.replace(" ", "-")
+        if hyphenated not in candidates:
+            candidates.append(hyphenated)
+
     return candidates
 
 
@@ -288,6 +296,8 @@ DESCRIPTION_SKU_OVERRIDES = {
     normalize_description('Pediatric Ambu Junior Manikin'): "20 0408",
     # Confirmed directly by the user.
     normalize_description('Aortic Cannula Femoral sizes 8,10,12,14, FR (SGS25081)'): "SLS 70212",
+    # Confirmed directly by the user.
+    normalize_description('Magnetic Sheet Autoclavable'): "SK-31-5-1",
 }
 
 
