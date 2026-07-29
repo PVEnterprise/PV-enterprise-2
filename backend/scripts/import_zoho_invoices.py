@@ -226,6 +226,15 @@ def sku_candidates(raw_sku: str) -> list:
     return candidates
 
 
+# Raw Zoho SKU text -> real catalog SKU, for codes no candidate transform
+# can derive (the parser mistook a multi-word item name for a SKU, and the
+# real catalog code shares no structural pattern with it). Checked first in
+# resolve_inventory(), before the generated candidates.
+SKU_OVERRIDES = {
+    "Goretex Sutures-CV4,CV5,CV6": "SI 9001",
+}
+
+
 DESCRIPTION_NOISE_RE_LIST = [
     (re.compile(r"\(SREEDEVI\)", re.IGNORECASE), ""),
     (re.compile(r"SREEDEVI[- ]INDIA", re.IGNORECASE), ""),
@@ -298,6 +307,8 @@ DESCRIPTION_SKU_OVERRIDES = {
     normalize_description('Aortic Cannula Femoral sizes 8,10,12,14, FR (SGS25081)'): "SLS 70212",
     # Confirmed directly by the user.
     normalize_description('Magnetic Sheet Autoclavable'): "SK-31-5-1",
+    # User created this as a new catalog item specifically for this line.
+    normalize_description('Omniterck Retractor'): "SI 9000",
 }
 
 
@@ -325,6 +336,11 @@ def resolve_by_description(db, description_index: dict, description: str):
 
 def resolve_inventory(db, raw_sku: str):
     """Returns (Inventory or None, the candidate string that matched)."""
+    override = SKU_OVERRIDES.get(raw_sku.strip())
+    if override:
+        inventory = db.query(Inventory).filter(Inventory.sku == override).first()
+        if inventory:
+            return inventory, override
     for candidate in sku_candidates(raw_sku):
         inventory = db.query(Inventory).filter(Inventory.sku == candidate).first()
         if inventory:
