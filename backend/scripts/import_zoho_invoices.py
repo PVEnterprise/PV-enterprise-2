@@ -96,6 +96,11 @@ COLUMN_ALIASES = {
     "invoice_status": ["invoice_status", "status"],
     "balance": ["balance"],
     "customer_name": ["customer_name", "customer", "company_name"],
+    "customer_address": ["customer_address", "address"],
+    "customer_city": ["customer_city", "city"],
+    "customer_state": ["customer_state", "state"],
+    "customer_pincode": ["customer_pincode", "pincode", "pin_code", "postal_code"],
+    "customer_gst": ["customer_gst_number", "customer_gst", "gst_number", "gstin"],
     "po_number": ["purchaseorder", "po_number", "purchase_order", "po_#"],
     "payment_terms": ["payment_terms", "terms"],
     "sku": ["sku", "product_id", "item_sku", "catalog_no", "catalog_number"],
@@ -191,7 +196,7 @@ def resolve_inventory(db, raw_sku: str):
     return None, None
 
 
-def get_or_create_customer(db, hospital_name: str, script_user_id) -> Customer:
+def get_or_create_customer(db, hospital_name: str, script_user_id, address_fields: dict) -> Customer:
     hospital_name = hospital_name.strip()
     existing = db.query(Customer).filter(Customer.hospital_name == hospital_name).first()
     if existing:
@@ -199,6 +204,11 @@ def get_or_create_customer(db, hospital_name: str, script_user_id) -> Customer:
     customer = Customer(
         hospital_name=hospital_name,
         name=hospital_name,
+        address=address_fields.get("address") or None,
+        city=address_fields.get("city") or None,
+        state=address_fields.get("state") or None,
+        pincode=address_fields.get("pincode") or None,
+        gst_number=address_fields.get("gst_number") or None,
         created_by=script_user_id,
     )
     db.add(customer)
@@ -268,6 +278,23 @@ def process_group(db, group: InvoiceGroup, cols: dict, script_user: User, report
             "detail": "Missing customer name",
         })
         return
+
+    def _clean(field):
+        if field not in cols:
+            return ""
+        val = first.get(cols[field])
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return ""
+        val = str(val).strip()
+        return "" if val.lower() == "nan" else val
+
+    customer_address_fields = {
+        "address": _clean("customer_address"),
+        "city": _clean("customer_city"),
+        "state": _clean("customer_state"),
+        "pincode": _clean("customer_pincode"),
+        "gst_number": _clean("customer_gst"),
+    }
 
     # Resolve every line item's inventory row up front - a single missing
     # SKU fails the whole invoice rather than importing it partially.
@@ -364,7 +391,7 @@ def process_group(db, group: InvoiceGroup, cols: dict, script_user: User, report
         elif status_val in ("draft", "sent", "overdue", "unpaid", "void"):
             payment_status, paid_amount = "unpaid", Decimal("0")
 
-    customer, customer_created = get_or_create_customer(db, customer_name, script_user.id)
+    customer, customer_created = get_or_create_customer(db, customer_name, script_user.id, customer_address_fields)
 
     po_number = str(first.get(cols["po_number"], "")).strip() if "po_number" in cols else None
     if po_number and po_number.lower() == "nan":
