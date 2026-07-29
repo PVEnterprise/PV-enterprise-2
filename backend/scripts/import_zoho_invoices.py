@@ -282,6 +282,10 @@ DESCRIPTION_SKU_OVERRIDES = {
     # Catalog description has the words in a different order.
     normalize_description('SREEDEVI Hook Nerve Vessel Fine'): "SI 585",
     normalize_description('SREEDEVI Hook nerve Vessel Blunt'): "SI 586",
+    # Confirmed directly by the user - catalog description text ('Cooley
+    # Coarctation clamp...') doesn't match this item's name at all, but
+    # they confirmed the SKU is correct as stored. Not a text-match case.
+    normalize_description('Pediatric Ambu Junior Manikin'): "20 0408",
 }
 
 
