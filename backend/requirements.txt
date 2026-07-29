@@ -52,3 +52,6 @@ xlsxwriter==3.1.9
 
 # PDF Generation
 reportlab==4.0.9
+
+# PDF parsing (Zoho invoice import)
+pdfplumber==0.10.3
