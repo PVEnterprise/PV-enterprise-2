@@ -286,6 +286,8 @@ DESCRIPTION_SKU_OVERRIDES = {
     # Coarctation clamp...') doesn't match this item's name at all, but
     # they confirmed the SKU is correct as stored. Not a text-match case.
     normalize_description('Pediatric Ambu Junior Manikin'): "20 0408",
+    # Confirmed directly by the user.
+    normalize_description('Aortic Cannula Femoral sizes 8,10,12,14, FR (SGS25081)'): "SLS 70212",
 }
 
 
