@@ -88,6 +88,9 @@ class InvoiceListItem(BaseModel):
     order_id: UUID
     order_number: str
     customer_name: str
+    customer_city: Optional[str] = None
+    payment_terms: Optional[str] = None
+    invoice_amount: float = 0
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

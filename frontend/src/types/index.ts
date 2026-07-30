@@ -228,6 +228,9 @@ export interface InvoiceListItem {
   order_id: string;
   order_number: string;
   customer_name: string;
+  customer_city?: string;
+  payment_terms?: string;
+  invoice_amount: number;
   created_at: string;
 }
 

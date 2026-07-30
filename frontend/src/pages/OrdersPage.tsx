@@ -9,19 +9,26 @@ import { Plus, Edit2, X, ChevronLeft, ChevronRight, Trash2, Search } from 'lucid
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column } from '@/components/common/DataTable';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function OrdersPage() {
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedStatus = searchParams.get('status') || '';
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('search') || '');
 
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedSearch(searchQuery);
       setCurrentPage(1);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (searchQuery) next.set('search', searchQuery); else next.delete('search');
+        return next;
+      }, { replace: true });
     }, 350);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
   const [showForm, setShowForm] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -64,8 +71,12 @@ export default function OrdersPage() {
 
   // Reset to page 1 when status filter changes
   const handleStatusChange = (newStatus: string) => {
-    setSelectedStatus(newStatus);
     setCurrentPage(1);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newStatus) next.set('status', newStatus); else next.delete('status');
+      return next;
+    }, { replace: true });
   };
 
   // Check if user has permission to create orders
