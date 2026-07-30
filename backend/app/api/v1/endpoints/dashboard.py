@@ -35,6 +35,12 @@ PRE_PO_STAGES = [
 POST_PO_STAGES = ['inventory_check', 'payment_pending']
 PENDING_WORKFLOW_STAGES = PRE_PO_STAGES + POST_PO_STAGES
 
+# Orders where the PO has actually been approved (workflow_stage moves to
+# 'inventory_check' only via the approve-po step) but not yet in payment
+# collection ('payment_pending' is tracked separately as receivables, not
+# order fulfillment value).
+PO_APPROVED_PENDING_STAGES = ['inventory_check']
+
 
 class DashboardStats(BaseModel):
     # Orders
@@ -180,7 +186,10 @@ def get_dashboard_stats(
         OrderItem.unit_price.isnot(None)
     ).scalar() or Decimal(0)
 
-    # Pending order value = outstanding (undelivered) qty across every non-terminal stage
+    # Pending order value = outstanding (undelivered) qty for orders whose PO
+    # has been approved and are awaiting dispatch. Excludes payment_pending
+    # (already dispatched, just awaiting payment) and everything pre-PO-approval
+    # (that's covered separately by pending_quotation_value).
     _dispatched_subq = db.query(
         DispatchItem.order_item_id,
         func.sum(DispatchItem.quantity).label('dispatched_qty')
@@ -196,7 +205,7 @@ def get_dashboard_stats(
     ).join(Order, Order.id == OrderItem.order_id
     ).outerjoin(_dispatched_subq, _dispatched_subq.c.order_item_id == OrderItem.id
     ).filter(
-        Order.workflow_stage.in_(PENDING_WORKFLOW_STAGES),
+        Order.workflow_stage.in_(PO_APPROVED_PENDING_STAGES),
         OrderItem.unit_price.isnot(None),
         OrderItem.inventory_id.isnot(None)
     ).scalar() or Decimal(0)
