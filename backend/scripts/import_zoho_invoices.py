@@ -319,6 +319,8 @@ DESCRIPTION_SKU_OVERRIDES = {
     # User created this as a new catalog item specifically for this line.
     normalize_description('Cups'): "SI 90003",
     normalize_description('Small & Medium Sizes Disposable Bulldog'): "SI 90004",
+    normalize_description('Aluminium tray two floor with siliscon mat SREEDEVI-INDIA'): "SI 90005",
+    normalize_description('Mouth Gag Set SREEDEVI-INDIA'): "SI 90007",
 }
 
 
