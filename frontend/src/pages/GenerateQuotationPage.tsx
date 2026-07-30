@@ -1,10 +1,10 @@
 /**
  * Generate Quotation Page - Create quotation with price list and discount
  */
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { Fragment, useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, FileText, Edit2, X, Check, Plus, Search } from 'lucide-react';
+import { ArrowLeft, FileText, Edit2, X, Check, Plus, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import api from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { Inventory as InventoryFull } from '@/types';
@@ -104,8 +104,9 @@ export default function GenerateQuotationPage() {
   const [showPDFModal, setShowPDFModal] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  // Add item state
-  const [showAddItem, setShowAddItem] = useState(false);
+  // Add item state — addItemAt holds the index (within order.items) the new
+  // item should be inserted before; null means the inline form is closed.
+  const [addItemAt, setAddItemAt] = useState<number | null>(null);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [searchResults, setSearchResults] = useState<InventoryFull[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -330,6 +331,7 @@ export default function GenerateQuotationPage() {
   const buildItemsPayload = (opts: {
     removeId?: string;
     addItem?: { inventory_id: string; quantity: number; unit_price: number; gst_percentage: number };
+    addAtIndex?: number;
   } = {}) => {
     const kept = (order?.items || [])
       .filter((item) => item.id !== opts.removeId)
@@ -341,7 +343,8 @@ export default function GenerateQuotationPage() {
         section_name: item.section_name || null,
       }));
     if (opts.addItem) {
-      kept.push({ ...opts.addItem, section_name: null });
+      const insertAt = opts.addAtIndex !== undefined ? opts.addAtIndex : kept.length;
+      kept.splice(insertAt, 0, { ...opts.addItem, section_name: null });
     }
     return kept;
   };
@@ -363,7 +366,7 @@ export default function GenerateQuotationPage() {
   };
 
   const handleCancelAddItem = () => {
-    setShowAddItem(false);
+    setAddItemAt(null);
     setSelectedCatalog(null);
     setCatalogSearch('');
     setAddQuantity(1);
@@ -384,6 +387,7 @@ export default function GenerateQuotationPage() {
 
     updateItemsMutation.mutate(
       buildItemsPayload({
+        addAtIndex: addItemAt ?? undefined,
         addItem: {
           inventory_id: selectedCatalog.id,
           quantity: addQuantity,
@@ -510,6 +514,62 @@ export default function GenerateQuotationPage() {
       </div>
     );
   }
+
+  const addItemForm = (
+    <div className="flex items-center gap-2">
+      <div className="relative w-64">
+        <div className="relative">
+          <input
+            type="text"
+            value={catalogSearch}
+            onChange={(e) => { setCatalogSearch(e.target.value); setSelectedCatalog(null); }}
+            onFocus={() => catalogSearch && !selectedCatalog && setShowDropdown(true)}
+            placeholder="Search catalog no or description…"
+            autoFocus
+            className="input input-sm w-full text-xs pr-7"
+          />
+          <Search className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" size={13} />
+        </div>
+        {showDropdown && searchResults.length > 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-56 overflow-auto">
+            {searchResults.map((inv, i) => (
+              <button
+                key={inv.id}
+                onClick={() => handleSelectCatalog(inv)}
+                className={`w-full text-left px-2 py-1.5 hover:bg-blue-50 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+              >
+                <div className="font-mono text-xs font-medium text-gray-900">{inv.sku}</div>
+                <div className="text-xs text-gray-500 truncate">{inv.description}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <input
+        type="number"
+        min={1}
+        value={addQuantity}
+        onChange={(e) => setAddQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+        className="input input-sm w-16 text-xs text-center"
+        title="Quantity"
+      />
+      <button
+        onClick={handleAddItem}
+        disabled={!selectedCatalog || updateItemsMutation.isPending}
+        className="btn btn-primary btn-sm text-xs px-3 py-1.5 disabled:opacity-40"
+      >
+        <Check size={13} className="mr-1" />
+        {updateItemsMutation.isPending ? 'Adding…' : 'Add'}
+      </button>
+      <button
+        onClick={handleCancelAddItem}
+        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+        title="Cancel"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
 
   return (
     <div className="-m-6 h-[calc(100vh-4rem)] flex flex-col bg-gray-50">
@@ -671,117 +731,88 @@ export default function GenerateQuotationPage() {
               </thead>
               <tbody className="divide-y">
                 {quotationItems.map((item, index) => (
-                  <tr key={item.id} className="hover:bg-gray-50 group">
-                    <td className="p-3 text-xs text-gray-900 whitespace-nowrap">{index + 1}</td>
-                    <td className="p-3 text-xs font-mono text-gray-900 whitespace-nowrap">{item.inventory.sku}</td>
-                    <td className="p-3 text-xs text-gray-700 max-w-[200px]">
-                      <div className="truncate" title={item.inventory.description || 'No description'}>
-                        {item.inventory.description || 'No description'}
-                      </div>
-                    </td>
-                    <td className="p-3 text-xs text-gray-600 whitespace-nowrap">{item.hsn_code || '-'}</td>
-                    <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
-                        <span className="text-gray-600">₹</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={rawPriceInputs[item.id] !== undefined ? rawPriceInputs[item.id] : String(item.final_unit_price)}
-                          onChange={(e) => handleUnitPriceChange(item.id, e.target.value)}
-                          onBlur={() => handleUnitPriceBlur(item.id)}
-                          className={`w-24 text-right border rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            customUnitPrices[item.id] !== undefined 
-                              ? 'border-blue-500 bg-blue-50' 
-                              : 'border-gray-300'
-                          }`}
-                          title={customUnitPrices[item.id] !== undefined ? 'Custom price (edited)' : 'Click to edit price'}
-                        />
-                      </div>
-                    </td>
-                    <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">{item.quantity}</td>
-                    <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{discountPercent}%</td>
-                    <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.amount))}</td>
-                    <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{item.tax_percent}%</td>
-                    <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.tax_amount))}</td>
-                    <td className="p-3 text-xs text-right font-bold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.total_amount))}</td>
-                    <td className="p-1 text-center">
-                      <button
-                        onClick={() => handleDeleteItem(item)}
-                        disabled={updateItemsMutation.isPending}
-                        className="p-1 rounded text-gray-300 group-hover:text-red-500 hover:bg-red-50 transition-colors"
-                        title="Remove item"
-                      >
-                        <X size={14} />
-                      </button>
-                    </td>
-                  </tr>
+                  <Fragment key={item.id}>
+                    {addItemAt === index && (
+                      <tr className="bg-gray-50/50">
+                        <td colSpan={12} className="p-2">{addItemForm}</td>
+                      </tr>
+                    )}
+                    <tr className="hover:bg-gray-50 group">
+                      <td className="p-3 text-xs text-gray-900 whitespace-nowrap">{index + 1}</td>
+                      <td className="p-3 text-xs font-mono text-gray-900 whitespace-nowrap">{item.inventory.sku}</td>
+                      <td className="p-3 text-xs text-gray-700 max-w-[200px]">
+                        <div className="truncate" title={item.inventory.description || 'No description'}>
+                          {item.inventory.description || 'No description'}
+                        </div>
+                      </td>
+                      <td className="p-3 text-xs text-gray-600 whitespace-nowrap">{item.hsn_code || '-'}</td>
+                      <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-gray-600">₹</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={rawPriceInputs[item.id] !== undefined ? rawPriceInputs[item.id] : String(item.final_unit_price)}
+                            onChange={(e) => handleUnitPriceChange(item.id, e.target.value)}
+                            onBlur={() => handleUnitPriceBlur(item.id)}
+                            className={`w-24 text-right border rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              customUnitPrices[item.id] !== undefined
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-300'
+                            }`}
+                            title={customUnitPrices[item.id] !== undefined ? 'Custom price (edited)' : 'Click to edit price'}
+                          />
+                        </div>
+                      </td>
+                      <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">{item.quantity}</td>
+                      <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{discountPercent}%</td>
+                      <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.amount))}</td>
+                      <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{item.tax_percent}%</td>
+                      <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.tax_amount))}</td>
+                      <td className="p-3 text-xs text-right font-bold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.total_amount))}</td>
+                      <td className="p-1 text-center">
+                        <div className="flex items-center justify-center">
+                          <button
+                            onClick={() => setAddItemAt(index)}
+                            disabled={updateItemsMutation.isPending}
+                            className="p-0.5 rounded text-gray-300 group-hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                            title="Insert item above"
+                          >
+                            <ChevronUp size={13} />
+                          </button>
+                          <button
+                            onClick={() => setAddItemAt(index + 1)}
+                            disabled={updateItemsMutation.isPending}
+                            className="p-0.5 rounded text-gray-300 group-hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                            title="Insert item below"
+                          >
+                            <ChevronDown size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item)}
+                            disabled={updateItemsMutation.isPending}
+                            className="p-0.5 rounded text-gray-300 group-hover:text-red-500 hover:bg-red-50 transition-colors"
+                            title="Remove item"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </Fragment>
                 ))}
 
-                {/* Add Item row */}
+                {/* Add Item row — also hosts the insert form when appending at the end */}
                 <tr className="bg-gray-50/50">
                   <td colSpan={12} className="p-2">
-                    {!showAddItem ? (
+                    {addItemAt === quotationItems.length ? addItemForm : (
                       <button
-                        onClick={() => setShowAddItem(true)}
+                        onClick={() => setAddItemAt(quotationItems.length)}
                         className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded hover:bg-blue-50 transition-colors"
                       >
                         <Plus size={14} />
                         Add Item
                       </button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="relative w-64">
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={catalogSearch}
-                              onChange={(e) => { setCatalogSearch(e.target.value); setSelectedCatalog(null); }}
-                              onFocus={() => catalogSearch && !selectedCatalog && setShowDropdown(true)}
-                              placeholder="Search catalog no or description…"
-                              autoFocus
-                              className="input input-sm w-full text-xs pr-7"
-                            />
-                            <Search className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" size={13} />
-                          </div>
-                          {showDropdown && searchResults.length > 0 && (
-                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-56 overflow-auto">
-                              {searchResults.map((inv, i) => (
-                                <button
-                                  key={inv.id}
-                                  onClick={() => handleSelectCatalog(inv)}
-                                  className={`w-full text-left px-2 py-1.5 hover:bg-blue-50 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
-                                >
-                                  <div className="font-mono text-xs font-medium text-gray-900">{inv.sku}</div>
-                                  <div className="text-xs text-gray-500 truncate">{inv.description}</div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <input
-                          type="number"
-                          min={1}
-                          value={addQuantity}
-                          onChange={(e) => setAddQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="input input-sm w-16 text-xs text-center"
-                          title="Quantity"
-                        />
-                        <button
-                          onClick={handleAddItem}
-                          disabled={!selectedCatalog || updateItemsMutation.isPending}
-                          className="btn btn-primary btn-sm text-xs px-3 py-1.5 disabled:opacity-40"
-                        >
-                          <Check size={13} className="mr-1" />
-                          {updateItemsMutation.isPending ? 'Adding…' : 'Add'}
-                        </button>
-                        <button
-                          onClick={handleCancelAddItem}
-                          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                          title="Cancel"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
                     )}
                   </td>
                 </tr>
