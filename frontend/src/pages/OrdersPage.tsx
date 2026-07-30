@@ -30,10 +30,25 @@ export default function OrdersPage() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
+
+  // Remember the current filters/page so navigating away (e.g. into an order)
+  // and back can restore the same list view instead of resetting to defaults.
+  useEffect(() => {
+    sessionStorage.setItem('ordersListQuery', searchParams.toString());
+  }, [searchParams]);
   const [showForm, setShowForm] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [newOrderNumber, setNewOrderNumber] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const currentPage = parseInt(searchParams.get('page') || '1', 10);
+  const setCurrentPage = (updater: number | ((prev: number) => number)) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const prevPage = parseInt(prev.get('page') || '1', 10);
+      const newPage = typeof updater === 'function' ? (updater as (p: number) => number)(prevPage) : updater;
+      if (newPage > 1) next.set('page', String(newPage)); else next.delete('page');
+      return next;
+    }, { replace: true });
+  };
   const [itemsPerPage] = useState(100); // Match backend default
   const [formError, setFormError] = useState('');
   const [editOrderError, setEditOrderError] = useState('');

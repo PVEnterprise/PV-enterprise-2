@@ -491,7 +491,10 @@ export default function OrderDetailPage() {
       {/* Header - Compact */}
       <div className="mb-3">
         <button
-          onClick={() => navigate('/orders')}
+          onClick={() => {
+            const savedQuery = sessionStorage.getItem('ordersListQuery');
+            navigate(savedQuery ? `/orders?${savedQuery}` : '/orders');
+          }}
           className="flex items-center text-gray-600 hover:text-gray-900 mb-2 text-sm"
         >
           <ArrowLeft size={16} className="mr-1" />
