@@ -321,6 +321,7 @@ DESCRIPTION_SKU_OVERRIDES = {
     normalize_description('Small & Medium Sizes Disposable Bulldog'): "SI 90004",
     normalize_description('Aluminium tray two floor with siliscon mat SREEDEVI-INDIA'): "SI 90005",
     normalize_description('Mouth Gag Set SREEDEVI-INDIA'): "SI 90007",
+    normalize_description('DISP CVP COMPLETE SET TRIPLE LUMEN CVC CATHETER DISPO DRAPE TRAY PLASTIC BOWL SPONGE HOLDER, (SGS25007) MRP:RS 2200'): "SI 90006",
 }
 
 
