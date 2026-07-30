@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List
 from uuid import UUID
 from datetime import datetime, date
+from decimal import Decimal
 
 from app.db.session import get_db
 from app.models.dispatch import Dispatch, DispatchItem
@@ -15,6 +16,7 @@ from app.models.user import User
 from app.schemas.dispatch import DispatchCreate, DispatchResponse, InvoiceListItem
 from app.api.deps import get_db, get_current_user
 from app.utils.order_tracking import add_order_action
+from app.utils.tax import compute_round_off
 
 router = APIRouter()
 
@@ -256,7 +258,8 @@ def list_invoiced_dispatches(
         )
 
     dispatches = db.query(Dispatch).options(
-        joinedload(Dispatch.order).joinedload(Order.customer)
+        joinedload(Dispatch.order).joinedload(Order.customer),
+        joinedload(Dispatch.items).joinedload(DispatchItem.order_item)
     ).filter(
         Dispatch.invoice_number.isnot(None),
         Dispatch.invoice_number != ''
@@ -271,10 +274,35 @@ def list_invoiced_dispatches(
             order_id=d.order_id,
             order_number=d.order.order_number,
             customer_name=d.order.customer.name,
+            customer_city=d.order.customer.city,
+            payment_terms=d.payment_terms,
+            invoice_amount=float(_compute_dispatch_invoice_amount(d)),
             created_at=d.created_at,
         )
         for d in dispatches
     ]
+
+
+def _compute_dispatch_invoice_amount(dispatch: Dispatch) -> Decimal:
+    """
+    Grand total for a dispatch's invoice, matching the calculation used to
+    render the invoice PDF (see invoice_pdf_generator._items_table): rate
+    less the order's flat discount, times quantity, plus per-item GST,
+    rounded to the nearest rupee.
+    """
+    discount_percentage = Decimal(str(dispatch.order.discount_percentage or 0))
+    subtotal = Decimal("0.00")
+    total_gst = Decimal("0.00")
+    for item in dispatch.items:
+        rate = Decimal(str(item.order_item.unit_price or 0))
+        qty = Decimal(str(item.quantity or 0))
+        gst = Decimal(str(item.order_item.gst_percentage or 0))
+        discounted_rate = rate - (rate * discount_percentage / Decimal("100"))
+        amt = discounted_rate * qty
+        subtotal += amt
+        total_gst += amt * gst / Decimal("100")
+    grand, _ = compute_round_off(subtotal + total_gst)
+    return grand
 
 
 @router.get("/{dispatch_id}", response_model=DispatchResponse)
