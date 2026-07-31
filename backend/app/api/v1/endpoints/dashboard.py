@@ -169,18 +169,35 @@ def get_dashboard_stats(
     ).scalar() or Decimal(0)
 
     # --- Finance extras ---
-    # Invoiced = value of dispatched items (quantity * order unit_price)
+    # Invoiced = value of dispatched items, net of order discount and with
+    # GST applied - same formula as pending_quotation_value/
+    # total_pending_order_value below, so this actually matches what an
+    # Invoice's total_amount comes out to instead of the pre-discount,
+    # pre-tax line subtotal.
     _dispatch_val_query = db.query(
-        func.sum(DispatchItem.quantity * OrderItem.unit_price)
-    ).join(OrderItem, OrderItem.id == DispatchItem.order_item_id).filter(
+        func.sum(
+            DispatchItem.quantity
+            * OrderItem.unit_price
+            * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+            * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+        )
+    ).join(OrderItem, OrderItem.id == DispatchItem.order_item_id
+    ).join(Order, Order.id == OrderItem.order_id
+    ).filter(
         OrderItem.unit_price.isnot(None)
     )
     total_invoiced = _dispatch_val_query.scalar() or Decimal(0)
 
     invoiced_this_month = db.query(
-        func.sum(DispatchItem.quantity * OrderItem.unit_price)
+        func.sum(
+            DispatchItem.quantity
+            * OrderItem.unit_price
+            * (1 - func.coalesce(Order.discount_percentage, 0) / 100)
+            * (1 + func.coalesce(OrderItem.gst_percentage, 0) / 100)
+        )
     ).join(Dispatch, Dispatch.id == DispatchItem.dispatch_id
     ).join(OrderItem, OrderItem.id == DispatchItem.order_item_id
+    ).join(Order, Order.id == OrderItem.order_id
     ).filter(
         Dispatch.dispatch_date >= month_start.date(),
         OrderItem.unit_price.isnot(None)
