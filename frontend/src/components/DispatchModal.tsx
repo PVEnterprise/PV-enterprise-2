@@ -14,6 +14,16 @@ interface DispatchModalProps {
   onSubmit: (dispatchData: DispatchFormData) => void;
   isSubmitting: boolean;
   error?: string;
+  // Seeds the bank fields from the customer's last-saved values (shared with
+  // the quotation flow) — falls back to the hardcoded defaults below for a
+  // customer with none saved yet.
+  initialBankDetails?: Partial<{
+    bank_account_name: string;
+    bank_account_number: string;
+    bank_name: string;
+    bank_ifsc: string;
+    bank_branch: string;
+  }>;
 }
 
 interface AlternateItem {
@@ -142,7 +152,8 @@ export default function DispatchModal({
   onClose,
   onSubmit,
   isSubmitting,
-  error
+  error,
+  initialBankDetails
 }: DispatchModalProps) {
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [courierName, setCourierName] = useState('');
@@ -151,11 +162,11 @@ export default function DispatchModal({
   const [terms, setTerms] = useState(DEFAULT_TERMS);
   const [includeTerms, setIncludeTerms] = useState(false);
   const [paymentTerms, setPaymentTerms] = useState('Due on Receipt');
-  const [bankAccountName, setBankAccountName] = useState('Sreedevi Life Sciences');
-  const [bankAccountNumber, setBankAccountNumber] = useState('42285740549');
-  const [bankName, setBankName] = useState('State Bank of India');
-  const [bankIfsc, setBankIfsc] = useState('SBIN0021790');
-  const [bankBranch, setBankBranch] = useState('Manikonda, Hyderabad');
+  const [bankAccountName, setBankAccountName] = useState(initialBankDetails?.bank_account_name || 'Sreedevi Life Sciences');
+  const [bankAccountNumber, setBankAccountNumber] = useState(initialBankDetails?.bank_account_number || '42285740549');
+  const [bankName, setBankName] = useState(initialBankDetails?.bank_name || 'State Bank of India');
+  const [bankIfsc, setBankIfsc] = useState(initialBankDetails?.bank_ifsc || 'SBIN0021790');
+  const [bankBranch, setBankBranch] = useState(initialBankDetails?.bank_branch || 'Manikonda, Hyderabad');
   const [poNumber, setPoNumber] = useState('');
   const [dcNumber, setDcNumber] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');

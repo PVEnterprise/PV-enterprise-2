@@ -181,15 +181,18 @@ def list_orders(
     status: Optional[str] = None,
     workflow_stage: Optional[str] = None,
     customer_id: Optional[UUID] = None,
+    city: Optional[str] = None,
     search: Optional[str] = None,
+    show_completed: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     List orders with filtering and pagination.
-    
+
     - Sales reps see only their own orders
     - Other roles see all orders
+    - Completed orders are hidden by default; pass show_completed=true to include them
     """
     query = db.query(Order).options(
         joinedload(Order.customer),  # Eager load customer relationship
@@ -209,13 +212,23 @@ def list_orders(
     # Apply filters
     if status:
         query = query.filter(Order.status == status)
+    elif not show_completed:
+        # Completed orders clutter the default view; hide them unless requested.
+        query = query.filter(Order.status != "completed")
     if workflow_stage:
         query = query.filter(Order.workflow_stage == workflow_stage)
     if customer_id:
         query = query.filter(Order.customer_id == customer_id)
+    customer_joined = False
+    if city:
+        query = query.join(Customer, Customer.id == Order.customer_id, isouter=True)
+        customer_joined = True
+        query = query.filter(Customer.city.ilike(f"%{city.strip()}%"))
     if search:
         s = f"%{search.strip()}%"
-        query = query.join(Customer, Customer.id == Order.customer_id, isouter=True).filter(
+        if not customer_joined:
+            query = query.join(Customer, Customer.id == Order.customer_id, isouter=True)
+        query = query.filter(
             Order.order_number.ilike(s) |
             Customer.hospital_name.ilike(s) |
             Customer.name.ilike(s)
@@ -510,7 +523,7 @@ def update_decoded_items(
         
         new_item = OrderItem(
             order_id=order_id,
-            item_description=f"Decoded: {inventory.sku} - {inventory.description or 'No description'}",
+            item_description=decode_item.item_description or f"Decoded: {inventory.sku} - {inventory.description or 'No description'}",
             quantity=decode_item.quantity or 1,
             inventory_id=decode_item.inventory_id,
             decoded_by=current_user.id,
@@ -992,8 +1005,10 @@ def generate_quotation_preview_pdf(
     # Create a temporary copy of order items with custom prices
     # We'll modify the order object temporarily for PDF generation
     original_prices = {}
+    original_quantities = {}
+    original_descriptions = {}
     original_discount = order.discount_percentage
-    
+
     try:
         # Apply custom prices to order items temporarily
         if 'custom_prices' in quotation_data and quotation_data['custom_prices']:
@@ -1003,7 +1018,25 @@ def generate_quotation_preview_pdf(
                 if item_id_str in custom_prices:
                     original_prices[item.id] = item.unit_price
                     item.unit_price = Decimal(str(custom_prices[item_id_str]))
-        
+
+        # Apply custom quantities temporarily
+        if 'custom_quantities' in quotation_data and quotation_data['custom_quantities']:
+            custom_quantities = quotation_data['custom_quantities']
+            for item in order.items:
+                item_id_str = str(item.id)
+                if item_id_str in custom_quantities:
+                    original_quantities[item.id] = item.quantity
+                    item.quantity = int(custom_quantities[item_id_str])
+
+        # Apply custom descriptions temporarily
+        if 'custom_descriptions' in quotation_data and quotation_data['custom_descriptions']:
+            custom_descriptions = quotation_data['custom_descriptions']
+            for item in order.items:
+                item_id_str = str(item.id)
+                if item_id_str in custom_descriptions:
+                    original_descriptions[item.id] = item.item_description
+                    item.item_description = custom_descriptions[item_id_str]
+
         # Apply discount temporarily
         if 'discount_percent' in quotation_data:
             order.discount_percentage = Decimal(str(quotation_data['discount_percent']))
@@ -1020,12 +1053,13 @@ def generate_quotation_preview_pdf(
         # Extract bank details and terms from request
         bank_details = quotation_data.get('bank_details') or None
         terms_and_conditions = quotation_data.get('terms_and_conditions') or None
+        discount_percent = quotation_data.get('discount_percent')
 
         # Remember these on the customer so future quotations default to them
         # instead of the hardcoded fallback. Committed here (separately from the
         # temporary price/discount mutations below, which are reverted and never
         # committed) so it survives the db.expire_all() in the finally block.
-        if bank_details or terms_and_conditions:
+        if bank_details or terms_and_conditions or discount_percent is not None:
             customer = order.customer
             if bank_details:
                 for field in ('bank_account_name', 'bank_account_number', 'bank_name', 'bank_ifsc', 'bank_branch'):
@@ -1033,6 +1067,8 @@ def generate_quotation_preview_pdf(
                         setattr(customer, field, bank_details[field])
             if terms_and_conditions:
                 customer.terms_and_conditions = terms_and_conditions
+            if discount_percent is not None:
+                customer.discount_percentage = Decimal(str(discount_percent))
             db.commit()
 
         # Generate PDF with modified prices
@@ -1050,10 +1086,14 @@ def generate_quotation_preview_pdf(
         )
     
     finally:
-        # Restore original prices (important: don't commit changes)
+        # Restore original prices/quantities/descriptions (important: don't commit changes)
         for item in order.items:
             if item.id in original_prices:
                 item.unit_price = original_prices[item.id]
+            if item.id in original_quantities:
+                item.quantity = original_quantities[item.id]
+            if item.id in original_descriptions:
+                item.item_description = original_descriptions[item.id]
         order.discount_percentage = original_discount
         # Explicitly expire the session to prevent accidental commits
         db.expire_all()
@@ -1421,7 +1461,8 @@ def save_quotation_draft(
         )
 
     order = db.query(Order).options(
-        joinedload(Order.items)
+        joinedload(Order.items),
+        joinedload(Order.customer)
     ).filter(Order.id == order_id).first()
 
     if not order:
@@ -1458,9 +1499,26 @@ def save_quotation_draft(
             if item_id_str in quotation_data['custom_prices']:
                 item.unit_price = quotation_data['custom_prices'][item_id_str]
 
+    # Apply custom quantities
+    if 'custom_quantities' in quotation_data and quotation_data['custom_quantities']:
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in quotation_data['custom_quantities']:
+                item.quantity = int(quotation_data['custom_quantities'][item_id_str])
+
+    # Apply custom descriptions
+    if 'custom_descriptions' in quotation_data and quotation_data['custom_descriptions']:
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in quotation_data['custom_descriptions']:
+                item.item_description = quotation_data['custom_descriptions'][item_id_str]
+
     # Save discount
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
+        # Remember it on the customer so future quotations default to it
+        if order.customer:
+            order.customer.discount_percentage = quotation_data['discount_percent']
 
     # Save subject
     if 'subject' in quotation_data:
@@ -1502,15 +1560,16 @@ def mark_quotation_generated(
         )
     
     order = db.query(Order).options(
-        joinedload(Order.items)
+        joinedload(Order.items),
+        joinedload(Order.customer)
     ).filter(Order.id == order_id).first()
-    
+
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found"
         )
-    
+
     # Check if order is in quotation stage
     if order.workflow_stage != "quotation":
         raise HTTPException(
@@ -1547,9 +1606,28 @@ def mark_quotation_generated(
             item_id_str = str(item.id)
             if item_id_str in custom_prices:
                 item.unit_price = custom_prices[item_id_str]
-    
+
+    # Update custom quantities if provided
+    if 'custom_quantities' in quotation_data and quotation_data['custom_quantities']:
+        custom_quantities = quotation_data['custom_quantities']  # Dict of item_id -> quantity
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in custom_quantities:
+                item.quantity = int(custom_quantities[item_id_str])
+
+    # Update custom descriptions if provided
+    if 'custom_descriptions' in quotation_data and quotation_data['custom_descriptions']:
+        custom_descriptions = quotation_data['custom_descriptions']  # Dict of item_id -> description
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in custom_descriptions:
+                item.item_description = custom_descriptions[item_id_str]
+
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
+        # Remember it on the customer so future quotations default to it
+        if order.customer:
+            order.customer.discount_percentage = quotation_data['discount_percent']
 
     # Save subject
     if 'subject' in quotation_data:

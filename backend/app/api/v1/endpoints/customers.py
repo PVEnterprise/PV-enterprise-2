@@ -55,6 +55,7 @@ class CustomerUpdate(BaseModel):
     bank_ifsc: Optional[str] = None
     bank_branch: Optional[str] = None
     terms_and_conditions: Optional[str] = None
+    discount_percentage: Optional[float] = None
 
 
 class CustomerResponse(CustomerBase):
@@ -65,6 +66,7 @@ class CustomerResponse(CustomerBase):
     bank_ifsc: Optional[str] = None
     bank_branch: Optional[str] = None
     terms_and_conditions: Optional[str] = None
+    discount_percentage: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
 
