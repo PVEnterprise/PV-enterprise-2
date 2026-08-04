@@ -510,7 +510,7 @@ def update_decoded_items(
         
         new_item = OrderItem(
             order_id=order_id,
-            item_description=f"Decoded: {inventory.sku} - {inventory.description or 'No description'}",
+            item_description=decode_item.item_description or f"Decoded: {inventory.sku} - {inventory.description or 'No description'}",
             quantity=decode_item.quantity or 1,
             inventory_id=decode_item.inventory_id,
             decoded_by=current_user.id,
@@ -992,8 +992,10 @@ def generate_quotation_preview_pdf(
     # Create a temporary copy of order items with custom prices
     # We'll modify the order object temporarily for PDF generation
     original_prices = {}
+    original_quantities = {}
+    original_descriptions = {}
     original_discount = order.discount_percentage
-    
+
     try:
         # Apply custom prices to order items temporarily
         if 'custom_prices' in quotation_data and quotation_data['custom_prices']:
@@ -1003,7 +1005,25 @@ def generate_quotation_preview_pdf(
                 if item_id_str in custom_prices:
                     original_prices[item.id] = item.unit_price
                     item.unit_price = Decimal(str(custom_prices[item_id_str]))
-        
+
+        # Apply custom quantities temporarily
+        if 'custom_quantities' in quotation_data and quotation_data['custom_quantities']:
+            custom_quantities = quotation_data['custom_quantities']
+            for item in order.items:
+                item_id_str = str(item.id)
+                if item_id_str in custom_quantities:
+                    original_quantities[item.id] = item.quantity
+                    item.quantity = int(custom_quantities[item_id_str])
+
+        # Apply custom descriptions temporarily
+        if 'custom_descriptions' in quotation_data and quotation_data['custom_descriptions']:
+            custom_descriptions = quotation_data['custom_descriptions']
+            for item in order.items:
+                item_id_str = str(item.id)
+                if item_id_str in custom_descriptions:
+                    original_descriptions[item.id] = item.item_description
+                    item.item_description = custom_descriptions[item_id_str]
+
         # Apply discount temporarily
         if 'discount_percent' in quotation_data:
             order.discount_percentage = Decimal(str(quotation_data['discount_percent']))
@@ -1050,10 +1070,14 @@ def generate_quotation_preview_pdf(
         )
     
     finally:
-        # Restore original prices (important: don't commit changes)
+        # Restore original prices/quantities/descriptions (important: don't commit changes)
         for item in order.items:
             if item.id in original_prices:
                 item.unit_price = original_prices[item.id]
+            if item.id in original_quantities:
+                item.quantity = original_quantities[item.id]
+            if item.id in original_descriptions:
+                item.item_description = original_descriptions[item.id]
         order.discount_percentage = original_discount
         # Explicitly expire the session to prevent accidental commits
         db.expire_all()
@@ -1458,6 +1482,20 @@ def save_quotation_draft(
             if item_id_str in quotation_data['custom_prices']:
                 item.unit_price = quotation_data['custom_prices'][item_id_str]
 
+    # Apply custom quantities
+    if 'custom_quantities' in quotation_data and quotation_data['custom_quantities']:
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in quotation_data['custom_quantities']:
+                item.quantity = int(quotation_data['custom_quantities'][item_id_str])
+
+    # Apply custom descriptions
+    if 'custom_descriptions' in quotation_data and quotation_data['custom_descriptions']:
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in quotation_data['custom_descriptions']:
+                item.item_description = quotation_data['custom_descriptions'][item_id_str]
+
     # Save discount
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
@@ -1547,7 +1585,23 @@ def mark_quotation_generated(
             item_id_str = str(item.id)
             if item_id_str in custom_prices:
                 item.unit_price = custom_prices[item_id_str]
-    
+
+    # Update custom quantities if provided
+    if 'custom_quantities' in quotation_data and quotation_data['custom_quantities']:
+        custom_quantities = quotation_data['custom_quantities']  # Dict of item_id -> quantity
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in custom_quantities:
+                item.quantity = int(custom_quantities[item_id_str])
+
+    # Update custom descriptions if provided
+    if 'custom_descriptions' in quotation_data and quotation_data['custom_descriptions']:
+        custom_descriptions = quotation_data['custom_descriptions']  # Dict of item_id -> description
+        for item in order.items:
+            item_id_str = str(item.id)
+            if item_id_str in custom_descriptions:
+                item.item_description = custom_descriptions[item_id_str]
+
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
 

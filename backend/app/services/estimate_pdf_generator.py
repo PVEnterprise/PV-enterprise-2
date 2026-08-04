@@ -467,10 +467,14 @@ class EstimatePDFGenerator:
                 subtotal += Decimal(str(amount))
                 total_igst += Decimal(str(igst_amt))
                 hsn_sac = item.inventory_item.hsn_code if hasattr(item.inventory_item, 'hsn_code') and item.inventory_item.hsn_code else ''
+                # item_description holds an auto-generated "Decoded: ..." placeholder unless
+                # the user has overridden it on the quotation screen — prefer the override.
+                item_desc = item.item_description or ''
+                display_description = item_desc if item_desc and not item_desc.startswith('Decoded:') else item.inventory_item.description
                 if show_discount_col:
                     table_data.append([
                         str(idx),
-                        Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}', self.styles['SmallText']),
+                        Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{display_description}', self.styles['SmallText']),
                         hsn_sac, format_indian_number(rate), f'{qty}',
                         f'{discount_percentage:.0f}%', format_indian_number(amount_after_discount),
                         f'{igst_pct:.0f}%', format_indian_number(igst_amt), format_indian_number(total_amt)
@@ -478,7 +482,7 @@ class EstimatePDFGenerator:
                 else:
                     table_data.append([
                         str(idx),
-                        Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}', self.styles['SmallText']),
+                        Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{display_description}', self.styles['SmallText']),
                         hsn_sac, format_indian_number(rate), f'{qty}',
                         format_indian_number(amount_after_discount),
                         f'{igst_pct:.0f}%', format_indian_number(igst_amt), format_indian_number(total_amt)
