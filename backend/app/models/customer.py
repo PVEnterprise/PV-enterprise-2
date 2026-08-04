@@ -1,7 +1,7 @@
 """
 Customer database model.
 """
-from sqlalchemy import Column, String, Text, ForeignKey
+from sqlalchemy import Column, String, Text, ForeignKey, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -34,6 +34,7 @@ class Customer(BaseModel):
     bank_ifsc = Column(String(20))
     bank_branch = Column(String(100))
     terms_and_conditions = Column(Text)
+    discount_percentage = Column(Numeric(5, 2))
     
     # Relationships
     creator = relationship("User", back_populates="created_customers", foreign_keys=[created_by])

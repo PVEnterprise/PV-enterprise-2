@@ -181,15 +181,18 @@ def list_orders(
     status: Optional[str] = None,
     workflow_stage: Optional[str] = None,
     customer_id: Optional[UUID] = None,
+    city: Optional[str] = None,
     search: Optional[str] = None,
+    show_completed: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     List orders with filtering and pagination.
-    
+
     - Sales reps see only their own orders
     - Other roles see all orders
+    - Completed orders are hidden by default; pass show_completed=true to include them
     """
     query = db.query(Order).options(
         joinedload(Order.customer),  # Eager load customer relationship
@@ -209,13 +212,23 @@ def list_orders(
     # Apply filters
     if status:
         query = query.filter(Order.status == status)
+    elif not show_completed:
+        # Completed orders clutter the default view; hide them unless requested.
+        query = query.filter(Order.status != "completed")
     if workflow_stage:
         query = query.filter(Order.workflow_stage == workflow_stage)
     if customer_id:
         query = query.filter(Order.customer_id == customer_id)
+    customer_joined = False
+    if city:
+        query = query.join(Customer, Customer.id == Order.customer_id, isouter=True)
+        customer_joined = True
+        query = query.filter(Customer.city.ilike(f"%{city.strip()}%"))
     if search:
         s = f"%{search.strip()}%"
-        query = query.join(Customer, Customer.id == Order.customer_id, isouter=True).filter(
+        if not customer_joined:
+            query = query.join(Customer, Customer.id == Order.customer_id, isouter=True)
+        query = query.filter(
             Order.order_number.ilike(s) |
             Customer.hospital_name.ilike(s) |
             Customer.name.ilike(s)
@@ -1040,12 +1053,13 @@ def generate_quotation_preview_pdf(
         # Extract bank details and terms from request
         bank_details = quotation_data.get('bank_details') or None
         terms_and_conditions = quotation_data.get('terms_and_conditions') or None
+        discount_percent = quotation_data.get('discount_percent')
 
         # Remember these on the customer so future quotations default to them
         # instead of the hardcoded fallback. Committed here (separately from the
         # temporary price/discount mutations below, which are reverted and never
         # committed) so it survives the db.expire_all() in the finally block.
-        if bank_details or terms_and_conditions:
+        if bank_details or terms_and_conditions or discount_percent is not None:
             customer = order.customer
             if bank_details:
                 for field in ('bank_account_name', 'bank_account_number', 'bank_name', 'bank_ifsc', 'bank_branch'):
@@ -1053,6 +1067,8 @@ def generate_quotation_preview_pdf(
                         setattr(customer, field, bank_details[field])
             if terms_and_conditions:
                 customer.terms_and_conditions = terms_and_conditions
+            if discount_percent is not None:
+                customer.discount_percentage = Decimal(str(discount_percent))
             db.commit()
 
         # Generate PDF with modified prices
@@ -1445,7 +1461,8 @@ def save_quotation_draft(
         )
 
     order = db.query(Order).options(
-        joinedload(Order.items)
+        joinedload(Order.items),
+        joinedload(Order.customer)
     ).filter(Order.id == order_id).first()
 
     if not order:
@@ -1499,6 +1516,9 @@ def save_quotation_draft(
     # Save discount
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
+        # Remember it on the customer so future quotations default to it
+        if order.customer:
+            order.customer.discount_percentage = quotation_data['discount_percent']
 
     # Save subject
     if 'subject' in quotation_data:
@@ -1540,15 +1560,16 @@ def mark_quotation_generated(
         )
     
     order = db.query(Order).options(
-        joinedload(Order.items)
+        joinedload(Order.items),
+        joinedload(Order.customer)
     ).filter(Order.id == order_id).first()
-    
+
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found"
         )
-    
+
     # Check if order is in quotation stage
     if order.workflow_stage != "quotation":
         raise HTTPException(
@@ -1604,6 +1625,9 @@ def mark_quotation_generated(
 
     if 'discount_percent' in quotation_data:
         order.discount_percentage = quotation_data['discount_percent']
+        # Remember it on the customer so future quotations default to it
+        if order.customer:
+            order.customer.discount_percentage = quotation_data['discount_percent']
 
     # Save subject
     if 'subject' in quotation_data:

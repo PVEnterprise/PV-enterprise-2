@@ -161,6 +161,16 @@ def create_dispatch(
     )
     db.add(dispatch)
     db.flush()  # Get dispatch ID
+
+    # Remember invoice bank details/terms on the customer so future
+    # quotations/invoices default to them instead of the hardcoded fallback.
+    # Latest update always overrides whatever was saved before.
+    for field in ('bank_account_name', 'bank_account_number', 'bank_name', 'bank_ifsc', 'bank_branch'):
+        value = getattr(dispatch_data, field)
+        if value:
+            setattr(order.customer, field, value)
+    if dispatch_data.terms:
+        order.customer.terms_and_conditions = dispatch_data.terms
     
     # Create dispatch items and update inventory
     for item_data in dispatch_data.items:
