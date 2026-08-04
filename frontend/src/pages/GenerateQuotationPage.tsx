@@ -33,6 +33,7 @@ interface OrderItem {
   unit_price: number;
   gst_percentage?: number;
   section_name?: string;
+  item_description?: string;
 }
 
 interface Order {
@@ -68,6 +69,7 @@ interface PriceListItem {
 interface QuotationItem extends OrderItem {
   hsn_code: string;
   final_unit_price: number;
+  description: string;
   amount: number;
   tax_percent: number;
   tax_amount: number;
@@ -76,6 +78,15 @@ interface QuotationItem extends OrderItem {
 
 const formatINR = (amount: number) =>
   new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+
+// item_description holds an auto-generated "Decoded: ..." placeholder unless the user
+// has already saved a custom description for this line — prefer that over the placeholder.
+const defaultDescription = (item: OrderItem) => {
+  if (item.item_description && !item.item_description.startsWith('Decoded:')) {
+    return item.item_description;
+  }
+  return item.inventory.description || '';
+};
 
 export default function GenerateQuotationPage() {
   const { user } = useAuth();
@@ -100,6 +111,9 @@ export default function GenerateQuotationPage() {
   // Store custom unit prices per item (itemId -> custom price)
   const [customUnitPrices, setCustomUnitPrices] = useState<Record<string, number>>({});
   const [rawPriceInputs, setRawPriceInputs] = useState<Record<string, string>>({});
+  // Store custom quantities and descriptions per item (itemId -> value)
+  const [customQuantities, setCustomQuantities] = useState<Record<string, number>>({});
+  const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
   const [subject, setSubject] = useState<string>('');
   const [showPDFModal, setShowPDFModal] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -182,7 +196,7 @@ export default function GenerateQuotationPage() {
       let unitPrice = Number(item.unit_price);
       // Use order item's GST percentage (already set when item was decoded)
       let taxPercent = Number(item.gst_percentage || item.inventory.tax || 5);
-      
+
       // Check if there's a custom price for this item
       if (customUnitPrices[item.id] !== undefined) {
         unitPrice = customUnitPrices[item.id];
@@ -197,8 +211,11 @@ export default function GenerateQuotationPage() {
         }
       }
 
+      const quantity = customQuantities[item.id] !== undefined ? customQuantities[item.id] : item.quantity;
+      const description = customDescriptions[item.id] !== undefined ? customDescriptions[item.id] : defaultDescription(item);
+
       // Calculate amounts
-      const grossAmount = unitPrice * item.quantity;
+      const grossAmount = unitPrice * quantity;
       const discountAmount = (grossAmount * discountPercent) / 100;
       const amount = grossAmount - discountAmount;
       const taxAmount = (amount * taxPercent) / 100;
@@ -208,13 +225,15 @@ export default function GenerateQuotationPage() {
         ...item,
         hsn_code: item.inventory.hsn_code || '',
         final_unit_price: unitPrice,
+        quantity,
+        description,
         amount,
         tax_percent: taxPercent,
         tax_amount: taxAmount,
         total_amount: totalAmount,
       };
     });
-  }, [order?.items, selectedPriceListId, priceListItems, discountPercent, customUnitPrices]);
+  }, [order?.items, selectedPriceListId, priceListItems, discountPercent, customUnitPrices, customQuantities, customDescriptions]);
 
   // Calculate totals
   const subTotal = useMemo(() => 
@@ -275,6 +294,8 @@ export default function GenerateQuotationPage() {
         tax_amount: totalTaxAmount,
         grand_total: grandTotal,
         custom_prices: customUnitPrices,
+        custom_quantities: customQuantities,
+        custom_descriptions: customDescriptions,
       });
     },
     onSuccess: () => {
@@ -304,6 +325,8 @@ export default function GenerateQuotationPage() {
         tax_amount: totalTaxAmount,
         grand_total: grandTotal,
         custom_prices: customUnitPrices,
+        custom_quantities: customQuantities,
+        custom_descriptions: customDescriptions,
       });
     },
     onSuccess: () => {
@@ -337,14 +360,15 @@ export default function GenerateQuotationPage() {
       .filter((item) => item.id !== opts.removeId)
       .map((item) => ({
         inventory_id: item.inventory_id,
-        quantity: item.quantity,
+        quantity: customQuantities[item.id] !== undefined ? customQuantities[item.id] : item.quantity,
         unit_price: customUnitPrices[item.id] !== undefined ? customUnitPrices[item.id] : item.unit_price,
         gst_percentage: item.gst_percentage,
         section_name: item.section_name || null,
+        item_description: customDescriptions[item.id] !== undefined ? customDescriptions[item.id] : item.item_description,
       }));
     if (opts.addItem) {
       const insertAt = opts.addAtIndex !== undefined ? opts.addAtIndex : kept.length;
-      kept.splice(insertAt, 0, { ...opts.addItem, section_name: null });
+      kept.splice(insertAt, 0, { ...opts.addItem, section_name: null, item_description: undefined });
     }
     return kept;
   };
@@ -455,6 +479,15 @@ export default function GenerateQuotationPage() {
     });
   };
 
+  const handleQuantityChange = (itemId: string, rawValue: string) => {
+    const quantity = Math.max(1, parseInt(rawValue, 10) || 1);
+    setCustomQuantities(prev => ({ ...prev, [itemId]: quantity }));
+  };
+
+  const handleDescriptionChange = (itemId: string, value: string) => {
+    setCustomDescriptions(prev => ({ ...prev, [itemId]: value }));
+  };
+
   const handleSaveAndSubmit = () => {
     if (quotationItems.length === 0) {
       alert('No items to quote');
@@ -470,6 +503,8 @@ export default function GenerateQuotationPage() {
         price_list_id: selectedPriceListId || null,
         discount_percent: discountPercent,
         custom_prices: customUnitPrices,
+        custom_quantities: customQuantities,
+        custom_descriptions: customDescriptions,
         expiry_date: formData.valid_till || null,
         bank_details: formData.bank_details,
         terms_and_conditions: formData.terms_and_conditions,
@@ -740,10 +775,18 @@ export default function GenerateQuotationPage() {
                     <tr className="hover:bg-gray-50 group">
                       <td className="p-3 text-xs text-gray-900 whitespace-nowrap">{index + 1}</td>
                       <td className="p-3 text-xs font-mono text-gray-900 whitespace-nowrap">{item.inventory.sku}</td>
-                      <td className="p-3 text-xs text-gray-700 max-w-[200px]">
-                        <div className="truncate" title={item.inventory.description || 'No description'}>
-                          {item.inventory.description || 'No description'}
-                        </div>
+                      <td className="p-3 text-xs text-gray-700 max-w-[220px]">
+                        <input
+                          type="text"
+                          value={item.description}
+                          onChange={(e) => handleDescriptionChange(item.id, e.target.value)}
+                          className={`w-full border rounded px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            customDescriptions[item.id] !== undefined
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-300'
+                          }`}
+                          title={customDescriptions[item.id] !== undefined ? 'Custom description (edited)' : 'Click to edit description'}
+                        />
                       </td>
                       <td className="p-3 text-xs text-gray-600 whitespace-nowrap">{item.hsn_code || '-'}</td>
                       <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">
@@ -764,7 +807,20 @@ export default function GenerateQuotationPage() {
                           />
                         </div>
                       </td>
-                      <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">{item.quantity}</td>
+                      <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                          className={`w-16 text-right border rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            customQuantities[item.id] !== undefined
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-300'
+                          }`}
+                          title={customQuantities[item.id] !== undefined ? 'Custom quantity (edited)' : 'Click to edit quantity'}
+                        />
+                      </td>
                       <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{discountPercent}%</td>
                       <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.amount))}</td>
                       <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{item.tax_percent}%</td>
