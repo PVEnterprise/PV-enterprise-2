@@ -206,7 +206,7 @@ export default function Layout() {
         </aside>
 
         {/* Main Content - Add left margin to account for fixed sidebar */}
-        <main className={`flex-1 p-6 transition-all duration-300 ${sidebarExpanded ? 'ml-64' : 'ml-16'}`}>
+        <main className={`flex-1 min-w-0 p-6 transition-all duration-300 ${sidebarExpanded ? 'ml-64' : 'ml-16'}`}>
           <Outlet />
         </main>
       </div>

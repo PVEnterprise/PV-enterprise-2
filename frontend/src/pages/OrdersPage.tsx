@@ -384,9 +384,9 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="w-full max-w-full overflow-x-auto">
+    <div className="w-full max-w-full">
       {/* Compact Header - Single Line */}
-      <div className="flex items-center justify-between mb-4 bg-white p-4 rounded-lg shadow-sm min-w-max">
+      <div className="flex items-center justify-between mb-4 bg-white p-4 rounded-lg shadow-sm">
         <div className="flex items-center space-x-4 flex-1">
           <h1 className="text-xl font-bold text-gray-900">Orders</h1>
           
@@ -457,7 +457,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Scrollable Table Container */}
-      <div className="overflow-auto max-h-[calc(100vh-260px)] min-w-max">
+      <div className="overflow-y-auto max-h-[calc(100vh-260px)]">
         <DataTable
           data={orders || []}
           columns={columns}
@@ -469,7 +469,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Pagination Controls */}
-      <div className="bg-white p-4 rounded-lg shadow-sm mt-4 flex items-center justify-between min-w-max">
+      <div className="bg-white p-4 rounded-lg shadow-sm mt-4 flex items-center justify-between">
         <div className="text-sm text-gray-600">
           Page {currentPage} • Showing {orders?.length || 0} orders
         </div>
