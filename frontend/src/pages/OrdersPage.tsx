@@ -13,9 +13,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function OrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedStatus = searchParams.get('status') || '';
+  const showCompleted = searchParams.get('show_completed') === '1';
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('search') || '');
+  const [cityQuery, setCityQuery] = useState(searchParams.get('city') || '');
+  const [debouncedCity, setDebouncedCity] = useState(searchParams.get('city') || '');
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -30,6 +32,29 @@ export default function OrdersPage() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedCity(cityQuery);
+      setCurrentPage(1);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (cityQuery) next.set('city', cityQuery); else next.delete('city');
+        return next;
+      }, { replace: true });
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cityQuery]);
+
+  const handleShowCompletedChange = (value: boolean) => {
+    setCurrentPage(1);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value) next.set('show_completed', '1'); else next.delete('show_completed');
+      return next;
+    }, { replace: true });
+  };
 
   // Remember the current filters/page so navigating away (e.g. into an order)
   // and back can restore the same list view instead of resetting to defaults.
@@ -75,24 +100,15 @@ export default function OrdersPage() {
   });
 
   const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ['orders', selectedStatus, currentPage, debouncedSearch],
+    queryKey: ['orders', showCompleted, currentPage, debouncedSearch, debouncedCity],
     queryFn: () => api.getOrders({
-      status: selectedStatus || undefined,
+      show_completed: showCompleted || undefined,
       search: debouncedSearch || undefined,
+      city: debouncedCity || undefined,
       skip: (currentPage - 1) * itemsPerPage,
       limit: itemsPerPage,
     }),
   });
-
-  // Reset to page 1 when status filter changes
-  const handleStatusChange = (newStatus: string) => {
-    setCurrentPage(1);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (newStatus) next.set('status', newStatus); else next.delete('status');
-      return next;
-    }, { replace: true });
-  };
 
   // Check if user has permission to create orders
   const canCreateOrder = user?.role?.permissions?.['order:create'] === true;
@@ -310,8 +326,14 @@ export default function OrdersPage() {
     {
       key: 'customer.name',
       label: 'Customer Name',
-      width: '25%',
+      width: '20%',
       render: (_value: any, row: Order) => row.customer?.name || row.customer?.hospital_name || '-',
+    },
+    {
+      key: 'customer.city',
+      label: 'City',
+      width: '10%',
+      render: (_value: any, row: Order) => row.customer?.city || '-',
     },
     {
       key: 'status',
@@ -368,31 +390,48 @@ export default function OrdersPage() {
         <div className="flex items-center space-x-4 flex-1">
           <h1 className="text-xl font-bold text-gray-900">Orders</h1>
           
-          {/* Filter */}
+          {/* City Filter */}
           <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700">Status:</label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className="input input-sm"
-            >
-              <option value="">All</option>
-              <option value="draft">Draft</option>
-              <option value="pending_approval">Pending Approval</option>
-              <option value="approved">Approved</option>
-              <option value="completed">Completed</option>
-            </select>
+            <label className="text-sm font-medium text-gray-700">City:</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={cityQuery}
+                onChange={(e) => setCityQuery(e.target.value)}
+                placeholder="Filter by city…"
+                className="input input-sm pr-7"
+              />
+              {cityQuery && (
+                <button
+                  onClick={() => setCityQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
           </div>
 
+          {/* Show Completed Orders */}
+          <label className="flex items-center space-x-1.5 whitespace-nowrap cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={(e) => handleShowCompletedChange(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <span className="text-xs font-medium text-gray-700">Open</span>
+          </label>
+
           {/* Search */}
-          <div className="relative flex-1">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <div className="flex-1 relative max-w-md">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search order # or customer…"
-              className="input input-md pl-9 w-full"
+              className="input input-sm pl-9 w-full"
             />
             {searchQuery && (
               <button
