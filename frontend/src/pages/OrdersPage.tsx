@@ -13,7 +13,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function OrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const showCompleted = searchParams.get('show_completed') === '1';
+  // "Open" checkbox: checked (default) = hide completed orders; unchecked = include them.
+  const includeCompleted = searchParams.get('show_completed') === '1';
+  const openOnly = !includeCompleted;
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('search') || '');
   const [cityQuery, setCityQuery] = useState(searchParams.get('city') || '');
@@ -22,10 +24,10 @@ export default function OrdersPage() {
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedSearch(searchQuery);
-      setCurrentPage(1);
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         if (searchQuery) next.set('search', searchQuery); else next.delete('search');
+        next.delete('page');
         return next;
       }, { replace: true });
     }, 350);
@@ -36,10 +38,10 @@ export default function OrdersPage() {
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedCity(cityQuery);
-      setCurrentPage(1);
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         if (cityQuery) next.set('city', cityQuery); else next.delete('city');
+        next.delete('page');
         return next;
       }, { replace: true });
     }, 350);
@@ -47,11 +49,11 @@ export default function OrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cityQuery]);
 
-  const handleShowCompletedChange = (value: boolean) => {
-    setCurrentPage(1);
+  const handleOpenOnlyChange = (nextOpenOnly: boolean) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      if (value) next.set('show_completed', '1'); else next.delete('show_completed');
+      if (nextOpenOnly) next.delete('show_completed'); else next.set('show_completed', '1');
+      next.delete('page');
       return next;
     }, { replace: true });
   };
@@ -100,9 +102,9 @@ export default function OrdersPage() {
   });
 
   const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ['orders', showCompleted, currentPage, debouncedSearch, debouncedCity],
+    queryKey: ['orders', includeCompleted, currentPage, debouncedSearch, debouncedCity],
     queryFn: () => api.getOrders({
-      show_completed: showCompleted || undefined,
+      show_completed: includeCompleted || undefined,
       search: debouncedSearch || undefined,
       city: debouncedCity || undefined,
       skip: (currentPage - 1) * itemsPerPage,
@@ -412,12 +414,12 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          {/* Show Completed Orders */}
+          {/* Open (non-completed) Orders Only */}
           <label className="flex items-center space-x-1.5 whitespace-nowrap cursor-pointer">
             <input
               type="checkbox"
-              checked={showCompleted}
-              onChange={(e) => handleShowCompletedChange(e.target.checked)}
+              checked={openOnly}
+              onChange={(e) => handleOpenOnlyChange(e.target.checked)}
               className="rounded border-gray-300"
             />
             <span className="text-xs font-medium text-gray-700">Open</span>
