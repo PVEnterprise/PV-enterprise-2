@@ -17,12 +17,20 @@ class DemoRequestState(str, Enum):
     COMPLETE = "complete"    # Items received back, stock restored
 
 
+class DemoRequestType(str, Enum):
+    """Demo request type: a temporary Demo loan, or a permanent Delivery."""
+    DEMO = "demo"
+    DELIVERY = "delivery"
+
+
 class DemoRequestBase(BaseModel):
     """Base schema for demo request."""
     hospital_id: Optional[UUID] = Field(None, description="Hospital/Customer ID")
     city: Optional[str] = Field(None, max_length=255, description="City")
     state: DemoRequestState = Field(default=DemoRequestState.REQUESTED, description="Demo request state")
     notes: Optional[str] = Field(None, description="Additional notes")
+    to_address: Optional[str] = Field(None, description="Free-text 'addressed to' block, used on the challan when no hospital is selected")
+    type: DemoRequestType = Field(default=DemoRequestType.DEMO, description="Demo (temporary loan) or Delivery (permanent)")
 
 
 class DemoRequestCreate(DemoRequestBase):
@@ -37,6 +45,8 @@ class DemoRequestUpdate(BaseModel):
     city: Optional[str] = Field(None, max_length=255)
     state: Optional[DemoRequestState] = None
     notes: Optional[str] = None
+    to_address: Optional[str] = None
+    type: Optional[DemoRequestType] = None
 
 
 class HospitalInfo(BaseModel):
@@ -88,7 +98,8 @@ class DemoRequestResponse(DemoRequestBase):
     hospital: Optional[HospitalInfo] = None
     creator: CreatorInfo
     items: list[DemoItemBrief] = []
+    converted_order_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)

@@ -375,6 +375,9 @@ class ApiService {
     });
     return response.data;
   }
+  convertDemoRequestToOrder = async (id: string) => {
+    return (await this.client.post(`/demo-requests/${id}/convert-to-order`)).data;
+  }
 
   // Payments
   getPayments = async (customerId?: string) => {

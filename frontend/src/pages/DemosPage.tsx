@@ -149,9 +149,21 @@ export default function DemosPage() {
       ),
     },
     {
+      key: 'type',
+      label: 'Type',
+      width: '8%',
+      render: (value: string) => (
+        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+          value === 'delivery' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
+        }`}>
+          {value === 'delivery' ? 'Delivery' : 'Demo'}
+        </span>
+      ),
+    },
+    {
       key: 'hospital',
       label: 'Hospital',
-      width: '25%',
+      width: '20%',
       render: (value: any) => (
         <div>
           {value ? (
