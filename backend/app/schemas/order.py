@@ -26,6 +26,7 @@ class CustomerBasic(BaseModel):
     id: UUID
     name: str
     hospital_name: str
+    city: Optional[str] = None
     bank_account_name: Optional[str] = None
     bank_account_number: Optional[str] = None
     bank_name: Optional[str] = None
@@ -74,6 +75,7 @@ class OrderItemDecode(BaseModel):
     quantity: Optional[int] = Field(default=1, gt=0)
     gst_percentage: Optional[Decimal] = Field(default=18.00, ge=0, le=100)
     section_name: Optional[str] = None
+    item_description: Optional[str] = None
 
 
 class OrderItemDecodeMultiple(BaseModel):
