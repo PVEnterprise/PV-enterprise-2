@@ -26,6 +26,7 @@ class CustomerBasic(BaseModel):
     id: UUID
     name: str
     hospital_name: str
+    city: Optional[str] = None
     bank_account_name: Optional[str] = None
     bank_account_number: Optional[str] = None
     bank_name: Optional[str] = None

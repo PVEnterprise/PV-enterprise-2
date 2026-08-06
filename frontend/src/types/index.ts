@@ -263,8 +263,11 @@ export interface DemoRequest {
     phone?: string;
   };
   city?: string;
-  state: 'requested' | 'dispatched' | 'returned';
+  state: 'requested' | 'submitted' | 'approved' | 'dispatched' | 'complete';
   notes?: string;
+  to_address?: string;
+  type: 'demo' | 'delivery';
+  converted_order_id?: string;
   items?: DemoItem[];
   creator: {
     id: string;

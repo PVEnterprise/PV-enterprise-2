@@ -14,14 +14,18 @@ from app.models.demo_item import DemoItem
 from app.models.customer import Customer
 from app.models.user import User
 from app.models.inventory import Inventory
+from app.models.order import Order, OrderItem
 from app.schemas.demo_request import (
     DemoRequestCreate,
     DemoRequestUpdate,
     DemoRequestResponse
 )
+from app.schemas.order import OrderResponse
 from app.api.deps import get_current_user
 from app.core.permissions import Permission, require_permission
 from app.services.demo_challan_generator import generate_demo_challan_pdf
+from app.api.v1.endpoints.orders import generate_order_number
+from app.utils.order_tracking import add_order_action
 
 router = APIRouter()
 
@@ -67,7 +71,13 @@ def create_demo_request(
     """
     # Check permission
     require_permission(current_user.role_name, Permission.INVENTORY_CREATE)
-    
+
+    if demo_data.type.value == "delivery" and not demo_data.hospital_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Hospital is required for Delivery type demo requests"
+        )
+
     # Verify hospital exists if provided
     if demo_data.hospital_id:
         hospital = db.query(Customer).filter(Customer.id == demo_data.hospital_id).first()
@@ -76,10 +86,10 @@ def create_demo_request(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Hospital not found"
             )
-    
+
     # Generate unique demo number
     demo_number = generate_demo_number(db)
-    
+
     # Create demo request
     demo_request = DemoRequest(
         number=demo_number,
@@ -87,6 +97,8 @@ def create_demo_request(
         city=demo_data.city,
         state=demo_data.state.value,
         notes=demo_data.notes,
+        to_address=demo_data.to_address,
+        type=demo_data.type.value,
         created_by=current_user.id
     )
     
@@ -212,20 +224,31 @@ def update_demo_request(
             detail="Demo request not found"
         )
     
+    update_data = demo_data.model_dump(exclude_unset=True)
+
     # Verify hospital if being updated and provided
-    if demo_data.hospital_id is not None:
-        hospital = db.query(Customer).filter(Customer.id == demo_data.hospital_id).first()
+    if update_data.get('hospital_id') is not None:
+        hospital = db.query(Customer).filter(Customer.id == update_data['hospital_id']).first()
         if not hospital:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Hospital not found"
             )
-    
-    # Update fields
-    update_data = demo_data.model_dump(exclude_unset=True)
+
+    # Validate hospital requirement against the resulting (merged) state
+    final_type = update_data['type'].value if 'type' in update_data and update_data['type'] else demo_request.type
+    final_hospital_id = update_data['hospital_id'] if 'hospital_id' in update_data else demo_request.hospital_id
+    if final_type == "delivery" and not final_hospital_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Hospital is required for Delivery type demo requests"
+        )
+
     if 'state' in update_data and update_data['state']:
         update_data['state'] = update_data['state'].value
-    
+    if 'type' in update_data and update_data['type']:
+        update_data['type'] = update_data['type'].value
+
     for field, value in update_data.items():
         setattr(demo_request, field, value)
     
@@ -557,3 +580,97 @@ def download_demo_challan(
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+
+@router.post("/{demo_id}/convert-to-order", response_model=OrderResponse)
+def convert_demo_request_to_order(
+    demo_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Convert a Delivery-type demo request into an Order, landing directly at the
+    'quotation' workflow stage with the same items (already decoded, since they're
+    known inventory items).
+    """
+    require_permission(current_user.role_name, Permission.INVENTORY_UPDATE)
+
+    demo_request = db.query(DemoRequest).options(
+        joinedload(DemoRequest.items).joinedload(DemoItem.inventory_item)
+    ).filter(DemoRequest.id == demo_id).first()
+
+    if not demo_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Demo request not found"
+        )
+
+    if demo_request.type != "delivery":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only Delivery type demo requests can be converted to an order"
+        )
+
+    if not demo_request.hospital_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Demo request must have a hospital before it can be converted to an order"
+        )
+
+    if not demo_request.items or len(demo_request.items) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Demo request has no items"
+        )
+
+    if demo_request.converted_order_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Demo request has already been converted to an order"
+        )
+
+    order = Order(
+        order_number=generate_order_number(db),
+        customer_id=demo_request.hospital_id,
+        sales_rep_id=current_user.id,
+        status="approved",
+        workflow_stage="quotation",
+        priority="medium",
+        source="demo_conversion",
+        notes=""
+    )
+    db.add(order)
+    db.flush()  # Get order ID before adding items
+
+    for demo_item in demo_request.items:
+        inventory_item = demo_item.inventory_item
+        order_item = OrderItem(
+            order_id=order.id,
+            item_description=inventory_item.description or inventory_item.sku,
+            quantity=demo_item.quantity,
+            inventory_id=inventory_item.id,
+            unit_price=inventory_item.unit_price,
+            gst_percentage=inventory_item.tax if inventory_item.tax is not None else 18.00,
+            status="decoded",
+            decoded_by=current_user.id
+        )
+        db.add(order_item)
+
+    add_order_action(
+        order=order,
+        action="Order Created",
+        user=current_user,
+        details=f"Converted from demo request {demo_request.number}"
+    )
+
+    demo_request.converted_order_id = order.id
+
+    db.commit()
+    db.refresh(order)
+
+    order = db.query(Order).options(
+        joinedload(Order.customer),
+        joinedload(Order.items)
+    ).filter(Order.id == order.id).first()
+
+    return order

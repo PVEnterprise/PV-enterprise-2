@@ -30,6 +30,8 @@ export default function DemoRequestModal({
     city: initialData?.city || '',
     state: initialData?.state || 'requested',
     notes: initialData?.notes || '',
+    type: initialData?.type || 'demo',
+    to_address: initialData?.to_address || '',
   });
 
   // Debounce search with 200ms delay
@@ -82,10 +84,26 @@ export default function DemoRequestModal({
         {/* Content */}
         <div className="px-6 py-4 overflow-y-auto flex-1">
           <div className="space-y-4">
+            {/* Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Type <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                className="input w-full"
+                required
+              >
+                <option value="demo">Demo</option>
+                <option value="delivery">Delivery</option>
+              </select>
+            </div>
+
             {/* Hospital Search */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Hospital
+                Hospital {formData.type === 'delivery' && <span className="text-red-500">*</span>}
               </label>
               <input
                 type="text"
@@ -136,6 +154,22 @@ export default function DemoRequestModal({
                 </div>
               )}
             </div>
+
+            {/* To (used on the challan when no hospital is selected) */}
+            {formData.type === 'demo' && !formData.hospital_id && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  To
+                </label>
+                <textarea
+                  value={formData.to_address}
+                  onChange={(e) => setFormData({ ...formData, to_address: e.target.value })}
+                  placeholder={'Hospital name\nAddress\nCity - Pincode\nState'}
+                  rows={4}
+                  className="input w-full"
+                />
+              </div>
+            )}
 
             {/* City */}
             <div>
@@ -205,7 +239,7 @@ export default function DemoRequestModal({
           <button
             onClick={handleSubmit}
             className="btn btn-primary"
-            disabled={isSubmitting}
+            disabled={isSubmitting || (formData.type === 'delivery' && !formData.hospital_id)}
           >
             {isSubmitting ? 'Saving...' : isEdit ? 'Update Demo Request' : 'Create Demo Request'}
           </button>

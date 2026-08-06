@@ -5,6 +5,7 @@ Uses ReportLab to create professional demo challan PDFs in F1 style.
 import os
 from datetime import datetime
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -127,8 +128,10 @@ class DemoChallanPDFGenerator:
         story.extend(self._build_items_table())
         story.append(Spacer(1, 6*mm))
         story.extend(self._build_footer())
-        story.append(Spacer(1, 5*mm))
-        story.extend(self._build_terms())
+        terms = self._build_terms()
+        if terms:
+            story.append(Spacer(1, 5*mm))
+            story.extend(terms)
 
         doc.build(story)
         self.buffer.seek(0)
@@ -147,7 +150,8 @@ class DemoChallanPDFGenerator:
         else:
             logo_element = Paragraph('<b>SREEDEVI<br/>MEDTRADE</b>', self.styles['NormalText'])
 
-        title_block = Paragraph('<b>DEMO CHALLAN</b>', self.styles['ChallanTitle'])
+        title_text = 'DELIVERY CHALLAN' if self.demo_request.type == 'delivery' else 'DEMO CHALLAN'
+        title_block = Paragraph(f'<b>{title_text}</b>', self.styles['ChallanTitle'])
         header_data = [[
             logo_element,
             '',
@@ -208,16 +212,18 @@ class DemoChallanPDFGenerator:
 
     def _build_ship_to(self):
         dr = self.demo_request
-        customer = getattr(dr, 'customer', None)
-        if customer:
-            name = getattr(customer, 'hospital_name', None) or getattr(customer, 'name', '') or ''
-            addr = getattr(customer, 'address', '') or ''
-            city = getattr(customer, 'city', '') or ''
-            pincode = getattr(customer, 'pincode', '') or ''
-            state = getattr(customer, 'state', '') or ''
+        hospital = dr.hospital
+        if hospital:
+            name = hospital.hospital_name or hospital.name or ''
+            addr = hospital.address or ''
+            city = hospital.city or ''
+            pincode = hospital.pincode or ''
+            state = hospital.state or ''
             ship_text = f'<b>{name}</b><br/>{addr}<br/>{city} - {pincode}<br/>{state}, India'
+        elif dr.to_address:
+            ship_text = escape(dr.to_address).replace('\n', '<br/>')
         else:
-            ship_text = getattr(dr, 'customer_name', '') or 'N/A'
+            ship_text = 'N/A'
 
         data = [
             [Paragraph('<font color="#3d6b9e"><b>SHIP TO</b></font>', self.styles['SmallText'])],
@@ -249,8 +255,12 @@ class DemoChallanPDFGenerator:
             data.append([str(idx), item.inventory_item.sku, desc, str(item.quantity)])
             total_qty += item.quantity
 
+        grand_cell_style = ParagraphStyle(
+            'GrandCellStyle', parent=cell_style,
+            fontSize=9, textColor=colors.white, alignment=TA_RIGHT
+        )
         grand_row = len(data)
-        data.append(['', '', Paragraph('<b>Total Items</b>', cell_style), str(total_qty)])
+        data.append(['', '', Paragraph('<b>Total Items</b>', grand_cell_style), str(total_qty)])
 
         t = Table(data, colWidths=[10*mm, 30*mm, 115*mm, 25*mm])
         t.setStyle(TableStyle([
@@ -282,16 +292,10 @@ class DemoChallanPDFGenerator:
 
     def _build_footer(self):
         sign = Paragraph('<br/><br/>Authorized Signature', self.styles['RightText'])
-        note = Paragraph(
-            '<b>Note:</b> Items are provided for demonstration purposes only. '
-            'All items must be returned in good condition.',
-            self.styles['SmallText']
-        )
-        t = Table([[note, sign]], colWidths=[125*mm, 55*mm], rowHeights=[35*mm])
+        t = Table([['', sign]], colWidths=[125*mm, 55*mm], rowHeights=[35*mm])
         t.setStyle(TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#d0dcea')),
             ('LINEABOVE', (0, 0), (-1, 0), 3, colors.HexColor('#56982c')),
-            ('VALIGN', (0, 0), (0, 0), 'TOP'),
             ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
             ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
             ('LEFTPADDING', (0, 0), (-1, -1), 6),
@@ -299,11 +303,11 @@ class DemoChallanPDFGenerator:
         return [t]
 
     def _build_terms(self):
-        terms_text = (
-            '1) All demo items must be returned within the agreed demo period.<br/>'
-            '2) Any damage or loss of items will be charged at full price.<br/>'
-            '3) Items are strictly for demonstration and evaluation purposes only.'
-        )
+        # Delivery challans carry no terms & conditions section.
+        if self.demo_request.type == 'delivery':
+            return []
+
+        terms_text = '1) All demo items must be returned within the agreed demo period.'
         data = [
             [Paragraph('<font color="#3d6b9e"><b>TERMS &amp; CONDITIONS</b></font>', self.styles['SmallText'])],
             [Paragraph(terms_text, self.styles['NormalText'])]

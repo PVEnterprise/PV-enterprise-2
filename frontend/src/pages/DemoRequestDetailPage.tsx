@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { DemoRequest, DemoItem, Customer, Inventory } from '@/types';
 import { useAuth } from '@/context/AuthContext';
-import { ArrowLeft, Edit, Save, X, Building2, MapPin, User, Calendar, FileText, Package, Search, Plus, Minus, Trash2, Download } from 'lucide-react';
+import { ArrowLeft, Edit, Save, X, Building2, MapPin, User, Calendar, FileText, Package, Search, Plus, Minus, Trash2, Download, ShoppingCart, ExternalLink } from 'lucide-react';
 
 export default function DemoRequestDetailPage() {
   const { demoId } = useParams<{ demoId: string }>();
@@ -17,6 +17,7 @@ export default function DemoRequestDetailPage() {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any>({});
+  const [saveError, setSaveError] = useState('');
   const [showItemsPanel, setShowItemsPanel] = useState(false);
   const [itemSearch, setItemSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -73,6 +74,18 @@ export default function DemoRequestDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['demo-request', demoId] });
       queryClient.invalidateQueries({ queryKey: ['demo-requests'] });
       setIsEditing(false);
+      setSaveError('');
+    },
+    onError: (error: any) => {
+      setSaveError(error.response?.data?.detail || 'Failed to update demo request');
+    },
+  });
+
+  // Convert to Order mutation (Delivery type only)
+  const convertMutation = useMutation({
+    mutationFn: () => api.convertDemoRequestToOrder(demoId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demo-request', demoId] });
     },
   });
 
@@ -154,17 +167,25 @@ export default function DemoRequestDetailPage() {
       city: demoRequest?.city,
       state: demoRequest?.state,
       notes: demoRequest?.notes,
+      type: demoRequest?.type,
+      to_address: demoRequest?.to_address || '',
     });
+    setSaveError('');
     setIsEditing(true);
   };
 
   const handleSave = () => {
+    if (editData.type === 'delivery' && !editData.hospital_id) {
+      setSaveError('Hospital is required for Delivery type demo requests');
+      return;
+    }
     updateMutation.mutate(editData);
   };
 
   const handleCancel = () => {
     setIsEditing(false);
     setEditData({});
+    setSaveError('');
   };
 
   const handleAddToSelection = (item: Inventory) => {
@@ -247,6 +268,10 @@ export default function DemoRequestDetailPage() {
   const canDispatch = canUpdate && demoRequest?.state === 'approved';
   const canReceive = canUpdate && demoRequest?.state === 'dispatched';
   const canDownloadChallan = demoRequest?.state === 'dispatched';
+  const isDelivery = demoRequest?.type === 'delivery';
+  const canConvert = canUpdate && isDelivery && !!demoRequest?.hospital_id
+    && !!demoItems && demoItems.length > 0 && !demoRequest?.converted_order_id;
+  const hasConverted = isDelivery && !!demoRequest?.converted_order_id;
 
   const handleDownloadChallan = async () => {
     try {
@@ -294,16 +319,23 @@ export default function DemoRequestDetailPage() {
         
         <div className="flex items-center justify-between">
           <div>
-            {isEditing ? (
-              <input
-                type="text"
-                value={editData.number || ''}
-                onChange={(e) => setEditData({ ...editData, number: e.target.value })}
-                className="text-3xl font-bold text-gray-900 border-b-2 border-blue-500 bg-transparent outline-none"
-              />
-            ) : (
-              <h1 className="text-3xl font-bold text-gray-900">{demoRequest.number}</h1>
-            )}
+            <div className="flex items-center gap-3">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editData.number || ''}
+                  onChange={(e) => setEditData({ ...editData, number: e.target.value })}
+                  className="text-3xl font-bold text-gray-900 border-b-2 border-blue-500 bg-transparent outline-none"
+                />
+              ) : (
+                <h1 className="text-3xl font-bold text-gray-900">{demoRequest.number}</h1>
+              )}
+              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                demoRequest.type === 'delivery' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
+              }`}>
+                {demoRequest.type === 'delivery' ? 'Delivery' : 'Demo'}
+              </span>
+            </div>
             <p className="text-gray-500 mt-1">Demo Request Details</p>
           </div>
           
@@ -380,10 +412,33 @@ export default function DemoRequestDetailPage() {
                   className="btn bg-purple-500 hover:bg-purple-600 text-white flex items-center gap-2"
                 >
                   <Download size={16} />
-                  Download Demo Challan
+                  Download {isDelivery ? 'Delivery' : 'Demo'} Challan
                 </button>
               )}
-              
+
+              {/* Convert to Order - Delivery type, has hospital + items, not yet converted */}
+              {canConvert && (
+                <button
+                  onClick={() => convertMutation.mutate()}
+                  className="btn bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                  disabled={convertMutation.isPending}
+                >
+                  <ShoppingCart size={16} />
+                  {convertMutation.isPending ? 'Converting...' : 'Convert to Order'}
+                </button>
+              )}
+
+              {/* View Order - once converted */}
+              {hasConverted && (
+                <button
+                  onClick={() => navigate(`/orders/${demoRequest.converted_order_id}`)}
+                  className="btn bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                >
+                  <ExternalLink size={16} />
+                  View Order
+                </button>
+              )}
+
               {/* Edit - only in requested state */}
               {canUpdate && demoRequest.state === 'requested' && (
                 <button
@@ -398,23 +453,26 @@ export default function DemoRequestDetailPage() {
           )}
           
           {isEditing && (
-            <div className="flex gap-2">
-              <button
-                onClick={handleCancel}
-                className="btn btn-secondary flex items-center gap-2"
-                disabled={updateMutation.isPending}
-              >
-                <X size={16} />
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="btn btn-primary flex items-center gap-2"
-                disabled={updateMutation.isPending}
-              >
-                <Save size={16} />
-                {updateMutation.isPending ? 'Saving...' : 'Save'}
-              </button>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCancel}
+                  className="btn btn-secondary flex items-center gap-2"
+                  disabled={updateMutation.isPending}
+                >
+                  <X size={16} />
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="btn btn-primary flex items-center gap-2"
+                  disabled={updateMutation.isPending}
+                >
+                  <Save size={16} />
+                  {updateMutation.isPending ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+              {saveError && <p className="text-sm text-red-600">{saveError}</p>}
             </div>
           )}
         </div>
@@ -435,11 +493,24 @@ export default function DemoRequestDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Hospital
+                    Type
                   </label>
                   <select
-                    value={editData.hospital_id}
-                    onChange={(e) => setEditData({ ...editData, hospital_id: e.target.value })}
+                    value={editData.type}
+                    onChange={(e) => setEditData({ ...editData, type: e.target.value })}
+                    className="input w-full"
+                  >
+                    <option value="demo">Demo</option>
+                    <option value="delivery">Delivery</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hospital {editData.type === 'delivery' && <span className="text-red-500">*</span>}
+                  </label>
+                  <select
+                    value={editData.hospital_id || ''}
+                    onChange={(e) => setEditData({ ...editData, hospital_id: e.target.value || undefined })}
                     className="input w-full"
                   >
                     <option value="">Select Hospital</option>
@@ -450,6 +521,20 @@ export default function DemoRequestDetailPage() {
                     ))}
                   </select>
                 </div>
+                {editData.type === 'demo' && !editData.hospital_id && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      To
+                    </label>
+                    <textarea
+                      value={editData.to_address || ''}
+                      onChange={(e) => setEditData({ ...editData, to_address: e.target.value })}
+                      placeholder={'Hospital name\nAddress\nCity - Pincode\nState'}
+                      rows={4}
+                      className="input w-full"
+                    />
+                  </div>
+                )}
               </div>
             ) : demoRequest.hospital ? (
               <div className="space-y-3">
@@ -478,6 +563,11 @@ export default function DemoRequestDetailPage() {
                     </p>
                   </div>
                 )}
+              </div>
+            ) : demoRequest.to_address ? (
+              <div>
+                <p className="text-sm text-gray-500">To</p>
+                <p className="text-base whitespace-pre-wrap">{demoRequest.to_address}</p>
               </div>
             ) : (
               <p className="text-gray-500 italic">No hospital selected</p>

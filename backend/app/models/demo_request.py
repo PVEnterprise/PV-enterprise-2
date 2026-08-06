@@ -19,12 +19,16 @@ class DemoRequest(BaseModel):
     city = Column(String(255), nullable=True)
     state = Column(String(50), nullable=False, default="requested", index=True)
     notes = Column(Text)
+    to_address = Column(Text, nullable=True)
+    type = Column(String(20), nullable=False, default="demo", index=True)
+    converted_order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    
+
     # Relationships
     hospital = relationship("Customer", back_populates="demo_requests")
     creator = relationship("User", back_populates="created_demo_requests", foreign_keys=[created_by])
     items = relationship("DemoItem", back_populates="demo_request", cascade="all, delete-orphan")
+    converted_order = relationship("Order", foreign_keys=[converted_order_id])
     
     def __repr__(self) -> str:
         return f"<DemoRequest {self.number}>"
