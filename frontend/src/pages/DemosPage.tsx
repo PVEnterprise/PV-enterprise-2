@@ -14,7 +14,6 @@ import DataTable, { Column, commonActions } from '@/components/common/DataTable'
 export default function DemosPage() {
   const [search, setSearch] = useState('');
   const [catalogSearch, setCatalogSearch] = useState('');
-  const [stateFilter, setStateFilter] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
   const [editingDemo, setEditingDemo] = useState<DemoRequest | null>(null);
   const [formError, setFormError] = useState<string>('');
@@ -23,13 +22,11 @@ export default function DemosPage() {
   const navigate = useNavigate();
 
   const { data: demoRequests, isLoading } = useQuery<DemoRequest[]>({
-    queryKey: ['demo-requests', search, catalogSearch, stateFilter],
+    queryKey: ['demo-requests', search, catalogSearch],
     queryFn: () => api.getDemoRequests({
       search: search || undefined,
       catalog_no: catalogSearch || undefined,
-      // when no specific state filter, default to requested+dispatched only
-      states: stateFilter ? undefined : 'requested,dispatched',
-      state: stateFilter || undefined,
+      states: 'requested,dispatched',
     }),
   });
 
@@ -217,7 +214,7 @@ export default function DemosPage() {
           <h1 className="text-xl font-bold text-gray-900">Demo Requests</h1>
           
           {/* Search */}
-          <div className="flex-1 relative max-w-md">
+          <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
             <input
               type="text"
@@ -227,29 +224,18 @@ export default function DemosPage() {
               className="input input-sm pl-9 w-full"
             />
           </div>
-          
+
           {/* Catalog Number Search */}
-          <div className="relative">
+          <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
             <input
               type="text"
               placeholder="Catalog no…"
               value={catalogSearch}
               onChange={(e) => setCatalogSearch(e.target.value)}
-              className="input input-sm pl-9 w-36"
+              className="input input-sm pl-9 w-full"
             />
           </div>
-
-          {/* State Filter */}
-          <select
-            value={stateFilter}
-            onChange={(e) => setStateFilter(e.target.value)}
-            className="input input-sm"
-          >
-            <option value="">Requested &amp; Dispatched</option>
-            <option value="requested">Requested</option>
-            <option value="dispatched">Dispatched</option>
-          </select>
         </div>
         
         {/* Action Buttons */}
