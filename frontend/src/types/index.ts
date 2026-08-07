@@ -177,6 +177,9 @@ export interface DispatchItem {
   quantity: number;
   alternate_inventory_id?: string;
   alternate_quantity?: number;
+  batch_no?: string;
+  mfg_date?: string;
+  exp_date?: string;
   inventory_item?: {
     id: string;
     sku: string;

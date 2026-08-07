@@ -57,6 +57,10 @@ class DispatchItem(BaseModel):
     quantity = Column(Integer, nullable=False)
     alternate_inventory_id = Column(UUID(as_uuid=True), ForeignKey("inventory.id"), nullable=True, index=True)
     alternate_quantity = Column(Integer, nullable=True)
+    # Optional batch/manufacturing details shown under the item on the invoice.
+    batch_no = Column(String(100), nullable=True, comment="Batch number for the item shown on the invoice")
+    mfg_date = Column(Date, nullable=True, comment="Manufacturing date for the item shown on the invoice")
+    exp_date = Column(Date, nullable=True, comment="Expiry date for the item shown on the invoice")
     
     # Relationships
     dispatch = relationship("Dispatch", back_populates="items")

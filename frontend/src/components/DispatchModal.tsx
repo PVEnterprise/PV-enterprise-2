@@ -3,7 +3,7 @@
  * Allows inventory admin to create dispatches for order items
  */
 import { useState, useRef } from 'react';
-import { X, Package, Plus, Trash2 } from 'lucide-react';
+import { X, Package, Plus, Trash2, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import { OrderItem } from '@/types';
 import api from '@/services/api';
 
@@ -43,6 +43,9 @@ export interface DispatchItemData {
   outstanding_quantity: number;
   showAlternate: boolean;
   alternate: AlternateItem | null;
+  batch_no: string;
+  mfg_date: string;
+  exp_date: string;
 }
 
 const DEFAULT_TERMS = `1) GST 5% included in this invoice.
@@ -80,6 +83,9 @@ export interface DispatchFormData {
     quantity: number;
     alternate_inventory_id?: string;
     alternate_quantity?: number;
+    batch_no?: string;
+    mfg_date?: string;
+    exp_date?: string;
   }>;
 }
 
@@ -171,6 +177,8 @@ export default function DispatchModal({
   const [dcNumber, setDcNumber] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [dispatchItems, setDispatchItems] = useState<DispatchItemData[]>([]);
+  const [openInfoIndex, setOpenInfoIndex] = useState<number | null>(null);
+  const [showBankDetails, setShowBankDetails] = useState(false);
 
   const availableItems = orderItems.filter(
     item => item.inventory_id &&
@@ -188,11 +196,19 @@ export default function DispatchModal({
       outstanding_quantity: item.outstanding_quantity || 0,
       showAlternate: false,
       alternate: null,
+      batch_no: '',
+      mfg_date: '',
+      exp_date: '',
     }]);
   };
 
   const removeItem = (index: number) => {
     setDispatchItems(prev => prev.filter((_, i) => i !== index));
+    setOpenInfoIndex(null);
+  };
+
+  const handleBatchFieldChange = (index: number, field: 'batch_no' | 'mfg_date' | 'exp_date', value: string) => {
+    setDispatchItems(prev => prev.map((it, i) => (i === index ? { ...it, [field]: value } : it)));
   };
 
   const handleQuantityChange = (index: number, newQuantity: number) => {
@@ -260,6 +276,9 @@ export default function DispatchModal({
           alternate_inventory_id: item.alternate.inventory_id,
           alternate_quantity: item.alternate.quantity,
         } : {}),
+        ...(item.batch_no.trim() ? { batch_no: item.batch_no.trim() } : {}),
+        ...(item.mfg_date ? { mfg_date: item.mfg_date } : {}),
+        ...(item.exp_date ? { exp_date: item.exp_date } : {}),
       }));
 
     if (itemsToDispatch.length === 0) return;
@@ -368,7 +387,15 @@ export default function DispatchModal({
 
           {/* Bank Details */}
           <div className="mb-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Bank Details</h3>
+            <button
+              type="button"
+              onClick={() => setShowBankDetails(v => !v)}
+              className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 hover:text-gray-700"
+            >
+              {showBankDetails ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              Bank Details
+            </button>
+            {showBankDetails && (
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">Account Name</label>
@@ -391,6 +418,7 @@ export default function DispatchModal({
                 <input type="text" value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} className="input w-full text-xs py-1" />
               </div>
             </div>
+            )}
           </div>
 
           {/* Items to Dispatch — two-column side-by-side layout */}
@@ -400,7 +428,7 @@ export default function DispatchModal({
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex-shrink-0">
                 Items to Dispatch {dispatchItems.length > 0 && <span className="ml-1 text-blue-600">({dispatchItems.length})</span>}
               </h3>
-              <div className="overflow-y-auto max-h-72 flex-1">
+              <div className="overflow-y-auto max-h-96 flex-1">
                 {dispatchItems.length === 0 ? (
                   <div className="text-center py-6 text-xs text-gray-400 border border-dashed border-gray-300 rounded h-full flex items-center justify-center">
                     <span>Add items from the right panel</span>
@@ -410,7 +438,7 @@ export default function DispatchModal({
                     {dispatchItems.map((item, index) => {
                       const mainQty = item.alternate ? item.quantity - item.alternate.quantity : item.quantity;
                       return (
-                        <div key={item.order_item_id} className="border border-gray-200 rounded p-2 bg-gray-50">
+                        <div key={item.order_item_id} className="relative border border-gray-200 rounded p-2 bg-gray-50">
                           {/* Main item row */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
@@ -438,6 +466,18 @@ export default function DispatchModal({
                               </div>
                               <button
                                 type="button"
+                                onClick={() => setOpenInfoIndex(openInfoIndex === index ? null : index)}
+                                className={`mt-4 transition-colors ${
+                                  (item.batch_no || item.mfg_date || item.exp_date)
+                                    ? 'text-blue-600 hover:text-blue-700'
+                                    : 'text-gray-400 hover:text-blue-600'
+                                }`}
+                                title="Batch / Mfg / Exp details"
+                              >
+                                <Info size={13} />
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => removeItem(index)}
                                 className="text-gray-400 hover:text-red-500 mt-4"
                                 title="Remove from dispatch"
@@ -446,6 +486,53 @@ export default function DispatchModal({
                               </button>
                             </div>
                           </div>
+
+                          {/* Batch / Mfg / Exp popover */}
+                          {openInfoIndex === index && (
+                            <div className="absolute right-2 top-11 z-30 w-60 bg-white border border-gray-200 rounded-lg shadow-lg p-2.5">
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Batch Details</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenInfoIndex(null)}
+                                  className="text-gray-400 hover:text-gray-600"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Batch No</label>
+                                  <input
+                                    type="text"
+                                    value={item.batch_no}
+                                    onChange={(e) => handleBatchFieldChange(index, 'batch_no', e.target.value)}
+                                    placeholder="e.g., 060190925G"
+                                    className="input w-full text-xs py-1"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Mfg Date</label>
+                                  <input
+                                    type="date"
+                                    value={item.mfg_date}
+                                    onChange={(e) => handleBatchFieldChange(index, 'mfg_date', e.target.value)}
+                                    className="input w-full text-xs py-1"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Exp Date</label>
+                                  <input
+                                    type="date"
+                                    value={item.exp_date}
+                                    onChange={(e) => handleBatchFieldChange(index, 'exp_date', e.target.value)}
+                                    className="input w-full text-xs py-1"
+                                  />
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1.5">Optional — prints under the item on the invoice.</p>
+                            </div>
+                          )}
 
                           {/* Alternate item section */}
                           {item.alternate ? (
@@ -514,7 +601,7 @@ export default function DispatchModal({
               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex-shrink-0">
                 Add Items to Dispatch {availableItems.length > 0 && <span className="ml-1 text-gray-400">({availableItems.length})</span>}
               </h4>
-              <div className="overflow-y-auto max-h-72 border border-gray-200 rounded divide-y divide-gray-100">
+              <div className="overflow-y-auto max-h-96 border border-gray-200 rounded divide-y divide-gray-100">
                 {availableItems.length === 0 ? (
                   <div className="text-center py-6 text-xs text-gray-400 h-full flex items-center justify-center">
                     <span>All items added</span>
