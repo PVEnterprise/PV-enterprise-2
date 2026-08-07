@@ -267,7 +267,7 @@ class InvoicePDFGenerator:
                 if item.exp_date:
                     batch_lines.append(f"Exp Date: {item.exp_date.strftime('%d.%m.%Y')}")
                 batch_html = (
-                    "<br/><font size=7 color='#555555'>" + " &nbsp; ".join(batch_lines) + "</font>"
+                    "<br/><font size=7 color='#555555'>" + "<br/>".join(batch_lines) + "</font>"
                     if batch_lines else ""
                 )
                 desc_cell = Paragraph(
