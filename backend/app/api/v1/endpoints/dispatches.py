@@ -180,7 +180,10 @@ def create_dispatch(
             inventory_id=item_data.inventory_id,
             quantity=item_data.quantity,
             alternate_inventory_id=item_data.alternate_inventory_id,
-            alternate_quantity=item_data.alternate_quantity
+            alternate_quantity=item_data.alternate_quantity,
+            batch_no=item_data.batch_no,
+            mfg_date=item_data.mfg_date,
+            exp_date=item_data.exp_date
         )
         db.add(dispatch_item)
         

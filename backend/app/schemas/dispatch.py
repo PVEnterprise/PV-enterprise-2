@@ -14,6 +14,9 @@ class DispatchItemBase(BaseModel):
     quantity: int = Field(gt=0, description="Quantity must be greater than 0")
     alternate_inventory_id: Optional[UUID] = None
     alternate_quantity: Optional[int] = Field(None, gt=0)
+    batch_no: Optional[str] = None
+    mfg_date: Optional[date] = None
+    exp_date: Optional[date] = None
 
 
 class DispatchItemCreate(DispatchItemBase):

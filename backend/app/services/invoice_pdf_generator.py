@@ -258,10 +258,26 @@ class InvoicePDFGenerator:
                 sec_subtotal += amt
                 subtotal += amt
                 total_igst += igst
+                # Optional batch/manufacturing details, shown under the description.
+                batch_lines = []
+                if item.batch_no:
+                    batch_lines.append(f"Batch No: {item.batch_no}")
+                if item.mfg_date:
+                    batch_lines.append(f"Mfg Date: {item.mfg_date.strftime('%d.%m.%Y')}")
+                if item.exp_date:
+                    batch_lines.append(f"Exp Date: {item.exp_date.strftime('%d.%m.%Y')}")
+                batch_html = (
+                    "<br/><font size=7 color='#555555'>" + " &nbsp; ".join(batch_lines) + "</font>"
+                    if batch_lines else ""
+                )
+                desc_cell = Paragraph(
+                    f"<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}{batch_html}",
+                    self.styles["NormalText"],
+                )
                 if show_discount_col:
                     data.append([
                         str(i),
-                        Paragraph(f"<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}", self.styles["NormalText"]),
+                        desc_cell,
                         item.inventory_item.hsn_code or "",
                         f"{qty}",
                         format_indian_number(rate),
@@ -274,7 +290,7 @@ class InvoicePDFGenerator:
                 else:
                     data.append([
                         str(i),
-                        Paragraph(f"<b>{item.inventory_item.sku}</b><br/>{item.inventory_item.description}", self.styles["NormalText"]),
+                        desc_cell,
                         item.inventory_item.hsn_code or "",
                         f"{qty}",
                         format_indian_number(discounted_rate),
