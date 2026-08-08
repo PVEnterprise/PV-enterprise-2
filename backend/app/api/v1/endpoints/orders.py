@@ -1342,7 +1342,7 @@ def request_po_approval(
         )
     
     from app.models.attachment import Attachment
-    
+
     order = db.query(Order).filter(Order.id == order_id).first()
     
     if not order:
@@ -1359,6 +1359,10 @@ def request_po_approval(
         )
     
     # PO attachment is no longer mandatory; approval can be requested without one.
+    attachment_count = db.query(Attachment).filter(
+        Attachment.entity_type == "order",
+        Attachment.entity_id == order.id
+    ).count()
 
     # Create approval request
     approval = Approval(
@@ -1378,7 +1382,11 @@ def request_po_approval(
         order=order,
         action="Purchase Order Approval Requested",
         user=current_user,
-        details=f"PO document uploaded ({attachment_count} attachment(s))\nWaiting for executive approval"
+        details=(
+            f"PO document uploaded ({attachment_count} attachment(s))\nWaiting for executive approval"
+            if attachment_count > 0
+            else "No PO document attached\nWaiting for executive approval"
+        )
     )
     
     db.commit()
