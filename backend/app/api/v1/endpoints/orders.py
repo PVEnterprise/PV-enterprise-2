@@ -1358,18 +1358,8 @@ def request_po_approval(
             detail="Order must be in waiting_purchase_order stage"
         )
     
-    # Check if at least one attachment exists (query directly)
-    attachment_count = db.query(Attachment).filter(
-        Attachment.entity_type == "order",
-        Attachment.entity_id == order.id
-    ).count()
-    
-    if attachment_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please upload purchase order document before requesting approval"
-        )
-    
+    # PO attachment is no longer mandatory; approval can be requested without one.
+
     # Create approval request
     approval = Approval(
         entity_type="order",
