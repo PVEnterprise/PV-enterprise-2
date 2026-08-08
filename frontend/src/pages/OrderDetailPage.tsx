@@ -934,47 +934,35 @@ export default function OrderDetailPage() {
                 {(user?.role_name === 'sales_rep' && order.sales_rep_id === user?.id) && (
                   <>
                     <button
-                      onClick={() => {
-                        if (!attachments || attachments.length === 0) {
-                          alert('Please upload the Purchase Order in the Attachments section before submitting for approval.');
-                          return;
-                        }
-                        requestPOApprovalMutation.mutate();
-                      }}
+                      onClick={() => requestPOApprovalMutation.mutate()}
                       disabled={requestPOApprovalMutation.isPending}
                       className="btn btn-primary btn-sm w-full text-xs"
                     >
                       <Check size={14} className="mr-1" />
-                      {requestPOApprovalMutation.isPending ? 'Requesting...' : 'PO Uploaded - Request Approval'}
+                      {requestPOApprovalMutation.isPending ? 'Requesting...' : 'Request Approval'}
                     </button>
-                    <div className={`text-xs text-center py-1 ${attachments && attachments.length > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {attachments && attachments.length > 0 
-                        ? `✓ ${attachments.length} attachment(s) uploaded` 
-                        : '⚠ No PO uploaded - Please add in Attachments'}
-                    </div>
+                    {attachments && attachments.length > 0 && (
+                      <div className="text-xs text-center py-1 text-green-600">
+                        {`✓ ${attachments.length} attachment(s) uploaded`}
+                      </div>
+                    )}
                   </>
                 )}
                 {user?.role_name === 'executive' && (
                   <>
                     <button
-                      onClick={() => {
-                        if (!attachments || attachments.length === 0) {
-                          alert('Please upload the Purchase Order in the Attachments section before submitting for approval.');
-                          return;
-                        }
-                        requestPOApprovalMutation.mutate();
-                      }}
+                      onClick={() => requestPOApprovalMutation.mutate()}
                       disabled={requestPOApprovalMutation.isPending}
                       className="btn btn-primary btn-sm w-full text-xs"
                     >
                       <Check size={14} className="mr-1" />
-                      {requestPOApprovalMutation.isPending ? 'Requesting...' : 'PO Uploaded - Request Approval'}
+                      {requestPOApprovalMutation.isPending ? 'Requesting...' : 'Request Approval'}
                     </button>
-                    <div className={`text-xs text-center py-1 ${attachments && attachments.length > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {attachments && attachments.length > 0 
-                        ? `✓ ${attachments.length} attachment(s) uploaded` 
-                        : '⚠ No PO uploaded - Please add in Attachments'}
-                    </div>
+                    {attachments && attachments.length > 0 && (
+                      <div className="text-xs text-center py-1 text-green-600">
+                        {`✓ ${attachments.length} attachment(s) uploaded`}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
