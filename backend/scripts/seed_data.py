@@ -40,6 +40,10 @@ def create_roles(db: Session) -> dict:
         RoleEnum.INVENTORY_ADMIN: {
             "description": "Inventory administrator who manages stock and dispatches",
             "permissions": {perm.value: True for perm in ROLE_PERMISSIONS[RoleEnum.INVENTORY_ADMIN]}
+        },
+        RoleEnum.DATA_ENTRY: {
+            "description": "Data entry operator who logs field visits and manages leads on behalf of sales reps",
+            "permissions": {perm.value: True for perm in ROLE_PERMISSIONS[RoleEnum.DATA_ENTRY]}
         }
     }
     

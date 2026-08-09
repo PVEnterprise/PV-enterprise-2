@@ -19,6 +19,9 @@ from app.models.demo_item import DemoItem
 from app.models.payment import Payment
 from app.models.procurement import Procurement, ProcurementItem
 from app.models.quotation_log import QuotationLog
+from app.models.lead import Lead
+from app.models.field_visit import FieldVisit
+from app.models.sales_attendance import SalesAttendance
 
 __all__ = [
     "User",
@@ -45,4 +48,7 @@ __all__ = [
     "Procurement",
     "ProcurementItem",
     "QuotationLog",
+    "Lead",
+    "FieldVisit",
+    "SalesAttendance",
 ]

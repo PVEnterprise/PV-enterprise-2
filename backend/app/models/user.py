@@ -40,6 +40,7 @@ class User(BaseModel):
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False, index=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
     last_login = Column(DateTime, nullable=True)
+    city = Column(String(100), nullable=True, index=True)
     
     # Relationships
     role = relationship("Role", back_populates="users", foreign_keys=[role_id])
@@ -81,7 +82,22 @@ class User(BaseModel):
         back_populates="creator",
         foreign_keys="DemoRequest.created_by"
     )
-    
+    field_visits = relationship(
+        "FieldVisit",
+        back_populates="sales_rep",
+        foreign_keys="FieldVisit.sales_rep_id"
+    )
+    attendance_records = relationship(
+        "SalesAttendance",
+        back_populates="sales_rep",
+        foreign_keys="SalesAttendance.sales_rep_id"
+    )
+    created_leads = relationship(
+        "Lead",
+        back_populates="creator",
+        foreign_keys="Lead.created_by"
+    )
+
     def __repr__(self) -> str:
         return f"<User {self.email}>"
     
