@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.price_list import PriceList, PriceListItem
 from app.models.inventory import Inventory
+from app.models.order import Order
 from app.schemas.price_list import (
     PriceListCreate,
     PriceListUpdate,
@@ -202,10 +203,17 @@ def delete_price_list(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete the default price list"
         )
-    
+
+    # Detach any orders/quotations that reference this price list.
+    # orders.price_list_id has no ON DELETE rule, so without this the
+    # FK RESTRICT would raise an IntegrityError -> 500 on delete.
+    db.query(Order).filter(Order.price_list_id == price_list_id).update(
+        {Order.price_list_id: None}, synchronize_session=False
+    )
+
     db.delete(price_list)
     db.commit()
-    
+
     return None
 
 
