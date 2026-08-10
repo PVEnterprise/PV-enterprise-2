@@ -33,7 +33,7 @@ router = APIRouter()
 def generate_demo_number(db: Session) -> str:
     """Generate unique demo request number with auto-increment logic."""
     today = date.today()
-    prefix = f"DEMO-{today.year}-"
+    prefix = f"DC-{today.year}-"
     
     # Get the last demo request number for this year
     last_demo = db.query(DemoRequest).filter(
@@ -87,8 +87,17 @@ def create_demo_request(
                 detail="Hospital not found"
             )
 
-    # Generate unique demo number
-    demo_number = generate_demo_number(db)
+    # Use provided number if given, otherwise auto-generate
+    if demo_data.number and demo_data.number.strip():
+        demo_number = demo_data.number.strip()
+        existing = db.query(DemoRequest).filter(DemoRequest.number == demo_number).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Demo number '{demo_number}' already exists"
+            )
+    else:
+        demo_number = generate_demo_number(db)
 
     # Create demo request
     demo_request = DemoRequest(
@@ -225,6 +234,19 @@ def update_demo_request(
         )
     
     update_data = demo_data.model_dump(exclude_unset=True)
+
+    # If number is being changed, normalize and ensure it stays unique
+    if 'number' in update_data and update_data['number'] is not None:
+        update_data['number'] = update_data['number'].strip()
+        conflict = db.query(DemoRequest).filter(
+            DemoRequest.number == update_data['number'],
+            DemoRequest.id != demo_id
+        ).first()
+        if conflict:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Demo number '{update_data['number']}' already exists"
+            )
 
     # Verify hospital if being updated and provided
     if update_data.get('hospital_id') is not None:

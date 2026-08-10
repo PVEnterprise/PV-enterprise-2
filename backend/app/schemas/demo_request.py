@@ -35,7 +35,7 @@ class DemoRequestBase(BaseModel):
 
 class DemoRequestCreate(DemoRequestBase):
     """Schema for creating a demo request."""
-    pass
+    number: Optional[str] = Field(None, max_length=50, description="Optional custom number. Auto-generated if omitted.")
 
 
 class DemoRequestUpdate(BaseModel):

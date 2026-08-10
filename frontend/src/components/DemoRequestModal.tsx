@@ -26,6 +26,7 @@ export default function DemoRequestModal({
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedHospital, setSelectedHospital] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({
+    number: initialData?.number || '',
     hospital_id: initialData?.hospital_id,
     city: initialData?.city || '',
     state: initialData?.state || 'requested',
@@ -59,7 +60,12 @@ export default function DemoRequestModal({
   const filteredCustomers = customers || [];
 
   const handleSubmit = () => {
-    onSubmit(formData);
+    const trimmedNumber = formData.number.trim();
+    // Omit an empty number on create so the backend auto-generates one
+    const payload = trimmedNumber
+      ? { ...formData, number: trimmedNumber }
+      : { ...formData, number: undefined };
+    onSubmit(payload);
   };
 
   const isEdit = !!initialData;
@@ -84,6 +90,20 @@ export default function DemoRequestModal({
         {/* Content */}
         <div className="px-6 py-4 overflow-y-auto flex-1">
           <div className="space-y-4">
+            {/* Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Number
+              </label>
+              <input
+                type="text"
+                value={formData.number}
+                onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                placeholder="Leave blank to auto-generate (e.g. DC-2026-0002)"
+                className="input w-full"
+              />
+            </div>
+
             {/* Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
