@@ -1682,8 +1682,12 @@ def change_quotation(
     untouched — they're already persisted on the order and its items, so
     Generate Quotation picks them back up as-is.
 
-    Available from the quotation_generated (pending approval) and
-    waiting_purchase_order stages, for quoter and executive roles.
+    Available from the quotation_generated (pending approval),
+    waiting_purchase_order, po_approval, inventory_check and payment_pending
+    stages, for quoter and executive roles. When the order already has
+    dispatches (i.e. the PO was approved and dispatches were created), those
+    dispatches are deleted and their inventory stock is restored before the
+    order is moved back to the quotation stage.
     """
     if current_user.role_name not in ['quoter', 'executive']:
         raise HTTPException(
@@ -1698,25 +1702,75 @@ def change_quotation(
             detail="Order not found"
         )
 
-    if order.workflow_stage not in ("quotation_generated", "waiting_purchase_order"):
+    allowed_stages = (
+        "quotation_generated",
+        "waiting_purchase_order",
+        "po_approval",
+        "inventory_check",
+        "payment_pending",
+    )
+    if order.workflow_stage not in allowed_stages:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Quotation can only be changed while pending approval or waiting for PO"
+            detail="Quotation can only be changed before the order is completed"
         )
 
     previous_stage = order.workflow_stage
+
+    # Delete any dispatches created for this order and restore inventory stock.
+    dispatches = db.query(Dispatch).options(
+        joinedload(Dispatch.items)
+    ).filter(Dispatch.order_id == order_id).all()
+
+    deleted_dispatch_numbers = []
+    for dispatch in dispatches:
+        for item in dispatch.items:
+            if item.alternate_inventory_id and item.alternate_quantity:
+                main_qty = item.quantity - item.alternate_quantity
+                alt_inv = db.query(Inventory).filter(Inventory.id == item.alternate_inventory_id).first()
+                if alt_inv:
+                    alt_inv.stock_quantity += item.alternate_quantity
+                if main_qty > 0:
+                    main_inv = db.query(Inventory).filter(Inventory.id == item.inventory_id).first()
+                    if main_inv:
+                        main_inv.stock_quantity += main_qty
+            else:
+                inv = db.query(Inventory).filter(Inventory.id == item.inventory_id).first()
+                if inv:
+                    inv.stock_quantity += item.quantity
+        deleted_dispatch_numbers.append(dispatch.dispatch_number)
+        db.delete(dispatch)
+
+    if deleted_dispatch_numbers:
+        db.flush()
+        # Reset order item statuses now that dispatches are gone.
+        for order_item in db.query(OrderItem).filter(OrderItem.order_id == order_id).all():
+            order_item.status = "pending"
+
     order.workflow_stage = "quotation"
     order.status = "approved"
+
+    details = f"Sent back from {previous_stage.replace('_', ' ')} to the quotation stage for changes"
+    if deleted_dispatch_numbers:
+        details += (
+            f"\nDeleted {len(deleted_dispatch_numbers)} dispatch(es) and restored inventory stock: "
+            + ", ".join(f"#{n}" for n in deleted_dispatch_numbers)
+        )
 
     add_order_action(
         order=order,
         action="Quotation Reopened for Editing",
         user=current_user,
-        details=f"Sent back from {previous_stage.replace('_', ' ')} to the quotation stage for changes"
+        details=details
     )
 
     db.commit()
 
+    if deleted_dispatch_numbers:
+        return {
+            "message": "Dispatches deleted and order sent back to quotation stage for editing",
+            "deleted_dispatches": len(deleted_dispatch_numbers),
+        }
     return {"message": "Order sent back to quotation stage for editing"}
 
 
