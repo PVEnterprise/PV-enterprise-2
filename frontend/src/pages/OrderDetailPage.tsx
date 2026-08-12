@@ -33,6 +33,7 @@ export default function OrderDetailPage() {
   const [currentQuantity, setCurrentQuantity] = useState<number>(1);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showQuotationPDFModal, setShowQuotationPDFModal] = useState(false);
+  const [showChangeQuotationModal, setShowChangeQuotationModal] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [quotationDate, setQuotationDate] = useState('');
 
@@ -372,6 +373,8 @@ export default function OrderDetailPage() {
     mutationFn: () => api.post(`/orders/${orderId}/change-quotation`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['dispatches', orderId] });
+      setShowChangeQuotationModal(false);
       navigate(`/generate-quotation?order_id=${orderId}`);
     },
     onError: (error: any) => {
@@ -380,9 +383,7 @@ export default function OrderDetailPage() {
   });
 
   const handleChangeQuotation = () => {
-    if (window.confirm('This will send the order back to the quotation stage for editing. Continue?')) {
-      changeQuotationMutation.mutate();
-    }
+    setShowChangeQuotationModal(true);
   };
 
   // Request PO approval
@@ -1015,6 +1016,19 @@ export default function OrderDetailPage() {
                 </button>
               </div>
             )}
+
+            {/* Change Quotation - available through the post-PO stages */}
+            {(user?.role_name === 'executive' || user?.role_name === 'quoter') &&
+              ['po_approval', 'inventory_check', 'payment_pending'].includes(order.workflow_stage) && (
+                <button
+                  onClick={handleChangeQuotation}
+                  disabled={changeQuotationMutation.isPending}
+                  className="btn btn-secondary btn-sm w-full text-xs"
+                >
+                  <Edit size={14} className="mr-1" />
+                  {changeQuotationMutation.isPending ? 'Reopening...' : 'Change Quotation'}
+                </button>
+              )}
           </div>
 
           {/* Attachments */}
@@ -1417,6 +1431,76 @@ export default function OrderDetailPage() {
                   </svg>
                 )}
                 {rejectPOMutation.isPending ? 'Rejecting...' : 'Reject PO'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Quotation Confirmation Modal */}
+      {showChangeQuotationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h2 className="text-2xl font-bold">Change Quotation</h2>
+              <button
+                onClick={() => setShowChangeQuotationModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+                disabled={changeQuotationMutation.isPending}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-4">
+              {dispatches.length > 0 ? (
+                <>
+                  <p className="text-gray-800 font-medium mb-2">
+                    This will delete all created dispatches on this order.
+                  </p>
+                  <p className="text-gray-600">
+                    {`The ${dispatches.length} dispatch(es) created for this order will be permanently deleted, their inventory stock will be restored, and the order will be moved back to the quotation stage for editing.`}
+                  </p>
+                </>
+              ) : (
+                <p className="text-gray-600">
+                  This will send the order back to the quotation stage for editing. Continue?
+                </p>
+              )}
+              {changeQuotationMutation.isError && (
+                <p className="text-red-600 text-sm mt-2">
+                  Failed to change quotation. Please try again.
+                </p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowChangeQuotationModal(false)}
+                className="btn btn-secondary"
+                disabled={changeQuotationMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => changeQuotationMutation.mutate()}
+                className={`btn flex items-center ${dispatches.length > 0 ? 'btn-danger' : 'btn-primary'}`}
+                disabled={changeQuotationMutation.isPending}
+              >
+                {changeQuotationMutation.isPending && (
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                {changeQuotationMutation.isPending
+                  ? 'Processing...'
+                  : dispatches.length > 0
+                    ? 'Delete Dispatches & Change'
+                    : 'Confirm'}
               </button>
             </div>
           </div>
