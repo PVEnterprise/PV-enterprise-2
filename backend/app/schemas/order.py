@@ -158,6 +158,7 @@ class OrderResponse(OrderBase):
     price_list_id: Optional[UUID] = None
     discount_percentage: Optional[Decimal] = None
     quotation_date: Optional[date] = None
+    quotation_number: Optional[int] = None
     po_number: Optional[str] = None
     po_date: Optional[date] = None
     po_amount: Optional[Decimal] = None

@@ -192,7 +192,15 @@ const OrdersListScreen: React.FC = () => {
         }
       />
 
-      {/* Floating Action Button */}
+      {/* Floating Action Buttons */}
+      {user?.role_name === 'executive' && (
+        <TouchableOpacity
+          style={styles.quotationFab}
+          onPress={() => navigation.navigate('GenerateQuotation' as never)}
+        >
+          <Icon name="request-quote" size={22} color="#ffffff" />
+        </TouchableOpacity>
+      )}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate('CreateOrder' as never)}
@@ -346,6 +354,22 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: '#2563eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  quotationFab: {
+    position: 'absolute',
+    bottom: 92,
+    right: 24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#8b5cf6',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',

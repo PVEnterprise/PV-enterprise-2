@@ -6,9 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, date
+from decimal import Decimal
+from pydantic import BaseModel, Field
 
 from app.db.session import get_db
-from app.api.deps import get_current_user, PermissionChecker
+from app.api.deps import get_current_user, PermissionChecker, require_executive
 from app.core.permissions import Permission, Role, can_access_all_orders
 from app.models.user import User
 from app.models.order import Order, OrderItem
@@ -170,7 +172,131 @@ def create_order(
     
     db.commit()
     db.refresh(order)
-    
+
+    return order
+
+
+class DirectQuotationItemCreate(BaseModel):
+    """A single priced line item for the executive direct-quotation flow."""
+    inventory_id: UUID
+    quantity: int = Field(..., gt=0)
+    unit_price: Decimal = Field(..., ge=0)
+    gst_percentage: Decimal = Field(..., ge=0, le=100)
+    item_description: Optional[str] = None
+
+
+class DirectQuotationCreate(BaseModel):
+    """Payload for creating an order + finalized quotation in one step."""
+    customer_id: UUID
+    items: List[DirectQuotationItemCreate] = Field(..., min_length=1)
+    price_list_id: Optional[UUID] = None
+    discount_percentage: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    subject: Optional[str] = None
+    quotation_date: Optional[date] = None
+    notes: Optional[str] = None
+    priority: str = Field(default="medium", pattern="^(low|medium|high|urgent)$")
+
+
+@router.post("/quotation-direct", response_model=OrderWithItems, status_code=status.HTTP_201_CREATED)
+def create_direct_quotation(
+    data: DirectQuotationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_executive)
+):
+    """
+    Create an order and a finalized quotation for it in a single step.
+
+    Mobile-only, executive-only shortcut: the executive picks the customer and
+    inventory items and sets pricing themselves, so there is no one else left
+    to decode or approve the quotation. The resulting order is created
+    directly at workflow_stage='waiting_purchase_order' — the stage a normal
+    order only reaches after decoding, quoter pricing, and executive approval
+    (see approve_order's "quotation_generated" branch above) — skipping all
+    of those intermediate stages.
+    """
+    customer = db.query(Customer).filter(Customer.id == data.customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+
+    inventory_ids = {item.inventory_id for item in data.items}
+    inventory_map = {inv.id: inv for inv in db.query(Inventory).filter(Inventory.id.in_(inventory_ids)).all()}
+    missing_ids = inventory_ids - set(inventory_map.keys())
+    if missing_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inventory item(s) not found: {', '.join(str(i) for i in missing_ids)}"
+        )
+
+    if data.price_list_id:
+        from app.models.price_list import PriceList
+        price_list = db.query(PriceList).filter(PriceList.id == data.price_list_id).first()
+        if not price_list:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Price list not found")
+
+    order = Order(
+        order_number=generate_order_number(db),
+        customer_id=data.customer_id,
+        sales_rep_id=current_user.id,
+        status="quote_sent",
+        workflow_stage="waiting_purchase_order",
+        priority=data.priority,
+        source="mobile_app",
+        notes=data.notes,
+        subject=data.subject,
+        price_list_id=data.price_list_id,
+        discount_percentage=data.discount_percentage,
+        quotation_date=data.quotation_date or date.today(),
+        quotation_created_by=current_user.id,
+    )
+    db.add(order)
+    db.flush()
+
+    for item_data in data.items:
+        inventory = inventory_map[item_data.inventory_id]
+        db.add(OrderItem(
+            order_id=order.id,
+            item_description=item_data.item_description or inventory.description or inventory.sku,
+            quantity=item_data.quantity,
+            inventory_id=inventory.id,
+            decoded_by=current_user.id,
+            unit_price=item_data.unit_price,
+            gst_percentage=item_data.gst_percentage,
+            status="decoded",
+        ))
+
+    # Same atomic quotation_number sequence used by the web Generate Quotation flow.
+    log_entry = QuotationLog(
+        order_id=order.id,
+        generated_by=current_user.id,
+        discount_percentage=data.discount_percentage,
+        valid_until=None,
+    )
+    db.add(log_entry)
+    db.flush()
+    order.quotation_number = log_entry.quotation_number
+
+    # Self-approved: the executive who generated this is also the only person
+    # who could approve it, so record the approval rather than leave it pending.
+    approval = Approval(
+        entity_type="order",
+        entity_id=order.id,
+        stage="quotation_approval",
+        approver_id=current_user.id,
+        status="approved",
+        approved_at=datetime.utcnow(),
+    )
+    db.add(approval)
+
+    add_order_action(
+        order=order,
+        action="Quotation Generated Directly",
+        user=current_user,
+        details=f"Order and quotation created directly by executive. Discount: {data.discount_percentage}%"
+    )
+
+    db.commit()
+    db.refresh(order)
+
     return order
 
 

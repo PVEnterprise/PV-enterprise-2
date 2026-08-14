@@ -61,6 +61,7 @@ export interface Order {
   po_amount?: number;
   discount_percentage?: number;
   grand_total?: number;
+  quotation_number?: number;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -116,6 +117,40 @@ export interface Quotation {
   notes?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface PriceList {
+  id: string;
+  name: string;
+  description?: string;
+  is_default: boolean;
+}
+
+export interface PriceListItem {
+  id: string;
+  price_list_id: string;
+  inventory_id: string;
+  unit_price: number;
+  tax_percentage?: number;
+}
+
+export interface DirectQuotationItemRequest {
+  inventory_id: string;
+  quantity: number;
+  unit_price: number;
+  gst_percentage: number;
+  item_description?: string;
+}
+
+export interface DirectQuotationRequest {
+  customer_id: string;
+  items: DirectQuotationItemRequest[];
+  price_list_id?: string | null;
+  discount_percentage?: number;
+  subject?: string;
+  quotation_date?: string;
+  notes?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
 }
 
 export interface Invoice {
@@ -218,6 +253,7 @@ export type RootStackParamList = {
   OrdersList: undefined;
   CreateOrder: undefined;
   OrderDetails: { orderId: string };
+  GenerateQuotation: undefined;
 };
 
 export type RoleName = 'executive' | 'sales_rep' | 'decoder' | 'quoter' | 'inventory_admin';
