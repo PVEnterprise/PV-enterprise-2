@@ -67,6 +67,7 @@ class UserUpdate(BaseModel):
     """Schema for updating a user."""
     email: Optional[EmailStr] = None
     full_name: Optional[str] = Field(None, max_length=255)
+    password: Optional[str] = Field(None, min_length=8)
     role_id: Optional[UUID] = None
     is_active: Optional[bool] = None
 
