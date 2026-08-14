@@ -6,9 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, date
+from decimal import Decimal
+from pydantic import BaseModel, Field
 
 from app.db.session import get_db
-from app.api.deps import get_current_user, PermissionChecker
+from app.api.deps import get_current_user, PermissionChecker, require_executive
 from app.core.permissions import Permission, Role, can_access_all_orders
 from app.models.user import User
 from app.models.order import Order, OrderItem
@@ -170,7 +172,199 @@ def create_order(
     
     db.commit()
     db.refresh(order)
-    
+
+    return order
+
+
+class DirectQuotationItemCreate(BaseModel):
+    """A single priced line item for the executive direct-quotation flow."""
+    inventory_id: UUID
+    quantity: int = Field(..., gt=0)
+    unit_price: Decimal = Field(..., ge=0)
+    gst_percentage: Decimal = Field(..., ge=0, le=100)
+    item_description: Optional[str] = None
+
+
+class DirectQuotationCreate(BaseModel):
+    """Payload for creating an order + finalized quotation in one step."""
+    customer_id: UUID
+    items: List[DirectQuotationItemCreate] = Field(..., min_length=1)
+    price_list_id: Optional[UUID] = None
+    discount_percentage: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    subject: Optional[str] = None
+    quotation_date: Optional[date] = None
+    notes: Optional[str] = None
+    priority: str = Field(default="medium", pattern="^(low|medium|high|urgent)$")
+
+
+def _resolve_direct_quotation_inputs(db: Session, data: DirectQuotationCreate):
+    """Shared validation for create_direct_quotation and its PDF preview."""
+    customer = db.query(Customer).filter(Customer.id == data.customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+
+    inventory_ids = {item.inventory_id for item in data.items}
+    inventory_map = {inv.id: inv for inv in db.query(Inventory).filter(Inventory.id.in_(inventory_ids)).all()}
+    missing_ids = inventory_ids - set(inventory_map.keys())
+    if missing_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inventory item(s) not found: {', '.join(str(i) for i in missing_ids)}"
+        )
+
+    if data.price_list_id:
+        from app.models.price_list import PriceList
+        price_list = db.query(PriceList).filter(PriceList.id == data.price_list_id).first()
+        if not price_list:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Price list not found")
+
+    return customer, inventory_map
+
+
+@router.post("/quotation-direct/preview-pdf")
+def preview_direct_quotation_pdf(
+    data: DirectQuotationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_executive)
+):
+    """
+    Render the direct-quotation PDF without persisting anything, so an
+    executive can check it before committing to create_direct_quotation.
+
+    order_number is previewed via generate_order_number the same way
+    GET /orders/next-number does — not reserved, just a preview of what the
+    real order will be numbered once generated — so the estimate number shown
+    here matches what the real PDF will show after submit (see
+    create_direct_quotation: it deliberately leaves order.quotation_number
+    unset so the PDF's estimate number falls back to order_number instead of
+    the unrelated global quotation_number sequence).
+    """
+    from fastapi.responses import StreamingResponse
+    from app.services.estimate_pdf_generator import generate_estimate_pdf
+
+    customer, inventory_map = _resolve_direct_quotation_inputs(db, data)
+
+    preview_order = Order(
+        order_number=generate_order_number(db),
+        customer_id=data.customer_id,
+        customer=customer,
+        sales_rep_id=current_user.id,
+        status="quote_sent",
+        workflow_stage="waiting_purchase_order",
+        priority=data.priority,
+        subject=data.subject,
+        price_list_id=data.price_list_id,
+        discount_percentage=data.discount_percentage,
+        quotation_date=data.quotation_date or date.today(),
+        created_at=datetime.utcnow(),
+    )
+    preview_order.items = [
+        OrderItem(
+            item_description=item_data.item_description or inventory_map[item_data.inventory_id].description
+            or inventory_map[item_data.inventory_id].sku,
+            quantity=item_data.quantity,
+            inventory_id=item_data.inventory_id,
+            inventory_item=inventory_map[item_data.inventory_id],
+            unit_price=item_data.unit_price,
+            gst_percentage=item_data.gst_percentage,
+        )
+        for item_data in data.items
+    ]
+
+    pdf_buffer = generate_estimate_pdf(preview_order)
+
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=Quotation_Preview.pdf"}
+    )
+
+
+@router.post("/quotation-direct", response_model=OrderWithItems, status_code=status.HTTP_201_CREATED)
+def create_direct_quotation(
+    data: DirectQuotationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_executive)
+):
+    """
+    Create an order and a finalized quotation for it in a single step.
+
+    Mobile-only, executive-only shortcut: the executive picks the customer and
+    inventory items and sets pricing themselves, so there is no one else left
+    to decode or approve the quotation. The resulting order is created
+    directly at workflow_stage='waiting_purchase_order' — the stage a normal
+    order only reaches after decoding, quoter pricing, and executive approval
+    (see approve_order's "quotation_generated" branch above) — skipping all
+    of those intermediate stages.
+    """
+    customer, inventory_map = _resolve_direct_quotation_inputs(db, data)
+
+    order = Order(
+        order_number=generate_order_number(db),
+        customer_id=data.customer_id,
+        sales_rep_id=current_user.id,
+        status="quote_sent",
+        workflow_stage="waiting_purchase_order",
+        priority=data.priority,
+        source="mobile_app",
+        notes=data.notes,
+        subject=data.subject,
+        price_list_id=data.price_list_id,
+        discount_percentage=data.discount_percentage,
+        quotation_date=data.quotation_date or date.today(),
+        quotation_created_by=current_user.id,
+    )
+    db.add(order)
+    db.flush()
+
+    for item_data in data.items:
+        inventory = inventory_map[item_data.inventory_id]
+        db.add(OrderItem(
+            order_id=order.id,
+            item_description=item_data.item_description or inventory.description or inventory.sku,
+            quantity=item_data.quantity,
+            inventory_id=inventory.id,
+            decoded_by=current_user.id,
+            unit_price=item_data.unit_price,
+            gst_percentage=item_data.gst_percentage,
+            status="decoded",
+        ))
+
+    # Logged for audit history via the same table the web Generate Quotation
+    # flow uses, but order.quotation_number is deliberately left unset: that
+    # field drives a separate global sequence unrelated to the order counter,
+    # and the estimate PDF falls back to order.order_number when it's unset —
+    # which is what we want here, so "Order No." and the PDF's "#" match.
+    log_entry = QuotationLog(
+        order_id=order.id,
+        generated_by=current_user.id,
+        discount_percentage=data.discount_percentage,
+        valid_until=None,
+    )
+    db.add(log_entry)
+
+    # Self-approved: the executive who generated this is also the only person
+    # who could approve it, so record the approval rather than leave it pending.
+    approval = Approval(
+        entity_type="order",
+        entity_id=order.id,
+        stage="quotation_approval",
+        approver_id=current_user.id,
+        status="approved",
+        approved_at=datetime.utcnow(),
+    )
+    db.add(approval)
+
+    add_order_action(
+        order=order,
+        action="Quotation Generated Directly",
+        user=current_user,
+        details=f"Order and quotation created directly by executive. Discount: {data.discount_percentage}%"
+    )
+
+    db.commit()
+    db.refresh(order)
+
     return order
 
 
