@@ -3,21 +3,17 @@
  * Adapted from web frontend for React Native with secure token storage.
  */
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import {
-  AuthResponse,
-  LoginRequest,
-  User,
-  Order,
-  Customer,
+import { 
+  AuthResponse, 
+  LoginRequest, 
+  User, 
+  Order, 
+  Customer, 
   DashboardStats,
   CreateOrderRequest,
   Invoice,
   Quotation,
-  Attachment,
-  Inventory,
-  PriceList,
-  PriceListItem,
-  DirectQuotationRequest
+  Attachment
 } from '@/types';
 import { tokenStorage } from '@/utils/tokenStorage';
 import { showErrorToast } from '@/utils/toast';
@@ -195,29 +191,6 @@ class ApiService {
     const response: AxiosResponse<Blob> = await this.client.get(`/orders/${orderId}/estimate-pdf`, {
       responseType: 'blob',
     });
-    return response.data;
-  }
-
-  // Executive-only: create an order + finalized quotation in one step
-  async createDirectQuotation(data: DirectQuotationRequest): Promise<Order> {
-    const response: AxiosResponse<Order> = await this.client.post('/orders/quotation-direct', data);
-    return response.data;
-  }
-
-  async searchInventory(search: string): Promise<Inventory[]> {
-    const response: AxiosResponse<{ items: Inventory[]; total: number }> = await this.client.get('/inventory/', {
-      params: { search, limit: 20 },
-    });
-    return response.data.items;
-  }
-
-  async getPriceLists(): Promise<PriceList[]> {
-    const response: AxiosResponse<PriceList[]> = await this.client.get('/price-lists');
-    return response.data;
-  }
-
-  async getPriceListItems(priceListId: string): Promise<PriceListItem[]> {
-    const response: AxiosResponse<PriceListItem[]> = await this.client.get(`/price-lists/${priceListId}/items`);
     return response.data;
   }
 

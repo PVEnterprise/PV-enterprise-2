@@ -12,7 +12,6 @@ import LoginScreen from '@/screens/LoginScreen';
 import OrdersListScreen from '@/screens/OrdersListScreen';
 import CreateOrderScreen from '@/screens/CreateOrderScreen';
 import OrderDetailsScreen from '@/screens/OrderDetailsScreenSimple';
-import GenerateQuotationScreen from '@/screens/GenerateQuotationScreen';
 import LoadingScreen from '@/components/LoadingScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -44,15 +43,10 @@ const AppNavigator: React.FC = () => {
             component={CreateOrderScreen}
             options={{ title: 'Create Order' }}
           />
-          <Stack.Screen
-            name="OrderDetails"
+          <Stack.Screen 
+            name="OrderDetails" 
             component={OrderDetailsScreen}
             options={{ title: 'Order Details' }}
-          />
-          <Stack.Screen
-            name="GenerateQuotation"
-            component={GenerateQuotationScreen}
-            options={{ title: 'Generate Quotation' }}
           />
         </>
       ) : (
