@@ -197,23 +197,8 @@ class DirectQuotationCreate(BaseModel):
     priority: str = Field(default="medium", pattern="^(low|medium|high|urgent)$")
 
 
-@router.post("/quotation-direct", response_model=OrderWithItems, status_code=status.HTTP_201_CREATED)
-def create_direct_quotation(
-    data: DirectQuotationCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_executive)
-):
-    """
-    Create an order and a finalized quotation for it in a single step.
-
-    Mobile-only, executive-only shortcut: the executive picks the customer and
-    inventory items and sets pricing themselves, so there is no one else left
-    to decode or approve the quotation. The resulting order is created
-    directly at workflow_stage='waiting_purchase_order' — the stage a normal
-    order only reaches after decoding, quoter pricing, and executive approval
-    (see approve_order's "quotation_generated" branch above) — skipping all
-    of those intermediate stages.
-    """
+def _resolve_direct_quotation_inputs(db: Session, data: DirectQuotationCreate):
+    """Shared validation for create_direct_quotation and its PDF preview."""
     customer = db.query(Customer).filter(Customer.id == data.customer_id).first()
     if not customer:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
@@ -232,6 +217,87 @@ def create_direct_quotation(
         price_list = db.query(PriceList).filter(PriceList.id == data.price_list_id).first()
         if not price_list:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Price list not found")
+
+    return customer, inventory_map
+
+
+@router.post("/quotation-direct/preview-pdf")
+def preview_direct_quotation_pdf(
+    data: DirectQuotationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_executive)
+):
+    """
+    Render the direct-quotation PDF without persisting anything, so an
+    executive can check it before committing to create_direct_quotation.
+
+    order_number is previewed via generate_order_number the same way
+    GET /orders/next-number does — not reserved, just a preview of what the
+    real order will be numbered once generated — so the estimate number shown
+    here matches what the real PDF will show after submit (see
+    create_direct_quotation: it deliberately leaves order.quotation_number
+    unset so the PDF's estimate number falls back to order_number instead of
+    the unrelated global quotation_number sequence).
+    """
+    from fastapi.responses import StreamingResponse
+    from app.services.estimate_pdf_generator import generate_estimate_pdf
+
+    customer, inventory_map = _resolve_direct_quotation_inputs(db, data)
+
+    preview_order = Order(
+        order_number=generate_order_number(db),
+        customer_id=data.customer_id,
+        customer=customer,
+        sales_rep_id=current_user.id,
+        status="quote_sent",
+        workflow_stage="waiting_purchase_order",
+        priority=data.priority,
+        subject=data.subject,
+        price_list_id=data.price_list_id,
+        discount_percentage=data.discount_percentage,
+        quotation_date=data.quotation_date or date.today(),
+        created_at=datetime.utcnow(),
+    )
+    preview_order.items = [
+        OrderItem(
+            item_description=item_data.item_description or inventory_map[item_data.inventory_id].description
+            or inventory_map[item_data.inventory_id].sku,
+            quantity=item_data.quantity,
+            inventory_id=item_data.inventory_id,
+            inventory_item=inventory_map[item_data.inventory_id],
+            unit_price=item_data.unit_price,
+            gst_percentage=item_data.gst_percentage,
+        )
+        for item_data in data.items
+    ]
+
+    pdf_buffer = generate_estimate_pdf(preview_order)
+
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=Quotation_Preview.pdf"}
+    )
+
+
+@router.post("/quotation-direct", response_model=OrderWithItems, status_code=status.HTTP_201_CREATED)
+def create_direct_quotation(
+    data: DirectQuotationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_executive)
+):
+    """
+    Create an order and a finalized quotation for it in a single step.
+
+    Mobile-only, executive-only shortcut: the executive picks the customer and
+    inventory items and sets pricing themselves, so there is no one else left
+    to decode or approve the quotation. The resulting order is created
+    directly at workflow_stage='waiting_purchase_order' — the stage a normal
+    order only reaches after decoding, quoter pricing, and executive approval
+    (see approve_order's "quotation_generated" branch above) — skipping all
+    of those intermediate stages.
+    """
+    customer, inventory_map = _resolve_direct_quotation_inputs(db, data)
 
     order = Order(
         order_number=generate_order_number(db),
@@ -264,7 +330,11 @@ def create_direct_quotation(
             status="decoded",
         ))
 
-    # Same atomic quotation_number sequence used by the web Generate Quotation flow.
+    # Logged for audit history via the same table the web Generate Quotation
+    # flow uses, but order.quotation_number is deliberately left unset: that
+    # field drives a separate global sequence unrelated to the order counter,
+    # and the estimate PDF falls back to order.order_number when it's unset —
+    # which is what we want here, so "Order No." and the PDF's "#" match.
     log_entry = QuotationLog(
         order_id=order.id,
         generated_by=current_user.id,
@@ -272,8 +342,6 @@ def create_direct_quotation(
         valid_until=None,
     )
     db.add(log_entry)
-    db.flush()
-    order.quotation_number = log_entry.quotation_number
 
     # Self-approved: the executive who generated this is also the only person
     # who could approve it, so record the approval rather than leave it pending.
