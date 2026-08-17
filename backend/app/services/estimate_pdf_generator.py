@@ -425,7 +425,7 @@ class EstimatePDFGenerator:
 
         # Group decoded items by section_name (sorted by creation order asc)
         decoded_items = sorted(
-            [item for item in self.order.items if item.inventory_id],
+            [item for item in self.order.items if item.inventory_id or item.is_nq],
             key=lambda x: x.created_at
         )
         sections_order = []
@@ -466,26 +466,46 @@ class EstimatePDFGenerator:
                 sec_igst += Decimal(str(igst_amt))
                 subtotal += Decimal(str(amount))
                 total_igst += Decimal(str(igst_amt))
-                hsn_sac = item.inventory_item.hsn_code if hasattr(item.inventory_item, 'hsn_code') and item.inventory_item.hsn_code else ''
-                # item_description holds an auto-generated "Decoded: ..." placeholder unless
-                # the user has overridden it on the quotation screen — prefer the override.
-                item_desc = item.item_description or ''
-                display_description = item_desc if item_desc and not item_desc.startswith('Decoded:') else item.inventory_item.description
+
+                if item.is_nq:
+                    # Dummy line: no inventory, no price — shown for reference only,
+                    # contributes 0 everywhere above so it can't move the totals.
+                    sku = 'NQ'
+                    hsn_sac = '-'
+                    display_description = item.item_description or ''
+                    price_cell = '-'
+                    amount_cell = '-'
+                    igst_pct_cell = '-'
+                    igst_amt_cell = '-'
+                    total_amt_cell = '-'
+                else:
+                    sku = item.inventory_item.sku
+                    hsn_sac = item.inventory_item.hsn_code if hasattr(item.inventory_item, 'hsn_code') and item.inventory_item.hsn_code else ''
+                    # item_description holds an auto-generated "Decoded: ..." placeholder unless
+                    # the user has overridden it on the quotation screen — prefer the override.
+                    item_desc = item.item_description or ''
+                    display_description = item_desc if item_desc and not item_desc.startswith('Decoded:') else item.inventory_item.description
+                    price_cell = format_indian_number(rate)
+                    amount_cell = format_indian_number(amount_after_discount)
+                    igst_pct_cell = f'{igst_pct:.0f}%'
+                    igst_amt_cell = format_indian_number(igst_amt)
+                    total_amt_cell = format_indian_number(total_amt)
+
                 if show_discount_col:
                     table_data.append([
                         str(idx),
-                        Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{display_description}', self.styles['SmallText']),
-                        hsn_sac, format_indian_number(rate), f'{qty}',
-                        f'{discount_percentage:.0f}%', format_indian_number(amount_after_discount),
-                        f'{igst_pct:.0f}%', format_indian_number(igst_amt), format_indian_number(total_amt)
+                        Paragraph(f'<b>{sku}</b><br/>{display_description}', self.styles['SmallText']),
+                        hsn_sac, price_cell, f'{qty}',
+                        f'{discount_percentage:.0f}%' if not item.is_nq else '-', amount_cell,
+                        igst_pct_cell, igst_amt_cell, total_amt_cell
                     ])
                 else:
                     table_data.append([
                         str(idx),
-                        Paragraph(f'<b>{item.inventory_item.sku}</b><br/>{display_description}', self.styles['SmallText']),
-                        hsn_sac, format_indian_number(rate), f'{qty}',
-                        format_indian_number(amount_after_discount),
-                        f'{igst_pct:.0f}%', format_indian_number(igst_amt), format_indian_number(total_amt)
+                        Paragraph(f'<b>{sku}</b><br/>{display_description}', self.styles['SmallText']),
+                        hsn_sac, price_cell, f'{qty}',
+                        amount_cell,
+                        igst_pct_cell, igst_amt_cell, total_amt_cell
                     ])
 
             if has_named_sections and sec:

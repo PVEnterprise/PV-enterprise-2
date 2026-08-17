@@ -99,6 +99,8 @@ class OrderItem(BaseModel):
     status = Column(String(50), default="pending", nullable=False, index=True)
     notes = Column(Text)
     section_name = Column(String(100), nullable=True)
+    is_nq = Column(Boolean, nullable=False, default=False, server_default="false",
+                   comment="Not Quoted: a dummy quotation line for a requirement we do not supply, with no inventory link and no price impact")
     
     # Relationships
     order = relationship("Order", back_populates="items")
