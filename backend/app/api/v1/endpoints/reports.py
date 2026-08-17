@@ -42,6 +42,14 @@ class MetricSummary(BaseModel):
     value: Decimal
 
 
+class HospitalBreakdown(BaseModel):
+    hospital_name: str
+    quotations_count: int
+    quotations_value: Decimal
+    invoices_count: int
+    invoices_value: Decimal
+
+
 class SalesRepSummaryResponse(BaseModel):
     sales_person_id: UUID
     sales_person_name: str
@@ -52,6 +60,7 @@ class SalesRepSummaryResponse(BaseModel):
     period_end: date
     quotations: MetricSummary
     invoices: MetricSummary
+    hospitals: List[HospitalBreakdown]
 
 
 def _resolve_sales_person(db: Session, current_user: User, sales_person_id: Optional[UUID]) -> User:
@@ -102,6 +111,15 @@ def _compute_summary(db: Session, person: User, period: str) -> SalesRepSummaryR
 
     customer_ids_subq = db.query(Customer.id).filter(Customer.territory_id.in_(territory_ids)).subquery()
 
+    # hospital_name -> running totals, built up as quotations/invoices are found below.
+    by_hospital: dict = {}
+
+    def _bucket(hospital_name: str) -> dict:
+        return by_hospital.setdefault(
+            hospital_name,
+            {"quotations_count": 0, "quotations_value": Decimal("0"), "invoices_count": 0, "invoices_value": Decimal("0")},
+        )
+
     quotations_count = 0
     quotations_value = Decimal("0")
     if territory_ids:
@@ -117,10 +135,19 @@ def _compute_summary(db: Session, person: User, period: str) -> SalesRepSummaryR
         order_ids = [r[0] for r in quotation_order_ids]
         if order_ids:
             quotation_orders = (
-                db.query(Order).options(joinedload(Order.items)).filter(Order.id.in_(order_ids)).all()
+                db.query(Order)
+                .options(joinedload(Order.items), joinedload(Order.customer))
+                .filter(Order.id.in_(order_ids))
+                .all()
             )
             quotations_count = len(quotation_orders)
-            quotations_value = sum((compute_order_grand_total(o) for o in quotation_orders), Decimal("0"))
+            for order in quotation_orders:
+                order_value = compute_order_grand_total(order)
+                quotations_value += order_value
+                hospital_name = order.customer.hospital_name if order.customer else "Unknown"
+                bucket = _bucket(hospital_name)
+                bucket["quotations_count"] += 1
+                bucket["quotations_value"] += order_value
 
     invoices_count = 0
     invoices_value = Decimal("0")
@@ -128,13 +155,25 @@ def _compute_summary(db: Session, person: User, period: str) -> SalesRepSummaryR
         invoices = (
             db.query(Invoice)
             .join(Order, Order.id == Invoice.order_id)
+            .options(joinedload(Invoice.order).joinedload(Order.customer))
             .filter(Order.customer_id.in_(db.query(customer_ids_subq)))
             .filter(Invoice.invoice_date >= start)
             .filter(Invoice.invoice_date <= end)
             .all()
         )
         invoices_count = len(invoices)
-        invoices_value = sum((Decimal(str(inv.total_amount)) for inv in invoices), Decimal("0"))
+        for invoice in invoices:
+            inv_value = Decimal(str(invoice.total_amount))
+            invoices_value += inv_value
+            hospital_name = invoice.order.customer.hospital_name if invoice.order and invoice.order.customer else "Unknown"
+            bucket = _bucket(hospital_name)
+            bucket["invoices_count"] += 1
+            bucket["invoices_value"] += inv_value
+
+    hospitals = [
+        HospitalBreakdown(hospital_name=name, **totals)
+        for name, totals in sorted(by_hospital.items())
+    ]
 
     return SalesRepSummaryResponse(
         sales_person_id=person.id,
@@ -146,6 +185,7 @@ def _compute_summary(db: Session, person: User, period: str) -> SalesRepSummaryR
         period_end=end,
         quotations=MetricSummary(count=quotations_count, value=quotations_value),
         invoices=MetricSummary(count=invoices_count, value=invoices_value),
+        hospitals=hospitals,
     )
 
 
@@ -182,6 +222,7 @@ def download_sales_rep_summary_pdf(
         quotations_value=summary.quotations.value,
         invoices_count=summary.invoices.count,
         invoices_value=summary.invoices.value,
+        hospitals=summary.hospitals,
     )
 
     filename = f"Sales_Report_{summary.sales_person_name.replace(' ', '_')}_{summary.period}.pdf"
