@@ -13,6 +13,8 @@ import GenerateQuotationPage from '@/pages/GenerateQuotationPage';
 import PriceListsPage from '@/pages/PriceListsPage';
 import InventoryPage from '@/pages/InventoryPage';
 import CustomersPage from '@/pages/CustomersPage';
+import TerritoriesPage from '@/pages/TerritoriesPage';
+import TerritoryDetailPage from '@/pages/TerritoryDetailPage';
 import EmployeesPage from '@/pages/EmployeesPage';
 import OutstandingPage from '@/pages/OutstandingPage';
 import DemosPage from '@/pages/DemosPage';
@@ -206,8 +208,24 @@ function AppRoutes() {
             </PermissionRoute>
           } 
         />
-        <Route 
-          path="employees" 
+        <Route
+          path="territories"
+          element={
+            <PermissionRoute permission="territory:read">
+              <TerritoriesPage />
+            </PermissionRoute>
+          }
+        />
+        <Route
+          path="territories/:territoryId"
+          element={
+            <PermissionRoute permission="territory:read">
+              <TerritoryDetailPage />
+            </PermissionRoute>
+          }
+        />
+        <Route
+          path="employees"
           element={
             <PermissionRoute permission="user:read">
               <EmployeesPage />

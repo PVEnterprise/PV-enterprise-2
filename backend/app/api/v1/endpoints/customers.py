@@ -32,6 +32,7 @@ class CustomerBase(BaseModel):
     state: Optional[str] = None
     pincode: Optional[str] = None
     gst_number: Optional[str] = None
+    territory_id: Optional[UUID] = None
 
 
 class CustomerCreate(CustomerBase):
@@ -49,6 +50,7 @@ class CustomerUpdate(BaseModel):
     state: Optional[str] = None
     pincode: Optional[str] = None
     gst_number: Optional[str] = None
+    territory_id: Optional[UUID] = None
     bank_account_name: Optional[str] = None
     bank_account_number: Optional[str] = None
     bank_name: Optional[str] = None
@@ -90,12 +92,13 @@ def list_customers(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
+    territory_id: Optional[str] = Query(None, description="Filter by territory id, or 'none' for unassigned customers"),
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(Permission.CUSTOMER_READ))
 ):
     """List customers with search."""
     query = db.query(Customer)
-    
+
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -103,7 +106,12 @@ def list_customers(
             (Customer.name.ilike(search_term)) |
             (Customer.gst_number.ilike(search_term))
         )
-    
+
+    if territory_id == "none":
+        query = query.filter(Customer.territory_id.is_(None))
+    elif territory_id:
+        query = query.filter(Customer.territory_id == UUID(territory_id))
+
     query = query.order_by(Customer.hospital_name)
     customers = query.offset(skip).limit(limit).all()
     return customers

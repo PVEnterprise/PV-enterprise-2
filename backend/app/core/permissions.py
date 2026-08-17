@@ -52,6 +52,12 @@ class Permission(str, Enum):
     CUSTOMER_READ = "customer:read"
     CUSTOMER_UPDATE = "customer:update"
     CUSTOMER_DELETE = "customer:delete"
+
+    # Territory permissions
+    TERRITORY_CREATE = "territory:create"
+    TERRITORY_READ = "territory:read"
+    TERRITORY_UPDATE = "territory:update"
+    TERRITORY_DELETE = "territory:delete"
     
     # Dashboard permissions
     DASHBOARD_VIEW = "dashboard:view"
@@ -126,11 +132,17 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         Permission.CUSTOMER_READ,
         Permission.CUSTOMER_UPDATE,
         Permission.CUSTOMER_DELETE,
-        
+
+        # Territory management
+        Permission.TERRITORY_CREATE,
+        Permission.TERRITORY_READ,
+        Permission.TERRITORY_UPDATE,
+        Permission.TERRITORY_DELETE,
+
         # Dashboard access
         Permission.DASHBOARD_VIEW,
         Permission.DASHBOARD_ANALYTICS,
-        
+
         # User management
         Permission.USER_CREATE,
         Permission.USER_READ,
@@ -159,11 +171,14 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         
         # Can only view customers (read-only)
         Permission.CUSTOMER_READ,
-        
+
+        # Can view territories (read-only)
+        Permission.TERRITORY_READ,
+
         # Basic dashboard view
         Permission.DASHBOARD_VIEW,
     },
-    
+
     Role.DECODER: {
         # Can read orders assigned to them and update items
         Permission.ORDER_READ,
@@ -201,11 +216,14 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         # Customer management - can create and read
         Permission.CUSTOMER_CREATE,
         Permission.CUSTOMER_READ,
-        
+
+        # Can view territories (read-only)
+        Permission.TERRITORY_READ,
+
         # Dashboard access
         Permission.DASHBOARD_VIEW,
     },
-    
+
     Role.ACCOUNTANT: {
         # Payment management
         Permission.PAYMENT_CREATE,

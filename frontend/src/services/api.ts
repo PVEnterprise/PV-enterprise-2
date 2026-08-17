@@ -103,6 +103,32 @@ class ApiService {
     return (await this.client.delete(`/customers/${id}`)).data;
   }
 
+  // Territories
+  getTerritories = async (params?: any) => {
+    return (await this.client.get('/territories/', { params })).data;
+  }
+  getTerritory = async (id: string) => {
+    return (await this.client.get(`/territories/${id}`)).data;
+  }
+  createTerritory = async (data: any) => {
+    return (await this.client.post('/territories/', data)).data;
+  }
+  updateTerritory = async (id: string, data: any) => {
+    return (await this.client.put(`/territories/${id}`, data)).data;
+  }
+  deleteTerritory = async (id: string) => {
+    return (await this.client.delete(`/territories/${id}`)).data;
+  }
+  getTerritoryCustomers = async (territoryId: string, params?: any) => {
+    return (await this.client.get(`/territories/${territoryId}/customers`, { params })).data;
+  }
+  addCustomersToTerritory = async (territoryId: string, customerIds: string[]) => {
+    return (await this.client.post(`/territories/${territoryId}/customers`, { customer_ids: customerIds })).data;
+  }
+  removeCustomersFromTerritory = async (territoryId: string, customerIds: string[]) => {
+    return (await this.client.delete(`/territories/${territoryId}/customers`, { data: { customer_ids: customerIds } })).data;
+  }
+
   // Orders
   getOrders = async (params?: any) => {
     return (await this.client.get('/orders/', { params })).data;

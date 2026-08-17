@@ -50,12 +50,13 @@ def create_user(
 @router.get("/")
 def list_users(
     search: str = Query(None, description="Search by name or email"),
+    role: str = Query(None, description="Filter by role name, e.g. 'sales_rep'"),
     db: Session = Depends(get_db),
     current_user: User = Depends(PermissionChecker(Permission.USER_READ))
 ):
     """List all users with role information."""
     query = db.query(User).options(joinedload(User.role))
-    
+
     # Apply search filter
     if search:
         search_filter = f"%{search}%"
@@ -63,7 +64,10 @@ def list_users(
             (User.full_name.ilike(search_filter)) |
             (User.email.ilike(search_filter))
         )
-    
+
+    if role:
+        query = query.filter(User.role.has(name=role))
+
     users = query.all()
     
     # Build response with name and role_name for frontend compatibility

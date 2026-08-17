@@ -4,6 +4,7 @@ Exports all models for easy importing.
 """
 from app.models.user import User, Role
 from app.models.customer import Customer
+from app.models.territory import Territory
 from app.models.inventory import Inventory
 from app.models.order import Order, OrderItem
 from app.models.quotation import Quotation, QuotationItem
@@ -24,6 +25,7 @@ __all__ = [
     "User",
     "Role",
     "Customer",
+    "Territory",
     "Inventory",
     "Order",
     "OrderItem",

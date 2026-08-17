@@ -4,13 +4,13 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
-import { Customer } from '@/types';
+import { Customer, Territory } from '@/types';
 import { Plus, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DynamicForm, { FormField } from '@/components/common/DynamicForm';
 import DataTable, { Column, commonActions } from '@/components/common/DataTable';
 
-const customerFields: FormField[] = [
+const baseCustomerFields: FormField[] = [
   {
     name: 'hospital_name',
     label: 'Hospital Name',
@@ -85,39 +85,6 @@ const customerFields: FormField[] = [
   },
 ];
 
-const columns: Column<Customer>[] = [
-  {
-    key: 'hospital_name',
-    label: 'Hospital Name',
-    width: '25%',
-  },
-  {
-    key: 'contact_person',
-    label: 'Contact Person',
-    width: '20%',
-  },
-  {
-    key: 'email',
-    label: 'Email',
-    width: '20%',
-  },
-  {
-    key: 'phone',
-    label: 'Phone',
-    width: '15%',
-  },
-  {
-    key: 'city',
-    label: 'City',
-    width: '10%',
-  },
-  {
-    key: 'state',
-    label: 'State',
-    width: '10%',
-  },
-];
-
 export default function CustomersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -144,6 +111,38 @@ export default function CustomersPage() {
       search: debouncedSearch || undefined,
     }),
   });
+
+  const { data: territories } = useQuery<Territory[]>({
+    queryKey: ['territories'],
+    queryFn: () => api.getTerritories(),
+  });
+  const territoryNameById = new Map((territories || []).map((t) => [t.id, t.name]));
+
+  const customerFields: FormField[] = [
+    ...baseCustomerFields,
+    {
+      name: 'territory_id',
+      label: 'Territory',
+      type: 'select',
+      placeholder: 'Unassigned',
+      options: (territories || []).map((t) => ({ value: t.id, label: t.name })),
+    },
+  ];
+
+  const columns: Column<Customer>[] = [
+    { key: 'hospital_name', label: 'Hospital Name', width: '20%' },
+    { key: 'contact_person', label: 'Contact Person', width: '18%' },
+    { key: 'email', label: 'Email', width: '18%' },
+    { key: 'phone', label: 'Phone', width: '12%' },
+    { key: 'city', label: 'City', width: '10%' },
+    { key: 'state', label: 'State', width: '10%' },
+    {
+      key: 'territory_id',
+      label: 'Territory',
+      width: '12%',
+      render: (v) => (v ? territoryNameById.get(v) || '—' : '—'),
+    },
+  ];
 
   const createMutation = useMutation({
     mutationFn: api.createCustomer,
@@ -179,6 +178,7 @@ export default function CustomersPage() {
     const transformedData = {
       ...data,
       name: data.hospital_name, // name and hospital_name are the same (customer name)
+      territory_id: data.territory_id || null,
     };
     
     if (editingCustomer) {

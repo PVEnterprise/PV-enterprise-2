@@ -42,12 +42,24 @@ export interface Customer {
   pincode?: string;
   gst_number?: string;
   created_by?: string;
+  territory_id?: string | null;
   bank_account_name?: string;
   bank_account_number?: string;
   bank_name?: string;
   bank_ifsc?: string;
   bank_branch?: string;
   terms_and_conditions?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Territory {
+  id: string;
+  name: string;
+  city?: string;
+  sales_person_id?: string | null;
+  sales_person_name?: string | null;
+  customer_count: number;
   created_at: string;
   updated_at: string;
 }

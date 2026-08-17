@@ -17,7 +17,8 @@ import {
   Beaker,
   Landmark,
   ShoppingBag,
-  FileText
+  FileText,
+  MapPin
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -77,8 +78,14 @@ export default function Layout() {
       icon: Users,
       permission: 'customer:read'
     },
-    { 
-      name: 'Employees', 
+    {
+      name: 'Territories',
+      href: '/territories',
+      icon: MapPin,
+      permission: 'territory:read'
+    },
+    {
+      name: 'Employees',
       href: '/employees', 
       icon: UserCog,
       permission: 'user:read'

@@ -25,6 +25,7 @@ class Customer(BaseModel):
     pincode = Column(String(20))
     gst_number = Column(String(50), index=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    territory_id = Column(UUID(as_uuid=True), ForeignKey("territories.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Quotation defaults — remembered from the last quotation/estimate generated
     # for this customer so the modal doesn't reset to hardcoded values every time.
@@ -40,6 +41,7 @@ class Customer(BaseModel):
     creator = relationship("User", back_populates="created_customers", foreign_keys=[created_by])
     orders = relationship("Order", back_populates="customer")
     demo_requests = relationship("DemoRequest", back_populates="hospital")
+    territory = relationship("Territory", back_populates="customers", foreign_keys=[territory_id])
     
     def __repr__(self) -> str:
         return f"<Customer {self.hospital_name}>"

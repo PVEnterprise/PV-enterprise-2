@@ -81,6 +81,11 @@ class User(BaseModel):
         back_populates="creator",
         foreign_keys="DemoRequest.created_by"
     )
+    territories = relationship(
+        "Territory",
+        back_populates="sales_person",
+        foreign_keys="Territory.sales_person_id"
+    )
     
     def __repr__(self) -> str:
         return f"<User {self.email}>"
