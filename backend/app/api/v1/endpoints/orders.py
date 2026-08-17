@@ -708,13 +708,42 @@ def update_decoded_items(
     
     # Create new decoded items
     for decode_item in decode_data.items:
+        if decode_item.is_nq:
+            # NQ ("Not Quoted"): a dummy line for a requirement we don't supply.
+            # No inventory link, no price — it must not affect quotation totals.
+            if not decode_item.item_description or not decode_item.item_description.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="NQ items require a description"
+                )
+            new_item = OrderItem(
+                order_id=order_id,
+                item_description=decode_item.item_description.strip(),
+                quantity=decode_item.quantity or 1,
+                inventory_id=None,
+                decoded_by=current_user.id,
+                unit_price=None,
+                gst_percentage=0,
+                status="decoded",
+                section_name=decode_item.section_name or None,
+                is_nq=True,
+            )
+            db.add(new_item)
+            continue
+
+        if not decode_item.inventory_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="inventory_id is required for non-NQ items"
+            )
+
         inventory = db.query(Inventory).filter(Inventory.id == decode_item.inventory_id).first()
         if not inventory:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Inventory item {decode_item.inventory_id} not found"
             )
-        
+
         new_item = OrderItem(
             order_id=order_id,
             item_description=decode_item.item_description or f"Decoded: {inventory.sku} - {inventory.description or 'No description'}",
@@ -727,10 +756,13 @@ def update_decoded_items(
             section_name=decode_item.section_name or None
         )
         db.add(new_item)
-    
+
     # Track decoding action
-    item_list = "\n".join([f"- {db.query(Inventory).get(item.inventory_id).sku} (Qty: {item.quantity})" 
-                           for item in decode_data.items])
+    item_list = "\n".join([
+        f"- NQ: {item.item_description} (Qty: {item.quantity})" if item.is_nq
+        else f"- {db.query(Inventory).get(item.inventory_id).sku} (Qty: {item.quantity})"
+        for item in decode_data.items
+    ])
     add_order_action(
         order=order,
         action="Items Decoded",

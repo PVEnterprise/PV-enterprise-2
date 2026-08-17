@@ -70,12 +70,13 @@ class OrderItemUpdate(BaseModel):
 
 class OrderItemDecode(BaseModel):
     """Schema for decoding an order item."""
-    inventory_id: UUID
+    inventory_id: Optional[UUID] = None
     unit_price: Optional[Decimal] = None
     quantity: Optional[int] = Field(default=1, gt=0)
     gst_percentage: Optional[Decimal] = Field(default=18.00, ge=0, le=100)
     section_name: Optional[str] = None
     item_description: Optional[str] = None
+    is_nq: Optional[bool] = False
 
 
 class OrderItemDecodeMultiple(BaseModel):
@@ -94,6 +95,7 @@ class OrderItemResponse(OrderItemBase):
     gst_percentage: Optional[Decimal] = None
     status: str
     section_name: Optional[str] = None
+    is_nq: bool = False
     created_at: datetime
     updated_at: datetime
     # Dispatch tracking properties (computed from model properties)

@@ -18,6 +18,16 @@ interface DecodedItem {
   section_name?: string;
 }
 
+// NQ ("Not Quoted") items are dummy quotation lines with no catalog match,
+// added on the Generate Quotation screen. This page only edits catalog-backed
+// items, but must round-trip any existing NQ items untouched so saving here
+// doesn't silently wipe them out.
+interface NQItem {
+  item_description: string;
+  quantity: number;
+  section_name?: string;
+}
+
 interface Attachment {
   id: string;
   original_filename: string;
@@ -37,6 +47,7 @@ export default function DecodePage() {
   
   // Decoded items state
   const [decodedItems, setDecodedItems] = useState<DecodedItem[]>([]);
+  const [nqItems, setNqItems] = useState<NQItem[]>([]);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Inventory[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -82,6 +93,15 @@ export default function DecodePage() {
             section_name: item.section_name || '',
           }));
         setDecodedItems(existingDecoded);
+
+        const existingNQ = order.items
+          .filter((item: any) => item.is_nq)
+          .map((item: any) => ({
+            item_description: item.item_description,
+            quantity: item.quantity,
+            section_name: item.section_name || '',
+          }));
+        setNqItems(existingNQ);
       }
     } catch (error) {
       console.error('Error fetching existing decoded items:', error);
@@ -230,7 +250,17 @@ export default function DecodePage() {
         section_name: item.section_name || null,
       }));
 
-      await api.updateDecodedItems(orderId, items);
+      // Preserve any NQ items added on the Generate Quotation screen — this
+      // page never edits them, so round-trip them unchanged rather than
+      // letting the full-replace save drop them.
+      const nqPayload = nqItems.map(item => ({
+        is_nq: true,
+        item_description: item.item_description,
+        quantity: item.quantity,
+        section_name: item.section_name || null,
+      }));
+
+      await api.updateDecodedItems(orderId, [...items, ...nqPayload]);
       
       // Invalidate the order cache to force a refresh
       await queryClient.invalidateQueries({ queryKey: ['order', orderId] });
@@ -518,6 +548,11 @@ export default function DecodePage() {
           <div className="p-4 border-t bg-gray-50">
             <div className="text-sm text-gray-600 mb-3">
               Total Items: <span className="font-semibold">{decodedItems.length}</span>
+              {nqItems.length > 0 && (
+                <span className="ml-2 text-amber-700">
+                  (+{nqItems.length} NQ item{nqItems.length !== 1 ? 's' : ''} kept as-is — edit those on the Generate Quotation screen)
+                </span>
+              )}
             </div>
             <button 
               onClick={handleSaveDecodedItems}

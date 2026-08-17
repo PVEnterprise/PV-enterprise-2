@@ -563,7 +563,7 @@ export default function OrderDetailPage() {
                   className="btn btn-primary btn-sm"
                 >
                   <Edit size={16} className="mr-1" />
-                  {order.items?.some(item => !item.inventory_id) ? 'Decode Items' : user?.role_name === 'executive' ? 'Review Decoded Items' : 'Edit Decoded Items'}
+                  {order.items?.some(item => !item.inventory_id && !item.is_nq) ? 'Decode Items' : user?.role_name === 'executive' ? 'Review Decoded Items' : 'Edit Decoded Items'}
                 </button>
               ) : null}
             </div>
@@ -606,7 +606,7 @@ export default function OrderDetailPage() {
                             <td className="p-3 text-center text-sm text-gray-600">{srNo}</td>
                             <td className="p-3">
                               <span className="font-mono text-sm font-medium text-gray-900">
-                                {item.inventory?.sku || '-'}
+                                {item.is_nq ? 'NQ' : (item.inventory?.sku || '-')}
                               </span>
                             </td>
                             <td className="p-3">
@@ -614,7 +614,9 @@ export default function OrderDetailPage() {
                             </td>
                             <td className="p-3 text-center text-sm font-medium text-gray-900">{item.quantity}</td>
                             <td className="p-3 text-center">
-                              {item.inventory_id ? (
+                              {item.is_nq ? (
+                                <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full">Not Quoted</span>
+                              ) : item.inventory_id ? (
                                 <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Decoded</span>
                               ) : (
                                 <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Not Decoded</span>

@@ -27,13 +27,14 @@ interface Inventory {
 
 interface OrderItem {
   id: string;
-  inventory_id: string;
-  inventory: Inventory;
+  inventory_id: string | null;
+  inventory: Inventory | null;
   quantity: number;
-  unit_price: number;
+  unit_price: number | null;
   gst_percentage?: number;
   section_name?: string;
   item_description?: string;
+  is_nq?: boolean;
 }
 
 interface Order {
@@ -68,7 +69,7 @@ interface PriceListItem {
 
 interface QuotationItem extends OrderItem {
   hsn_code: string;
-  final_unit_price: number;
+  final_unit_price: number | null;
   description: string;
   amount: number;
   tax_percent: number;
@@ -85,7 +86,7 @@ const defaultDescription = (item: OrderItem) => {
   if (item.item_description && !item.item_description.startsWith('Decoded:')) {
     return item.item_description;
   }
-  return item.inventory.description || '';
+  return item.inventory?.description || '';
 };
 
 export default function GenerateQuotationPage() {
@@ -192,10 +193,29 @@ export default function GenerateQuotationPage() {
     if (!order?.items) return [];
 
     return order.items.map((item) => {
+      const quantity = customQuantities[item.id] !== undefined ? customQuantities[item.id] : item.quantity;
+      const description = customDescriptions[item.id] !== undefined ? customDescriptions[item.id] : defaultDescription(item);
+
+      // NQ ("Not Quoted") rows are dummy lines for requirements we don't supply —
+      // no catalog item, no price, and by design zero impact on every total below.
+      if (item.is_nq) {
+        return {
+          ...item,
+          hsn_code: '-',
+          final_unit_price: null,
+          quantity,
+          description,
+          amount: 0,
+          tax_percent: 0,
+          tax_amount: 0,
+          total_amount: 0,
+        };
+      }
+
       // Priority: custom price > price list > standard price
       let unitPrice = Number(item.unit_price);
       // Use order item's GST percentage (already set when item was decoded)
-      let taxPercent = Number(item.gst_percentage || item.inventory.tax || 5);
+      let taxPercent = Number(item.gst_percentage || item.inventory?.tax || 5);
 
       // Check if there's a custom price for this item
       if (customUnitPrices[item.id] !== undefined) {
@@ -211,9 +231,6 @@ export default function GenerateQuotationPage() {
         }
       }
 
-      const quantity = customQuantities[item.id] !== undefined ? customQuantities[item.id] : item.quantity;
-      const description = customDescriptions[item.id] !== undefined ? customDescriptions[item.id] : defaultDescription(item);
-
       // Calculate amounts
       const grossAmount = unitPrice * quantity;
       const discountAmount = (grossAmount * discountPercent) / 100;
@@ -223,7 +240,7 @@ export default function GenerateQuotationPage() {
 
       return {
         ...item,
-        hsn_code: item.inventory.hsn_code || '',
+        hsn_code: item.inventory?.hsn_code || '',
         final_unit_price: unitPrice,
         quantity,
         description,
@@ -353,22 +370,25 @@ export default function GenerateQuotationPage() {
 
   const buildItemsPayload = (opts: {
     removeId?: string;
-    addItem?: { inventory_id: string; quantity: number; unit_price: number; gst_percentage: number };
+    addItem?:
+      | { inventory_id: string; quantity: number; unit_price: number; gst_percentage: number; is_nq?: false }
+      | { is_nq: true; quantity: number; item_description: string };
     addAtIndex?: number;
   } = {}) => {
     const kept = (order?.items || [])
       .filter((item) => item.id !== opts.removeId)
       .map((item) => ({
-        inventory_id: item.inventory_id,
+        inventory_id: item.is_nq ? null : item.inventory_id,
         quantity: customQuantities[item.id] !== undefined ? customQuantities[item.id] : item.quantity,
-        unit_price: customUnitPrices[item.id] !== undefined ? customUnitPrices[item.id] : item.unit_price,
-        gst_percentage: item.gst_percentage,
+        unit_price: item.is_nq ? null : (customUnitPrices[item.id] !== undefined ? customUnitPrices[item.id] : item.unit_price),
+        gst_percentage: item.is_nq ? 0 : item.gst_percentage,
         section_name: item.section_name || null,
         item_description: customDescriptions[item.id] !== undefined ? customDescriptions[item.id] : item.item_description,
+        is_nq: !!item.is_nq,
       }));
     if (opts.addItem) {
       const insertAt = opts.addAtIndex !== undefined ? opts.addAtIndex : kept.length;
-      kept.splice(insertAt, 0, { ...opts.addItem, section_name: null, item_description: undefined });
+      kept.splice(insertAt, 0, { ...opts.addItem, section_name: null } as any);
     }
     return kept;
   };
@@ -378,7 +398,8 @@ export default function GenerateQuotationPage() {
       alert('A quotation must have at least one item.');
       return;
     }
-    if (!window.confirm(`Remove ${item.inventory.sku} from this quotation?`)) return;
+    const label = item.is_nq ? 'this NQ item' : item.inventory?.sku || 'this item';
+    if (!window.confirm(`Remove ${label} from this quotation?`)) return;
     updateItemsMutation.mutate(buildItemsPayload({ removeId: item.id }));
   };
 
@@ -417,6 +438,26 @@ export default function GenerateQuotationPage() {
           quantity: addQuantity,
           unit_price: unitPrice,
           gst_percentage: taxPercent,
+        },
+      }),
+      { onSuccess: handleCancelAddItem }
+    );
+  };
+
+  // Add an "NQ" (Not Quoted) row — a dummy line for a requirement we don't
+  // supply. No catalog lookup: whatever text is in the search box becomes the
+  // description, and the row carries no price so it can't affect any totals.
+  const handleAddNQItem = () => {
+    const description = catalogSearch.trim();
+    if (!description || addQuantity <= 0) return;
+
+    updateItemsMutation.mutate(
+      buildItemsPayload({
+        addAtIndex: addItemAt ?? undefined,
+        addItem: {
+          is_nq: true,
+          quantity: addQuantity,
+          item_description: description,
         },
       }),
       { onSuccess: handleCancelAddItem }
@@ -559,7 +600,7 @@ export default function GenerateQuotationPage() {
             value={catalogSearch}
             onChange={(e) => { setCatalogSearch(e.target.value); setSelectedCatalog(null); }}
             onFocus={() => catalogSearch && !selectedCatalog && setShowDropdown(true)}
-            placeholder="Search catalog no or description…"
+            placeholder="Search catalog no, or type a description for NQ Item…"
             autoFocus
             className="input input-sm w-full text-xs pr-7"
           />
@@ -595,6 +636,14 @@ export default function GenerateQuotationPage() {
       >
         <Check size={13} className="mr-1" />
         {updateItemsMutation.isPending ? 'Adding…' : 'Add'}
+      </button>
+      <button
+        onClick={handleAddNQItem}
+        disabled={!catalogSearch.trim() || updateItemsMutation.isPending}
+        className="btn btn-secondary btn-sm text-xs px-3 py-1.5 disabled:opacity-40"
+        title="Add a dummy line for a requirement we don't supply — no catalog match needed, no price, no effect on totals"
+      >
+        NQ Item
       </button>
       <button
         onClick={handleCancelAddItem}
@@ -772,14 +821,21 @@ export default function GenerateQuotationPage() {
                         <td colSpan={12} className="p-2">{addItemForm}</td>
                       </tr>
                     )}
-                    <tr className="hover:bg-gray-50 group">
+                    <tr className={`hover:bg-gray-50 group ${item.is_nq ? 'bg-amber-50/40' : ''}`}>
                       <td className="p-3 text-xs text-gray-900 whitespace-nowrap">{index + 1}</td>
-                      <td className="p-3 text-xs font-mono text-gray-900 whitespace-nowrap">{item.inventory.sku}</td>
+                      <td className="p-3 text-xs font-mono text-gray-900 whitespace-nowrap">
+                        {item.is_nq ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold" title="Not Quoted — dummy line, no price impact">NQ</span>
+                        ) : (
+                          item.inventory?.sku
+                        )}
+                      </td>
                       <td className="p-3 text-xs text-gray-700 max-w-[220px]">
                         <input
                           type="text"
                           value={item.description}
                           onChange={(e) => handleDescriptionChange(item.id, e.target.value)}
+                          placeholder={item.is_nq ? 'Describe the item not supplied…' : undefined}
                           className={`w-full border rounded px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                             customDescriptions[item.id] !== undefined
                               ? 'border-blue-500 bg-blue-50'
@@ -788,24 +844,28 @@ export default function GenerateQuotationPage() {
                           title={customDescriptions[item.id] !== undefined ? 'Custom description (edited)' : 'Click to edit description'}
                         />
                       </td>
-                      <td className="p-3 text-xs text-gray-600 whitespace-nowrap">{item.hsn_code || '-'}</td>
+                      <td className="p-3 text-xs text-gray-600 whitespace-nowrap">{item.is_nq ? '-' : (item.hsn_code || '-')}</td>
                       <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          <span className="text-gray-600">₹</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={rawPriceInputs[item.id] !== undefined ? rawPriceInputs[item.id] : String(item.final_unit_price)}
-                            onChange={(e) => handleUnitPriceChange(item.id, e.target.value)}
-                            onBlur={() => handleUnitPriceBlur(item.id)}
-                            className={`w-24 text-right border rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              customUnitPrices[item.id] !== undefined
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-gray-300'
-                            }`}
-                            title={customUnitPrices[item.id] !== undefined ? 'Custom price (edited)' : 'Click to edit price'}
-                          />
-                        </div>
+                        {item.is_nq ? (
+                          <span className="text-gray-400">-</span>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="text-gray-600">₹</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={rawPriceInputs[item.id] !== undefined ? rawPriceInputs[item.id] : String(item.final_unit_price)}
+                              onChange={(e) => handleUnitPriceChange(item.id, e.target.value)}
+                              onBlur={() => handleUnitPriceBlur(item.id)}
+                              className={`w-24 text-right border rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                customUnitPrices[item.id] !== undefined
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-gray-300'
+                              }`}
+                              title={customUnitPrices[item.id] !== undefined ? 'Custom price (edited)' : 'Click to edit price'}
+                            />
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">
                         <input
@@ -821,11 +881,11 @@ export default function GenerateQuotationPage() {
                           title={customQuantities[item.id] !== undefined ? 'Custom quantity (edited)' : 'Click to edit quantity'}
                         />
                       </td>
-                      <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{discountPercent}%</td>
-                      <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.amount))}</td>
-                      <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{item.tax_percent}%</td>
-                      <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.tax_amount))}</td>
-                      <td className="p-3 text-xs text-right font-bold text-gray-900 whitespace-nowrap">₹{formatINR(Number(item.total_amount))}</td>
+                      <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{item.is_nq ? '-' : `${discountPercent}%`}</td>
+                      <td className="p-3 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">{item.is_nq ? '-' : `₹${formatINR(Number(item.amount))}`}</td>
+                      <td className="p-3 text-xs text-right text-gray-600 whitespace-nowrap">{item.is_nq ? '-' : `${item.tax_percent}%`}</td>
+                      <td className="p-3 text-xs text-right text-gray-900 whitespace-nowrap">{item.is_nq ? '-' : `₹${formatINR(Number(item.tax_amount))}`}</td>
+                      <td className="p-3 text-xs text-right font-bold text-gray-900 whitespace-nowrap">{item.is_nq ? '-' : `₹${formatINR(Number(item.total_amount))}`}</td>
                       <td className="p-1 text-center">
                         <div className="flex items-center justify-center">
                           <button

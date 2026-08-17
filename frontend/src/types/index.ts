@@ -90,6 +90,7 @@ export interface OrderItem {
   status: string;
   section_name?: string;
   notes?: string;
+  is_nq?: boolean;
   created_at: string;
   updated_at: string;
   dispatched_quantity?: number;
