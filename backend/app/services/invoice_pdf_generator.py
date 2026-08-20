@@ -196,6 +196,8 @@ class InvoicePDFGenerator:
     def _bill_to(self):
         c = self.order.customer
         addr = f"<b>{c.hospital_name or c.name}</b><br/>{c.address or ''}<br/>{c.city or ''} - {c.pincode or ''}<br/>{c.state or ''}, India"
+        if c.gst_number:
+            addr += f"<br/>GSTIN: {c.gst_number}"
         data = [[Paragraph('<font color="#3d6b9e"><b>BILL TO</b></font>', self.styles["NormalText"])],
                 [Paragraph(addr, self.styles["NormalText"])]]
         t = Table(data, colWidths=[180*mm])

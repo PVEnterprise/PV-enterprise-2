@@ -370,7 +370,9 @@ class EstimatePDFGenerator:
             customer_text += f' - {self.customer.pincode}'
         if self.customer.state:
             customer_text += f'<br/>{self.customer.state}, India'
-        
+        if self.customer.gst_number:
+            customer_text += f'<br/>GSTIN: {self.customer.gst_number}'
+
         data = [
             [Paragraph('<font color="#3d6b9e"><b>BILL TO</b></font>', self.styles['SmallText'])],
             [Paragraph(customer_text, self.styles['NormalText'])]
