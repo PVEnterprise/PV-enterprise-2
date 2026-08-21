@@ -150,6 +150,7 @@ def create_dispatch(
         terms=dispatch_data.terms,
         payment_terms=dispatch_data.payment_terms,
         po_number=dispatch_data.po_number,
+        po_date=dispatch_data.po_date,
         dc_number=dispatch_data.dc_number,
         invoice_number=dispatch_data.invoice_number,
         bank_account_name=dispatch_data.bank_account_name,

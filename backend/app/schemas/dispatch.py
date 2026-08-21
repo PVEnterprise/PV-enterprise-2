@@ -54,6 +54,7 @@ class DispatchBase(BaseModel):
     terms: Optional[str] = None
     payment_terms: Optional[str] = None
     po_number: Optional[str] = None
+    po_date: Optional[date] = None
     dc_number: Optional[str] = None
     invoice_number: Optional[str] = None
     bank_account_name: Optional[str] = None

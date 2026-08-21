@@ -173,17 +173,26 @@ class InvoicePDFGenerator:
     def _invoice_info(self):
         payment_terms = getattr(self.dispatch, 'payment_terms', None) or getattr(self.invoice, 'payment_terms', '') or ''
         po_number = getattr(self.dispatch, 'po_number', None) or ''
+        po_date = getattr(self.dispatch, 'po_date', None)
         invoice_number = getattr(self.dispatch, 'invoice_number', None) or self.invoice.invoice_number
         data = [
             ["Invoice #", f": {invoice_number}", "Place Of Supply", f": {self.order.customer.state or 'N/A'}"],
             ["Invoice Date", f": {self.invoice.invoice_date.strftime('%d.%m.%Y')}", "Due Date", f": {self.invoice.due_date.strftime('%d.%m.%Y')}"],
         ]
-        if po_number or payment_terms:
-            left_label = "PO #" if po_number else ""
-            left_val   = f": {po_number}" if po_number else ""
-            right_label = "Terms" if payment_terms else ""
-            right_val   = f": {payment_terms}" if payment_terms else ""
-            data.append([left_label, left_val, right_label, right_val])
+        optional_fields = []
+        if po_number:
+            optional_fields.append(("PO #", po_number))
+        if po_date:
+            optional_fields.append(("PO Date", po_date.strftime('%d.%m.%Y')))
+        if payment_terms:
+            optional_fields.append(("Terms", payment_terms))
+        for i in range(0, len(optional_fields), 2):
+            row = []
+            for label, val in optional_fields[i:i + 2]:
+                row += [label, f": {val}"]
+            if len(row) == 2:
+                row += ["", ""]
+            data.append(row)
         t = Table(data, colWidths=[30 * mm, 60 * mm, 40 * mm, 50 * mm])
         t.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),

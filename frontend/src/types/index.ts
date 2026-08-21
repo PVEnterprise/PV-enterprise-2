@@ -223,6 +223,7 @@ export interface Dispatch {
   terms?: string;
   payment_terms?: string;
   po_number?: string;
+  po_date?: string;
   dc_number?: string;
   invoice_number?: string;
   bank_account_name?: string;

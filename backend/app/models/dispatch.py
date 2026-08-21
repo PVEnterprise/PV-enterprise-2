@@ -25,6 +25,7 @@ class Dispatch(BaseModel):
     terms = Column(Text, nullable=True, comment="Terms and conditions shown on invoice")
     payment_terms = Column(String(50), nullable=True, comment="Payment terms (e.g. Net 30, Due on Receipt)")
     po_number = Column(String(100), nullable=True, comment="Purchase Order number from customer")
+    po_date = Column(Date, nullable=True, comment="Purchase Order date from customer")
     dc_number = Column(String(100), nullable=True, comment="Delivery Challan reference number")
     invoice_number = Column(String(100), nullable=True, comment="Invoice number shown on the invoice PDF")
     bank_account_name   = Column(String(100), nullable=True, comment="Bank account name for invoice")

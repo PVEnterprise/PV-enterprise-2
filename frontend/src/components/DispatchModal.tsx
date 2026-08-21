@@ -64,12 +64,10 @@ const PAYMENT_TERMS_OPTIONS = [
 export interface DispatchFormData {
   order_id: string;
   dispatch_date: string;
-  courier_name: string;
-  tracking_number: string;
-  notes: string;
   terms: string;
   payment_terms: string;
   po_number: string;
+  po_date?: string;
   dc_number: string;
   invoice_number: string;
   bank_account_name: string;
@@ -162,9 +160,6 @@ export default function DispatchModal({
   initialBankDetails
 }: DispatchModalProps) {
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split('T')[0]);
-  const [courierName, setCourierName] = useState('');
-  const [trackingNumber, setTrackingNumber] = useState('');
-  const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState(DEFAULT_TERMS);
   const [includeTerms, setIncludeTerms] = useState(false);
   const [paymentTerms, setPaymentTerms] = useState('Due on Receipt');
@@ -174,6 +169,7 @@ export default function DispatchModal({
   const [bankIfsc, setBankIfsc] = useState(initialBankDetails?.bank_ifsc || 'SBIN0021790');
   const [bankBranch, setBankBranch] = useState(initialBankDetails?.bank_branch || 'Manikonda, Hyderabad');
   const [poNumber, setPoNumber] = useState('');
+  const [poDate, setPoDate] = useState('');
   const [dcNumber, setDcNumber] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [dispatchItems, setDispatchItems] = useState<DispatchItemData[]>([]);
@@ -286,9 +282,6 @@ export default function DispatchModal({
     onSubmit({
       order_id: orderId,
       dispatch_date: dispatchDate,
-      courier_name: courierName,
-      tracking_number: trackingNumber,
-      notes,
       terms: includeTerms ? terms : '',
       payment_terms: paymentTerms,
       bank_account_name: bankAccountName,
@@ -297,6 +290,7 @@ export default function DispatchModal({
       bank_ifsc: bankIfsc,
       bank_branch: bankBranch,
       po_number: poNumber,
+      po_date: poDate || undefined,
       dc_number: dcNumber,
       invoice_number: invoiceNumber,
       items: itemsToDispatch,
@@ -332,20 +326,12 @@ export default function DispatchModal({
                 <input type="date" value={dispatchDate} onChange={(e) => setDispatchDate(e.target.value)} className="input w-full text-xs py-1" required />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Courier Name</label>
-                <input type="text" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="e.g., Blue Dart, DTDC" className="input w-full text-xs py-1" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Tracking Number</label>
-                <input type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Enter tracking number" className="input w-full text-xs py-1" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Notes</label>
-                <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes" className="input w-full text-xs py-1" />
-              </div>
-              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">PO #</label>
                 <input type="text" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="Purchase Order number" className="input w-full text-xs py-1" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">PO Date</label>
+                <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} className="input w-full text-xs py-1" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">DC #</label>
