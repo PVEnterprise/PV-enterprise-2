@@ -63,8 +63,8 @@ class Order(BaseModel):
     
     @property
     def decoded_items_count(self) -> int:
-        """Get count of decoded items."""
-        return sum(1 for item in self.items if item.inventory_id is not None)
+        """Get count of decoded items. NQ items count as decoded — they have no inventory link by design."""
+        return sum(1 for item in self.items if item.inventory_id is not None or item.is_nq)
     
     @property
     def is_fully_decoded(self) -> bool:
@@ -118,8 +118,8 @@ class OrderItem(BaseModel):
     
     @property
     def is_decoded(self) -> bool:
-        """Check if item is decoded (mapped to inventory)."""
-        return self.inventory_id is not None
+        """Check if item is decoded (mapped to inventory, or NQ by design)."""
+        return self.inventory_id is not None or self.is_nq
     
     @property
     def line_total(self) -> float:
