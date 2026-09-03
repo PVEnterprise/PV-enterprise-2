@@ -8,7 +8,8 @@ import { ChevronLeft, ChevronRight, Search, X, Plus, Save, Tag } from 'lucide-re
 import api from '@/services/api';
 import { Inventory } from '@/types';
 
-interface DecodedItem {
+interface CatalogRow {
+  kind: 'catalog';
   catalog_no: string;
   quantity: number;
   description?: string;
@@ -20,11 +21,14 @@ interface DecodedItem {
 
 // NQ ("Not Quoted") items are dummy quotation lines with no catalog match —
 // no price, no inventory link. Can be added here or on the Generate Quotation screen.
-interface NQItem {
+interface NQRow {
+  kind: 'nq';
   item_description: string;
   quantity: number;
   section_name?: string;
 }
+
+type ItemRow = CatalogRow | NQRow;
 
 interface Attachment {
   id: string;
@@ -38,20 +42,20 @@ export default function DecodePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const orderId = searchParams.get('order_id');
-  
+
   // Attachment state
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [currentAttachmentIndex, setCurrentAttachmentIndex] = useState(0);
-  
-  // Decoded items state
-  const [decodedItems, setDecodedItems] = useState<DecodedItem[]>([]);
-  const [nqItems, setNqItems] = useState<NQItem[]>([]);
+
+  // Decoded items state — a single ordered list (catalog + NQ interleaved) so
+  // the add order survives save/reload instead of grouping NQ items at the end.
+  const [items, setItems] = useState<ItemRow[]>([]);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Inventory[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedCatalog, setSelectedCatalog] = useState<Inventory | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
-  
+
   // Section state
   const [currentSection, setCurrentSection] = useState<string>('');
   const [newSectionName, setNewSectionName] = useState<string>('');
@@ -78,10 +82,17 @@ export default function DecodePage() {
     try {
       const order = await api.getOrder(orderId!);
       if (order.items && order.items.length > 0) {
-        // Filter only decoded items (items with inventory_id)
-        const existingDecoded = order.items
-          .filter((item: any) => item.inventory_id && item.inventory)
-          .map((item: any) => ({
+        // order.items comes back sorted by created_at, which reflects the
+        // order they were saved in — preserve that order here.
+        const existingItems: ItemRow[] = order.items
+          .filter((item: any) => item.is_nq || (item.inventory_id && item.inventory))
+          .map((item: any): ItemRow => item.is_nq ? {
+            kind: 'nq',
+            item_description: item.item_description,
+            quantity: item.quantity,
+            section_name: item.section_name || '',
+          } : {
+            kind: 'catalog',
             catalog_no: item.inventory.sku,
             quantity: item.quantity,
             description: item.inventory.description,
@@ -89,17 +100,8 @@ export default function DecodePage() {
             unit_price: item.unit_price || item.inventory.unit_price,
             tax: item.gst_percentage || item.inventory.tax,
             section_name: item.section_name || '',
-          }));
-        setDecodedItems(existingDecoded);
-
-        const existingNQ = order.items
-          .filter((item: any) => item.is_nq)
-          .map((item: any) => ({
-            item_description: item.item_description,
-            quantity: item.quantity,
-            section_name: item.section_name || '',
-          }));
-        setNqItems(existingNQ);
+          });
+        setItems(existingItems);
       }
     } catch (error) {
       console.error('Error fetching existing decoded items:', error);
@@ -126,16 +128,16 @@ export default function DecodePage() {
 
     const debounce = setTimeout(searchInventory, 250);
     return () => clearTimeout(debounce);
-  }, [catalogSearch, decodedItems, selectedCatalog]);
+  }, [catalogSearch, selectedCatalog]);
 
   const currentAttachment = attachments[currentAttachmentIndex];
   const isImage = currentAttachment?.file_type?.startsWith('image/');
   const isPdf = currentAttachment?.file_type === 'application/pdf';
-  
+
   // State for image blob URL
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  
+
   // Load image/PDF with authentication
   useEffect(() => {
     if (!currentAttachment) {
@@ -143,7 +145,7 @@ export default function DecodePage() {
       setPdfUrl(null);
       return;
     }
-    
+
     const loadAttachment = async () => {
       try {
         const token = localStorage.getItem('access_token');
@@ -152,14 +154,14 @@ export default function DecodePage() {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+
         if (!response.ok) {
           throw new Error('Failed to load attachment');
         }
-        
+
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        
+
         if (isImage) {
           setImageUrl(url);
           setPdfUrl(null);
@@ -173,9 +175,9 @@ export default function DecodePage() {
         setPdfUrl(null);
       }
     };
-    
+
     loadAttachment();
-    
+
     // Cleanup blob URLs
     return () => {
       if (imageUrl) URL.revokeObjectURL(imageUrl);
@@ -202,16 +204,11 @@ export default function DecodePage() {
     setSearchResults([]);
   };
 
-  const sections = Array.from(new Set([
-    ...decodedItems.map(i => i.section_name || ''),
-    ...nqItems.map(i => i.section_name || ''),
-  ].filter(Boolean)));
+  const sections = Array.from(new Set(items.map(i => i.section_name || '').filter(Boolean)));
 
   const handleAddSection = () => {
     const trimmed = newSectionName.trim();
-    if (trimmed && !sections.includes(trimmed)) {
-      setCurrentSection(trimmed);
-    } else if (trimmed) {
+    if (trimmed) {
       setCurrentSection(trimmed);
     }
     setNewSectionName('');
@@ -220,7 +217,8 @@ export default function DecodePage() {
 
   const handleAddItem = () => {
     if (selectedCatalog && quantity > 0) {
-      const newItem: DecodedItem = {
+      const newItem: CatalogRow = {
+        kind: 'catalog',
         catalog_no: selectedCatalog.sku,
         quantity: quantity,
         description: selectedCatalog.description,
@@ -230,7 +228,7 @@ export default function DecodePage() {
         section_name: currentSection || undefined,
       };
 
-      setDecodedItems([newItem, ...decodedItems]);
+      setItems([...items, newItem]);
 
       // Reset form
       setSelectedCatalog(null);
@@ -246,13 +244,14 @@ export default function DecodePage() {
     const description = catalogSearch.trim();
     if (!description || quantity <= 0) return;
 
-    const newItem: NQItem = {
+    const newItem: NQRow = {
+      kind: 'nq',
       item_description: description,
       quantity: quantity,
       section_name: currentSection || undefined,
     };
 
-    setNqItems([newItem, ...nqItems]);
+    setItems([...items, newItem]);
 
     // Reset form
     setSelectedCatalog(null);
@@ -262,29 +261,29 @@ export default function DecodePage() {
   };
 
   const handleSaveDecodedItems = async () => {
-    if (!orderId || (decodedItems.length === 0 && nqItems.length === 0)) return;
+    if (!orderId || items.length === 0) return;
 
     try {
-      const items = [...decodedItems].reverse().map(item => ({
+      // Send items in the same order the user built the list — the backend
+      // preserves it via created_at, so this is also the order they'll see on reload.
+      const payload = items.map(item => item.kind === 'nq' ? {
+        is_nq: true,
+        item_description: item.item_description,
+        quantity: item.quantity,
+        section_name: item.section_name || null,
+      } : {
         inventory_id: item.inventory_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
         gst_percentage: item.tax,
         section_name: item.section_name || null,
-      }));
+      });
 
-      const nqPayload = [...nqItems].reverse().map(item => ({
-        is_nq: true,
-        item_description: item.item_description,
-        quantity: item.quantity,
-        section_name: item.section_name || null,
-      }));
+      await api.updateDecodedItems(orderId, payload);
 
-      await api.updateDecodedItems(orderId, [...items, ...nqPayload]);
-      
       // Invalidate the order cache to force a refresh
       await queryClient.invalidateQueries({ queryKey: ['order', orderId] });
-      
+
       // Navigate back
       navigate(`/orders/${orderId}`, { replace: true });
     } catch (error) {
@@ -294,28 +293,17 @@ export default function DecodePage() {
   };
 
   const handleRemoveItem = (index: number) => {
-    const reversedIndex = decodedItems.length - 1 - index;
-    setDecodedItems(decodedItems.filter((_, i) => i !== reversedIndex));
+    setItems(items.filter((_, i) => i !== index));
   };
 
   const handleUpdateQuantity = (index: number, newQuantity: number) => {
-    const reversedIndex = decodedItems.length - 1 - index;
-    const updated = [...decodedItems];
-    updated[reversedIndex].quantity = newQuantity;
-    setDecodedItems(updated);
+    const updated = [...items];
+    updated[index] = { ...updated[index], quantity: newQuantity };
+    setItems(updated);
   };
 
-  const handleRemoveNQItem = (index: number) => {
-    const reversedIndex = nqItems.length - 1 - index;
-    setNqItems(nqItems.filter((_, i) => i !== reversedIndex));
-  };
-
-  const handleUpdateNQQuantity = (index: number, newQuantity: number) => {
-    const reversedIndex = nqItems.length - 1 - index;
-    const updated = [...nqItems];
-    updated[reversedIndex].quantity = newQuantity;
-    setNqItems(updated);
-  };
+  const catalogCount = items.filter(i => i.kind === 'catalog').length;
+  const nqCount = items.filter(i => i.kind === 'nq').length;
 
   return (
     <div className="h-[calc(100vh-80px)] flex gap-4">
@@ -520,19 +508,14 @@ export default function DecodePage() {
           </div>
         </div>
 
-        {/* Items List - Grouped by section */}
+        {/* Items List - Grouped by section, preserving add order within each section */}
         <div className="flex-1 overflow-auto p-3">
-          {decodedItems.length === 0 && nqItems.length === 0 ? (
+          {items.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <p className="text-sm">No items added yet</p>
             </div>
           ) : (() => {
-            const reversedCatalog = [...decodedItems].reverse();
-            const reversedNQ = [...nqItems].reverse();
-            const allSections = Array.from(new Set([
-              ...reversedCatalog.map(i => i.section_name || ''),
-              ...reversedNQ.map(i => i.section_name || ''),
-            ]));
+            const allSections = Array.from(new Set(items.map(i => i.section_name || '')));
             const orderedSections = [
               ...allSections.filter(s => s === ''),
               ...allSections.filter(s => s !== '')
@@ -540,8 +523,9 @@ export default function DecodePage() {
             return (
               <div className="space-y-2">
                 {orderedSections.map(sectionKey => {
-                  const sectionItems = reversedCatalog.filter(i => (i.section_name || '') === sectionKey);
-                  const sectionNQItems = reversedNQ.filter(i => (i.section_name || '') === sectionKey);
+                  const sectionItems = items
+                    .map((item, index) => ({ item, index }))
+                    .filter(({ item }) => (item.section_name || '') === sectionKey);
                   return (
                     <div key={sectionKey}>
                       {sectionKey && (
@@ -550,11 +534,10 @@ export default function DecodePage() {
                           <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{sectionKey}</span>
                         </div>
                       )}
-                      {sectionItems.map((item) => {
-                        const globalIndex = reversedCatalog.indexOf(item);
-                        return (
+                      {sectionItems.map(({ item, index }) => (
+                        item.kind === 'catalog' ? (
                           <div
-                            key={`catalog-${globalIndex}`}
+                            key={index}
                             className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded border-b border-gray-100"
                           >
                             <div className="font-mono text-xs font-medium text-gray-900">
@@ -564,12 +547,12 @@ export default function DecodePage() {
                               <input
                                 type="number"
                                 value={item.quantity}
-                                onChange={(e) => handleUpdateQuantity(globalIndex, Number(e.target.value))}
+                                onChange={(e) => handleUpdateQuantity(index, Number(e.target.value))}
                                 min="1"
                                 className="input input-sm w-14 text-center font-medium text-xs"
                               />
                               <button
-                                onClick={() => handleRemoveItem(globalIndex)}
+                                onClick={() => handleRemoveItem(index)}
                                 className="p-1 hover:bg-red-100 rounded text-red-600"
                                 title="Remove"
                               >
@@ -577,13 +560,9 @@ export default function DecodePage() {
                               </button>
                             </div>
                           </div>
-                        );
-                      })}
-                      {sectionNQItems.map((item) => {
-                        const globalIndex = reversedNQ.indexOf(item);
-                        return (
+                        ) : (
                           <div
-                            key={`nq-${globalIndex}`}
+                            key={index}
                             className="flex items-center justify-between py-1.5 px-2 hover:bg-amber-50 rounded border-b border-gray-100 bg-amber-50/40"
                           >
                             <div className="flex items-center gap-1.5 min-w-0">
@@ -598,12 +577,12 @@ export default function DecodePage() {
                               <input
                                 type="number"
                                 value={item.quantity}
-                                onChange={(e) => handleUpdateNQQuantity(globalIndex, Number(e.target.value))}
+                                onChange={(e) => handleUpdateQuantity(index, Number(e.target.value))}
                                 min="1"
                                 className="input input-sm w-14 text-center font-medium text-xs"
                               />
                               <button
-                                onClick={() => handleRemoveNQItem(globalIndex)}
+                                onClick={() => handleRemoveItem(index)}
                                 className="p-1 hover:bg-red-100 rounded text-red-600"
                                 title="Remove"
                               >
@@ -611,8 +590,8 @@ export default function DecodePage() {
                               </button>
                             </div>
                           </div>
-                        );
-                      })}
+                        )
+                      ))}
                     </div>
                   );
                 })}
@@ -622,13 +601,13 @@ export default function DecodePage() {
         </div>
 
         {/* Footer Actions */}
-        {(decodedItems.length > 0 || nqItems.length > 0) && (
+        {items.length > 0 && (
           <div className="p-4 border-t bg-gray-50">
             <div className="text-sm text-gray-600 mb-3">
-              Total Items: <span className="font-semibold">{decodedItems.length}</span>
-              {nqItems.length > 0 && (
+              Total Items: <span className="font-semibold">{catalogCount}</span>
+              {nqCount > 0 && (
                 <span className="ml-2 text-amber-700">
-                  (+{nqItems.length} NQ item{nqItems.length !== 1 ? 's' : ''})
+                  (+{nqCount} NQ item{nqCount !== 1 ? 's' : ''})
                 </span>
               )}
             </div>
