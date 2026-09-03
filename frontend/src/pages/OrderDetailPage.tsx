@@ -557,7 +557,7 @@ export default function OrderDetailPage() {
                 <h2 className="text-xl font-semibold">Order Items</h2>
                 {isOrderItemsExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
               </button>
-              {(canDecode && order.status === 'draft') || (user?.role_name === 'executive' && order.items?.some(item => item.inventory_id) && order.workflow_stage !== 'quotation_generated') ? (
+              {dispatches.length === 0 && ((canDecode && order.status === 'draft') || (user?.role_name === 'executive' && order.items?.some(item => item.inventory_id) && order.workflow_stage !== 'quotation_generated')) ? (
                 <button
                   onClick={() => navigate(`/decode?order_id=${orderId}`)}
                   className="btn btn-primary btn-sm"
@@ -773,7 +773,7 @@ export default function OrderDetailPage() {
             <h2 className="text-sm font-semibold mb-2">Actions</h2>
             
             {/* Decoder Actions */}
-            {canDecode && order.status === 'draft' && order.items?.some(item => item.inventory_id) && (
+            {canDecode && order.status === 'draft' && order.items?.some(item => item.inventory_id || item.is_nq) && (
               <div className="space-y-2">
                 <p className="text-xs text-gray-600 mb-2">
                   Decode all items and submit
@@ -781,7 +781,7 @@ export default function OrderDetailPage() {
                 <button
                   onClick={() => submitForApprovalMutation.mutate()}
                   className="btn btn-primary btn-sm w-full text-xs"
-                  disabled={order.items?.some(item => !item.inventory_id) || submitForApprovalMutation.isPending}
+                  disabled={order.items?.some(item => !item.inventory_id && !item.is_nq) || submitForApprovalMutation.isPending}
                 >
                   <Check size={14} className="mr-1" />
                   {submitForApprovalMutation.isPending ? 'Submitting...' : 'Submit'}
@@ -790,7 +790,7 @@ export default function OrderDetailPage() {
             )}
 
             {/* Executive Submit for Approval (if order is still draft) */}
-            {canApprove && order.status === 'draft' && !canDecode && order.items?.some(item => item.inventory_id) && (
+            {canApprove && order.status === 'draft' && !canDecode && order.items?.some(item => item.inventory_id || item.is_nq) && (
               <div className="space-y-2">
                 <p className="text-xs text-gray-600 mb-2">
                   Submit order for approval
@@ -798,7 +798,7 @@ export default function OrderDetailPage() {
                 <button
                   onClick={() => submitForApprovalMutation.mutate()}
                   className="btn btn-primary btn-sm w-full text-xs"
-                  disabled={order.items?.some(item => !item.inventory_id) || submitForApprovalMutation.isPending}
+                  disabled={order.items?.some(item => !item.inventory_id && !item.is_nq) || submitForApprovalMutation.isPending}
                 >
                   <Check size={14} className="mr-1" />
                   {submitForApprovalMutation.isPending ? 'Submitting...' : 'Submit for Approval'}

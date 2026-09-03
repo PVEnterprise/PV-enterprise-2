@@ -8,7 +8,8 @@ import { ChevronLeft, ChevronRight, Search, X, Plus, Save, Tag } from 'lucide-re
 import api from '@/services/api';
 import { Inventory } from '@/types';
 
-interface DecodedItem {
+interface CatalogRow {
+  kind: 'catalog';
   catalog_no: string;
   quantity: number;
   description?: string;
@@ -18,15 +19,16 @@ interface DecodedItem {
   section_name?: string;
 }
 
-// NQ ("Not Quoted") items are dummy quotation lines with no catalog match,
-// added on the Generate Quotation screen. This page only edits catalog-backed
-// items, but must round-trip any existing NQ items untouched so saving here
-// doesn't silently wipe them out.
-interface NQItem {
+// NQ ("Not Quoted") items are dummy quotation lines with no catalog match —
+// no price, no inventory link. Can be added here or on the Generate Quotation screen.
+interface NQRow {
+  kind: 'nq';
   item_description: string;
   quantity: number;
   section_name?: string;
 }
+
+type ItemRow = CatalogRow | NQRow;
 
 interface Attachment {
   id: string;
@@ -40,20 +42,20 @@ export default function DecodePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const orderId = searchParams.get('order_id');
-  
+
   // Attachment state
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [currentAttachmentIndex, setCurrentAttachmentIndex] = useState(0);
-  
-  // Decoded items state
-  const [decodedItems, setDecodedItems] = useState<DecodedItem[]>([]);
-  const [nqItems, setNqItems] = useState<NQItem[]>([]);
+
+  // Decoded items state — a single ordered list (catalog + NQ interleaved) so
+  // the add order survives save/reload instead of grouping NQ items at the end.
+  const [items, setItems] = useState<ItemRow[]>([]);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Inventory[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedCatalog, setSelectedCatalog] = useState<Inventory | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
-  
+
   // Section state
   const [currentSection, setCurrentSection] = useState<string>('');
   const [newSectionName, setNewSectionName] = useState<string>('');
@@ -80,10 +82,17 @@ export default function DecodePage() {
     try {
       const order = await api.getOrder(orderId!);
       if (order.items && order.items.length > 0) {
-        // Filter only decoded items (items with inventory_id)
-        const existingDecoded = order.items
-          .filter((item: any) => item.inventory_id && item.inventory)
-          .map((item: any) => ({
+        // order.items comes back sorted by created_at, which reflects the
+        // order they were saved in — preserve that order here.
+        const existingItems: ItemRow[] = order.items
+          .filter((item: any) => item.is_nq || (item.inventory_id && item.inventory))
+          .map((item: any): ItemRow => item.is_nq ? {
+            kind: 'nq',
+            item_description: item.item_description,
+            quantity: item.quantity,
+            section_name: item.section_name || '',
+          } : {
+            kind: 'catalog',
             catalog_no: item.inventory.sku,
             quantity: item.quantity,
             description: item.inventory.description,
@@ -91,17 +100,8 @@ export default function DecodePage() {
             unit_price: item.unit_price || item.inventory.unit_price,
             tax: item.gst_percentage || item.inventory.tax,
             section_name: item.section_name || '',
-          }));
-        setDecodedItems(existingDecoded);
-
-        const existingNQ = order.items
-          .filter((item: any) => item.is_nq)
-          .map((item: any) => ({
-            item_description: item.item_description,
-            quantity: item.quantity,
-            section_name: item.section_name || '',
-          }));
-        setNqItems(existingNQ);
+          });
+        setItems(existingItems);
       }
     } catch (error) {
       console.error('Error fetching existing decoded items:', error);
@@ -128,16 +128,16 @@ export default function DecodePage() {
 
     const debounce = setTimeout(searchInventory, 250);
     return () => clearTimeout(debounce);
-  }, [catalogSearch, decodedItems, selectedCatalog]);
+  }, [catalogSearch, selectedCatalog]);
 
   const currentAttachment = attachments[currentAttachmentIndex];
   const isImage = currentAttachment?.file_type?.startsWith('image/');
   const isPdf = currentAttachment?.file_type === 'application/pdf';
-  
+
   // State for image blob URL
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  
+
   // Load image/PDF with authentication
   useEffect(() => {
     if (!currentAttachment) {
@@ -145,7 +145,7 @@ export default function DecodePage() {
       setPdfUrl(null);
       return;
     }
-    
+
     const loadAttachment = async () => {
       try {
         const token = localStorage.getItem('access_token');
@@ -154,14 +154,14 @@ export default function DecodePage() {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+
         if (!response.ok) {
           throw new Error('Failed to load attachment');
         }
-        
+
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        
+
         if (isImage) {
           setImageUrl(url);
           setPdfUrl(null);
@@ -175,9 +175,9 @@ export default function DecodePage() {
         setPdfUrl(null);
       }
     };
-    
+
     loadAttachment();
-    
+
     // Cleanup blob URLs
     return () => {
       if (imageUrl) URL.revokeObjectURL(imageUrl);
@@ -204,13 +204,11 @@ export default function DecodePage() {
     setSearchResults([]);
   };
 
-  const sections = Array.from(new Set(decodedItems.map(i => i.section_name || '').filter(Boolean)));
+  const sections = Array.from(new Set(items.map(i => i.section_name || '').filter(Boolean)));
 
   const handleAddSection = () => {
     const trimmed = newSectionName.trim();
-    if (trimmed && !sections.includes(trimmed)) {
-      setCurrentSection(trimmed);
-    } else if (trimmed) {
+    if (trimmed) {
       setCurrentSection(trimmed);
     }
     setNewSectionName('');
@@ -219,7 +217,8 @@ export default function DecodePage() {
 
   const handleAddItem = () => {
     if (selectedCatalog && quantity > 0) {
-      const newItem: DecodedItem = {
+      const newItem: CatalogRow = {
+        kind: 'catalog',
         catalog_no: selectedCatalog.sku,
         quantity: quantity,
         description: selectedCatalog.description,
@@ -228,9 +227,9 @@ export default function DecodePage() {
         tax: selectedCatalog.tax,
         section_name: currentSection || undefined,
       };
-      
-      setDecodedItems([newItem, ...decodedItems]);
-      
+
+      setItems([...items, newItem]);
+
       // Reset form
       setSelectedCatalog(null);
       setCatalogSearch('');
@@ -238,33 +237,53 @@ export default function DecodePage() {
     }
   };
 
+  // Add an "NQ" (Not Quoted) row — a dummy line for a requirement with no
+  // catalog match. Whatever text is in the search box becomes the
+  // description; no catalog lookup or price is attached.
+  const handleAddNQItem = () => {
+    const description = catalogSearch.trim();
+    if (!description || quantity <= 0) return;
+
+    const newItem: NQRow = {
+      kind: 'nq',
+      item_description: description,
+      quantity: quantity,
+      section_name: currentSection || undefined,
+    };
+
+    setItems([...items, newItem]);
+
+    // Reset form
+    setSelectedCatalog(null);
+    setCatalogSearch('');
+    setQuantity(1);
+    setShowDropdown(false);
+  };
+
   const handleSaveDecodedItems = async () => {
-    if (!orderId || decodedItems.length === 0) return;
+    if (!orderId || items.length === 0) return;
 
     try {
-      const items = [...decodedItems].reverse().map(item => ({
+      // Send items in the same order the user built the list — the backend
+      // preserves it via created_at, so this is also the order they'll see on reload.
+      const payload = items.map(item => item.kind === 'nq' ? {
+        is_nq: true,
+        item_description: item.item_description,
+        quantity: item.quantity,
+        section_name: item.section_name || null,
+      } : {
         inventory_id: item.inventory_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
         gst_percentage: item.tax,
         section_name: item.section_name || null,
-      }));
+      });
 
-      // Preserve any NQ items added on the Generate Quotation screen — this
-      // page never edits them, so round-trip them unchanged rather than
-      // letting the full-replace save drop them.
-      const nqPayload = nqItems.map(item => ({
-        is_nq: true,
-        item_description: item.item_description,
-        quantity: item.quantity,
-        section_name: item.section_name || null,
-      }));
+      await api.updateDecodedItems(orderId, payload);
 
-      await api.updateDecodedItems(orderId, [...items, ...nqPayload]);
-      
       // Invalidate the order cache to force a refresh
       await queryClient.invalidateQueries({ queryKey: ['order', orderId] });
-      
+
       // Navigate back
       navigate(`/orders/${orderId}`, { replace: true });
     } catch (error) {
@@ -274,21 +293,22 @@ export default function DecodePage() {
   };
 
   const handleRemoveItem = (index: number) => {
-    const reversedIndex = decodedItems.length - 1 - index;
-    setDecodedItems(decodedItems.filter((_, i) => i !== reversedIndex));
+    setItems(items.filter((_, i) => i !== index));
   };
 
   const handleUpdateQuantity = (index: number, newQuantity: number) => {
-    const reversedIndex = decodedItems.length - 1 - index;
-    const updated = [...decodedItems];
-    updated[reversedIndex].quantity = newQuantity;
-    setDecodedItems(updated);
+    const updated = [...items];
+    updated[index] = { ...updated[index], quantity: newQuantity };
+    setItems(updated);
   };
+
+  const catalogCount = items.filter(i => i.kind === 'catalog').length;
+  const nqCount = items.filter(i => i.kind === 'nq').length;
 
   return (
     <div className="h-[calc(100vh-80px)] flex gap-4">
-      {/* Left Section - Attachment Viewer (80%) */}
-      <div className="w-[80%] bg-white rounded-lg shadow-sm flex flex-col">
+      {/* Left Section - Attachment Viewer (55%) */}
+      <div className="w-[55%] bg-white rounded-lg shadow-sm flex flex-col">
         {/* Header */}
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">
@@ -353,8 +373,8 @@ export default function DecodePage() {
         </div>
       </div>
 
-      {/* Right Section - Decoded Items (20%) */}
-      <div className="w-[20%] bg-white rounded-lg shadow-sm flex flex-col">
+      {/* Right Section - Decoded Items (45%) */}
+      <div className="w-[45%] bg-white rounded-lg shadow-sm flex flex-col">
         {/* Header */}
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold text-gray-900">Decoded Items</h2>
@@ -425,7 +445,7 @@ export default function DecodePage() {
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
                   onFocus={() => catalogSearch && setShowDropdown(true)}
-                  placeholder="Search..."
+                  placeholder="Search, or type a description for NQ..."
                   className="input input-sm w-full pr-6"
                 />
                 <Search className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
@@ -462,13 +482,12 @@ export default function DecodePage() {
                 value={quantity}
                 onChange={(e) => setQuantity(Number(e.target.value))}
                 min="1"
-                disabled={!selectedCatalog}
                 className="input input-sm w-full text-center px-1"
               />
             </div>
 
-            {/* Add Button - Small */}
-            <div className="pt-5">
+            {/* Add Buttons - Small */}
+            <div className="pt-5 flex items-center gap-1">
               <button
                 onClick={handleAddItem}
                 disabled={!selectedCatalog || quantity <= 0}
@@ -477,19 +496,26 @@ export default function DecodePage() {
               >
                 <Plus size={14} />
               </button>
+              <button
+                onClick={handleAddNQItem}
+                disabled={!catalogSearch.trim() || quantity <= 0}
+                className="btn btn-secondary px-1.5 py-1 text-xs rounded"
+                title="Add a Not Quoted (NQ) line — a dummy row for a requirement with no catalog match, no price impact"
+              >
+                NQ
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Items List - Grouped by section */}
+        {/* Items List - Grouped by section, preserving add order within each section */}
         <div className="flex-1 overflow-auto p-3">
-          {decodedItems.length === 0 ? (
+          {items.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <p className="text-sm">No items added yet</p>
             </div>
           ) : (() => {
-            const reversed = [...decodedItems].reverse();
-            const allSections = Array.from(new Set(reversed.map(i => i.section_name || '')));
+            const allSections = Array.from(new Set(items.map(i => i.section_name || '')));
             const orderedSections = [
               ...allSections.filter(s => s === ''),
               ...allSections.filter(s => s !== '')
@@ -497,7 +523,9 @@ export default function DecodePage() {
             return (
               <div className="space-y-2">
                 {orderedSections.map(sectionKey => {
-                  const sectionItems = reversed.filter(i => (i.section_name || '') === sectionKey);
+                  const sectionItems = items
+                    .map((item, index) => ({ item, index }))
+                    .filter(({ item }) => (item.section_name || '') === sectionKey);
                   return (
                     <div key={sectionKey}>
                       {sectionKey && (
@@ -506,11 +534,10 @@ export default function DecodePage() {
                           <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{sectionKey}</span>
                         </div>
                       )}
-                      {sectionItems.map((item) => {
-                        const globalIndex = reversed.indexOf(item);
-                        return (
+                      {sectionItems.map(({ item, index }) => (
+                        item.kind === 'catalog' ? (
                           <div
-                            key={globalIndex}
+                            key={index}
                             className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded border-b border-gray-100"
                           >
                             <div className="font-mono text-xs font-medium text-gray-900">
@@ -520,12 +547,12 @@ export default function DecodePage() {
                               <input
                                 type="number"
                                 value={item.quantity}
-                                onChange={(e) => handleUpdateQuantity(globalIndex, Number(e.target.value))}
+                                onChange={(e) => handleUpdateQuantity(index, Number(e.target.value))}
                                 min="1"
                                 className="input input-sm w-14 text-center font-medium text-xs"
                               />
                               <button
-                                onClick={() => handleRemoveItem(globalIndex)}
+                                onClick={() => handleRemoveItem(index)}
                                 className="p-1 hover:bg-red-100 rounded text-red-600"
                                 title="Remove"
                               >
@@ -533,8 +560,38 @@ export default function DecodePage() {
                               </button>
                             </div>
                           </div>
-                        );
-                      })}
+                        ) : (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between py-1.5 px-2 hover:bg-amber-50 rounded border-b border-gray-100 bg-amber-50/40"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold" title="Not Quoted">
+                                NQ
+                              </span>
+                              <span className="text-xs text-gray-900 truncate" title={item.item_description}>
+                                {item.item_description}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => handleUpdateQuantity(index, Number(e.target.value))}
+                                min="1"
+                                className="input input-sm w-14 text-center font-medium text-xs"
+                              />
+                              <button
+                                onClick={() => handleRemoveItem(index)}
+                                className="p-1 hover:bg-red-100 rounded text-red-600"
+                                title="Remove"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      ))}
                     </div>
                   );
                 })}
@@ -544,17 +601,17 @@ export default function DecodePage() {
         </div>
 
         {/* Footer Actions */}
-        {decodedItems.length > 0 && (
+        {items.length > 0 && (
           <div className="p-4 border-t bg-gray-50">
             <div className="text-sm text-gray-600 mb-3">
-              Total Items: <span className="font-semibold">{decodedItems.length}</span>
-              {nqItems.length > 0 && (
+              Total Items: <span className="font-semibold">{catalogCount}</span>
+              {nqCount > 0 && (
                 <span className="ml-2 text-amber-700">
-                  (+{nqItems.length} NQ item{nqItems.length !== 1 ? 's' : ''} kept as-is — edit those on the Generate Quotation screen)
+                  (+{nqCount} NQ item{nqCount !== 1 ? 's' : ''})
                 </span>
               )}
             </div>
-            <button 
+            <button
               onClick={handleSaveDecodedItems}
               className="btn btn-primary w-full flex items-center justify-center gap-2"
             >
