@@ -18,10 +18,8 @@ interface DecodedItem {
   section_name?: string;
 }
 
-// NQ ("Not Quoted") items are dummy quotation lines with no catalog match,
-// added on the Generate Quotation screen. This page only edits catalog-backed
-// items, but must round-trip any existing NQ items untouched so saving here
-// doesn't silently wipe them out.
+// NQ ("Not Quoted") items are dummy quotation lines with no catalog match —
+// no price, no inventory link. Can be added here or on the Generate Quotation screen.
 interface NQItem {
   item_description: string;
   quantity: number;
@@ -204,7 +202,10 @@ export default function DecodePage() {
     setSearchResults([]);
   };
 
-  const sections = Array.from(new Set(decodedItems.map(i => i.section_name || '').filter(Boolean)));
+  const sections = Array.from(new Set([
+    ...decodedItems.map(i => i.section_name || ''),
+    ...nqItems.map(i => i.section_name || ''),
+  ].filter(Boolean)));
 
   const handleAddSection = () => {
     const trimmed = newSectionName.trim();
@@ -228,9 +229,9 @@ export default function DecodePage() {
         tax: selectedCatalog.tax,
         section_name: currentSection || undefined,
       };
-      
+
       setDecodedItems([newItem, ...decodedItems]);
-      
+
       // Reset form
       setSelectedCatalog(null);
       setCatalogSearch('');
@@ -238,8 +239,30 @@ export default function DecodePage() {
     }
   };
 
+  // Add an "NQ" (Not Quoted) row — a dummy line for a requirement with no
+  // catalog match. Whatever text is in the search box becomes the
+  // description; no catalog lookup or price is attached.
+  const handleAddNQItem = () => {
+    const description = catalogSearch.trim();
+    if (!description || quantity <= 0) return;
+
+    const newItem: NQItem = {
+      item_description: description,
+      quantity: quantity,
+      section_name: currentSection || undefined,
+    };
+
+    setNqItems([newItem, ...nqItems]);
+
+    // Reset form
+    setSelectedCatalog(null);
+    setCatalogSearch('');
+    setQuantity(1);
+    setShowDropdown(false);
+  };
+
   const handleSaveDecodedItems = async () => {
-    if (!orderId || decodedItems.length === 0) return;
+    if (!orderId || (decodedItems.length === 0 && nqItems.length === 0)) return;
 
     try {
       const items = [...decodedItems].reverse().map(item => ({
@@ -250,10 +273,7 @@ export default function DecodePage() {
         section_name: item.section_name || null,
       }));
 
-      // Preserve any NQ items added on the Generate Quotation screen — this
-      // page never edits them, so round-trip them unchanged rather than
-      // letting the full-replace save drop them.
-      const nqPayload = nqItems.map(item => ({
+      const nqPayload = [...nqItems].reverse().map(item => ({
         is_nq: true,
         item_description: item.item_description,
         quantity: item.quantity,
@@ -285,10 +305,22 @@ export default function DecodePage() {
     setDecodedItems(updated);
   };
 
+  const handleRemoveNQItem = (index: number) => {
+    const reversedIndex = nqItems.length - 1 - index;
+    setNqItems(nqItems.filter((_, i) => i !== reversedIndex));
+  };
+
+  const handleUpdateNQQuantity = (index: number, newQuantity: number) => {
+    const reversedIndex = nqItems.length - 1 - index;
+    const updated = [...nqItems];
+    updated[reversedIndex].quantity = newQuantity;
+    setNqItems(updated);
+  };
+
   return (
     <div className="h-[calc(100vh-80px)] flex gap-4">
-      {/* Left Section - Attachment Viewer (80%) */}
-      <div className="w-[80%] bg-white rounded-lg shadow-sm flex flex-col">
+      {/* Left Section - Attachment Viewer (55%) */}
+      <div className="w-[55%] bg-white rounded-lg shadow-sm flex flex-col">
         {/* Header */}
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">
@@ -353,8 +385,8 @@ export default function DecodePage() {
         </div>
       </div>
 
-      {/* Right Section - Decoded Items (20%) */}
-      <div className="w-[20%] bg-white rounded-lg shadow-sm flex flex-col">
+      {/* Right Section - Decoded Items (45%) */}
+      <div className="w-[45%] bg-white rounded-lg shadow-sm flex flex-col">
         {/* Header */}
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold text-gray-900">Decoded Items</h2>
@@ -425,7 +457,7 @@ export default function DecodePage() {
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
                   onFocus={() => catalogSearch && setShowDropdown(true)}
-                  placeholder="Search..."
+                  placeholder="Search, or type a description for NQ..."
                   className="input input-sm w-full pr-6"
                 />
                 <Search className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
@@ -462,13 +494,12 @@ export default function DecodePage() {
                 value={quantity}
                 onChange={(e) => setQuantity(Number(e.target.value))}
                 min="1"
-                disabled={!selectedCatalog}
                 className="input input-sm w-full text-center px-1"
               />
             </div>
 
-            {/* Add Button - Small */}
-            <div className="pt-5">
+            {/* Add Buttons - Small */}
+            <div className="pt-5 flex items-center gap-1">
               <button
                 onClick={handleAddItem}
                 disabled={!selectedCatalog || quantity <= 0}
@@ -477,19 +508,31 @@ export default function DecodePage() {
               >
                 <Plus size={14} />
               </button>
+              <button
+                onClick={handleAddNQItem}
+                disabled={!catalogSearch.trim() || quantity <= 0}
+                className="btn btn-secondary px-1.5 py-1 text-xs rounded"
+                title="Add a Not Quoted (NQ) line — a dummy row for a requirement with no catalog match, no price impact"
+              >
+                NQ
+              </button>
             </div>
           </div>
         </div>
 
         {/* Items List - Grouped by section */}
         <div className="flex-1 overflow-auto p-3">
-          {decodedItems.length === 0 ? (
+          {decodedItems.length === 0 && nqItems.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <p className="text-sm">No items added yet</p>
             </div>
           ) : (() => {
-            const reversed = [...decodedItems].reverse();
-            const allSections = Array.from(new Set(reversed.map(i => i.section_name || '')));
+            const reversedCatalog = [...decodedItems].reverse();
+            const reversedNQ = [...nqItems].reverse();
+            const allSections = Array.from(new Set([
+              ...reversedCatalog.map(i => i.section_name || ''),
+              ...reversedNQ.map(i => i.section_name || ''),
+            ]));
             const orderedSections = [
               ...allSections.filter(s => s === ''),
               ...allSections.filter(s => s !== '')
@@ -497,7 +540,8 @@ export default function DecodePage() {
             return (
               <div className="space-y-2">
                 {orderedSections.map(sectionKey => {
-                  const sectionItems = reversed.filter(i => (i.section_name || '') === sectionKey);
+                  const sectionItems = reversedCatalog.filter(i => (i.section_name || '') === sectionKey);
+                  const sectionNQItems = reversedNQ.filter(i => (i.section_name || '') === sectionKey);
                   return (
                     <div key={sectionKey}>
                       {sectionKey && (
@@ -507,10 +551,10 @@ export default function DecodePage() {
                         </div>
                       )}
                       {sectionItems.map((item) => {
-                        const globalIndex = reversed.indexOf(item);
+                        const globalIndex = reversedCatalog.indexOf(item);
                         return (
                           <div
-                            key={globalIndex}
+                            key={`catalog-${globalIndex}`}
                             className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded border-b border-gray-100"
                           >
                             <div className="font-mono text-xs font-medium text-gray-900">
@@ -535,6 +579,40 @@ export default function DecodePage() {
                           </div>
                         );
                       })}
+                      {sectionNQItems.map((item) => {
+                        const globalIndex = reversedNQ.indexOf(item);
+                        return (
+                          <div
+                            key={`nq-${globalIndex}`}
+                            className="flex items-center justify-between py-1.5 px-2 hover:bg-amber-50 rounded border-b border-gray-100 bg-amber-50/40"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold" title="Not Quoted">
+                                NQ
+                              </span>
+                              <span className="text-xs text-gray-900 truncate" title={item.item_description}>
+                                {item.item_description}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => handleUpdateNQQuantity(globalIndex, Number(e.target.value))}
+                                min="1"
+                                className="input input-sm w-14 text-center font-medium text-xs"
+                              />
+                              <button
+                                onClick={() => handleRemoveNQItem(globalIndex)}
+                                className="p-1 hover:bg-red-100 rounded text-red-600"
+                                title="Remove"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -544,17 +622,17 @@ export default function DecodePage() {
         </div>
 
         {/* Footer Actions */}
-        {decodedItems.length > 0 && (
+        {(decodedItems.length > 0 || nqItems.length > 0) && (
           <div className="p-4 border-t bg-gray-50">
             <div className="text-sm text-gray-600 mb-3">
               Total Items: <span className="font-semibold">{decodedItems.length}</span>
               {nqItems.length > 0 && (
                 <span className="ml-2 text-amber-700">
-                  (+{nqItems.length} NQ item{nqItems.length !== 1 ? 's' : ''} kept as-is — edit those on the Generate Quotation screen)
+                  (+{nqItems.length} NQ item{nqItems.length !== 1 ? 's' : ''})
                 </span>
               )}
             </div>
-            <button 
+            <button
               onClick={handleSaveDecodedItems}
               className="btn btn-primary w-full flex items-center justify-center gap-2"
             >
