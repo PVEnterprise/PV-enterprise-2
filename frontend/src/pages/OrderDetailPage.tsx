@@ -557,7 +557,7 @@ export default function OrderDetailPage() {
                 <h2 className="text-xl font-semibold">Order Items</h2>
                 {isOrderItemsExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
               </button>
-              {(canDecode && order.status === 'draft') || (user?.role_name === 'executive' && order.items?.some(item => item.inventory_id) && order.workflow_stage !== 'quotation_generated') ? (
+              {dispatches.length === 0 && ((canDecode && order.status === 'draft') || (user?.role_name === 'executive' && order.items?.some(item => item.inventory_id) && order.workflow_stage !== 'quotation_generated')) ? (
                 <button
                   onClick={() => navigate(`/decode?order_id=${orderId}`)}
                   className="btn btn-primary btn-sm"
