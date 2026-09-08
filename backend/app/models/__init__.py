@@ -20,6 +20,8 @@ from app.models.demo_item import DemoItem
 from app.models.payment import Payment
 from app.models.procurement import Procurement, ProcurementItem
 from app.models.quotation_log import QuotationLog
+from app.models.location_checkin import LocationCheckin
+from app.models.push_subscription import PushSubscription
 
 __all__ = [
     "User",
@@ -47,4 +49,6 @@ __all__ = [
     "Procurement",
     "ProcurementItem",
     "QuotationLog",
+    "LocationCheckin",
+    "PushSubscription",
 ]

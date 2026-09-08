@@ -22,6 +22,7 @@ import DemoRequestDetailPage from '@/pages/DemoRequestDetailPage';
 import AccountsPage from '@/pages/AccountsPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import ProcurementPage from '@/pages/ProcurementPage';
+import LocationTrackingPage from '@/pages/LocationTrackingPage';
 import Layout from '@/components/Layout';
 import SessionExpiredModal from '@/components/SessionExpiredModal';
 
@@ -280,13 +281,21 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
-        <Route 
-          path="procurement" 
+        <Route
+          path="procurement"
           element={
             <RoleRoute allowedRoles={['executive']}>
               <ProcurementPage />
             </RoleRoute>
-          } 
+          }
+        />
+        <Route
+          path="location-tracking"
+          element={
+            <RoleRoute allowedRoles={['executive']}>
+              <LocationTrackingPage />
+            </RoleRoute>
+          }
         />
       </Route>
     </Routes>

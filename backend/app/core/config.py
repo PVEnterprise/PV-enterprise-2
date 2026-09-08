@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB
     UPLOAD_DIR: str = "./uploads"
     
+    # Web Push (employee location check-in reminders)
+    VAPID_PUBLIC_KEY: Optional[str] = None
+    VAPID_PRIVATE_KEY: Optional[str] = None
+    VAPID_CLAIM_EMAIL: str = "mailto:admin@sreedevisurgicals.com"
+    LOCATION_REMINDER_TIMEZONE: str = "Asia/Kolkata"
+
     # Company Information (for PDFs)
     COMPANY_NAME: str = "Sreedevi Life Sciences"
     COMPANY_PLOT: str = "Plot No: 173 Road No: 14"

@@ -461,6 +461,19 @@ class ApiService {
   receiveProcurement = async (id: string, data: any) => {
     return (await this.client.post(`/procurement/${id}/receive`, data)).data;
   }
+
+  // Location check-ins (sales rep location tracking - executive only, see sreedevi-sales PWA)
+  getLocationCheckins = async (params?: { user_id?: string; checkin_date?: string }) => {
+    return (await this.client.get('/location-checkins/', { params })).data;
+  }
+
+  /** Triggers the reminder push immediately instead of waiting for its scheduled time. */
+  sendLocationReminder = async (data: { slot: string; user_id?: string }) => {
+    return (await this.client.post('/push-subscriptions/send-reminder', data)).data as {
+      sent: number;
+      total: number;
+    };
+  }
 }
 
 export default new ApiService();

@@ -86,7 +86,18 @@ class User(BaseModel):
         back_populates="sales_person",
         foreign_keys="Territory.sales_person_id"
     )
-    
+    location_checkins = relationship(
+        "LocationCheckin",
+        back_populates="user",
+        foreign_keys="LocationCheckin.user_id"
+    )
+    push_subscriptions = relationship(
+        "PushSubscription",
+        back_populates="user",
+        foreign_keys="PushSubscription.user_id",
+        cascade="all, delete-orphan"
+    )
+
     def __repr__(self) -> str:
         return f"<User {self.email}>"
     

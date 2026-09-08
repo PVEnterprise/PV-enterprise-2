@@ -18,7 +18,8 @@ import {
   Landmark,
   ShoppingBag,
   FileText,
-  MapPin
+  MapPin,
+  Navigation
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -100,6 +101,12 @@ export default function Layout() {
       name: 'Procurement',
       href: '/procurement',
       icon: ShoppingBag,
+      roleOnly: 'executive'
+    },
+    {
+      name: 'Location Tracking',
+      href: '/location-tracking',
+      icon: Navigation,
       roleOnly: 'executive'
     },
   ];

@@ -55,3 +55,7 @@ reportlab==4.0.9
 
 # PDF parsing (Zoho invoice import)
 pdfplumber==0.10.3
+
+# Location check-in reminders (Web Push + in-process scheduler)
+pywebpush==2.0.0
+APScheduler==3.10.4

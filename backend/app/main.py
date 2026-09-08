@@ -7,6 +7,10 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.api.v1.api import api_router
+from app.services.location_reminder_scheduler import (
+    start_location_reminder_scheduler,
+    stop_location_reminder_scheduler,
+)
 
 
 # Create FastAPI application
@@ -48,6 +52,17 @@ def health_check():
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
+
+
+@app.on_event("startup")
+def on_startup():
+    """Start the location check-in reminder scheduler (no-op if VAPID keys aren't set)."""
+    start_location_reminder_scheduler()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    stop_location_reminder_scheduler()
 
 
 # Global exception handler
