@@ -107,7 +107,7 @@ export default function Layout() {
       name: 'Location Tracking',
       href: '/location-tracking',
       icon: Navigation,
-      roleOnly: 'executive'
+      roles: ['executive', 'quoter']
     },
   ];
 

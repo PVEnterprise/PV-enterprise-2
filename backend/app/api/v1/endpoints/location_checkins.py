@@ -10,13 +10,18 @@ from datetime import date, datetime, timedelta
 from app.db.session import get_db
 from app.models.location_checkin import LocationCheckin
 from app.models.user import User
-from app.schemas.location_checkin import LocationCheckinCreate, LocationCheckinResponse
+from app.schemas.location_checkin import (
+    LocationCheckinCreate,
+    LocationCheckinResponse,
+    LocationCheckinStatusUpdate,
+)
 from app.api.deps import get_current_user
 
 router = APIRouter()
 
-# Roles other than sales_rep that are allowed to see every rep's check-ins.
-MANAGER_ROLES = {"executive"}
+# Roles other than sales_rep that are allowed to see every rep's check-ins,
+# and to verify/reject one.
+MANAGER_ROLES = {"executive", "quoter"}
 
 
 @router.post("/", response_model=LocationCheckinResponse, status_code=status.HTTP_201_CREATED)
@@ -75,13 +80,13 @@ def list_location_checkins(
     """
     Every employee's check-ins for a given day (default: today).
 
-    Restricted to manager roles (currently: executive) — a sales rep should
-    use GET /location-checkins/me instead.
+    Restricted to manager roles (executive, quoter) — a sales rep should use
+    GET /location-checkins/me instead.
     """
     if current_user.role_name not in MANAGER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only executives can view other employees' check-ins",
+            detail="Only executives and quoters can view other employees' check-ins",
         )
 
     day = checkin_date or date.today()
@@ -96,3 +101,33 @@ def list_location_checkins(
         query = query.filter(LocationCheckin.user_id == user_id)
 
     return query.order_by(LocationCheckin.user_id, LocationCheckin.recorded_at).all()
+
+
+@router.patch("/{checkin_id}/status", response_model=LocationCheckinResponse)
+def update_location_checkin_status(
+    checkin_id: UUID,
+    status_data: LocationCheckinStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark a check-in verified or rejected. Restricted to manager roles (executive, quoter)."""
+    if current_user.role_name not in MANAGER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only executives and quoters can verify or reject check-ins",
+        )
+
+    checkin = (
+        db.query(LocationCheckin)
+        .options(joinedload(LocationCheckin.user))
+        .filter(LocationCheckin.id == checkin_id)
+        .first()
+    )
+    if not checkin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Check-in not found")
+
+    checkin.status = status_data.status.value
+    checkin.set_audit_fields(current_user.id, is_create=False)
+    db.commit()
+    db.refresh(checkin)
+    return checkin

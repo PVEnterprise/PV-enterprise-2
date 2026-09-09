@@ -23,6 +23,37 @@ def _money(value) -> str:
     return f"{RUPEE}{format_indian_number(float(value))}"
 
 
+def _visits_table(styles, title: str, visits: list, empty_message: str) -> list:
+    """A two-column Hospital / Visits table, or an empty-state line."""
+    elements = [Paragraph(title, styles["SectionHeading"]), Spacer(1, 2 * mm)]
+    if not visits:
+        elements.append(Paragraph(empty_message, styles["ReportSmall"]))
+        return elements
+
+    data = [["Hospital", "Visits"]]
+    for v in visits:
+        data.append([Paragraph(v.hospital_name, styles["TableCell"]), str(v.visits)])
+
+    table = Table(data, colWidths=[FULL_WIDTH - 30 * mm, 30 * mm], repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), BRAND_COLOR),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), _FONT_BOLD),
+        ("FONTNAME", (0, 1), (-1, -1), _FONT),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, ACCENT_COLOR]),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    elements.append(table)
+    return elements
+
+
 def generate_sales_report_pdf(
     sales_person_name: str,
     territory_names: list,
@@ -34,6 +65,8 @@ def generate_sales_report_pdf(
     invoices_count: int,
     invoices_value,
     hospitals: list,
+    territory_visits: list,
+    other_visits: list,
 ) -> BytesIO:
     from app.core.config import settings
 
@@ -142,6 +175,20 @@ def generate_sales_report_pdf(
         elements.append(hospital_table)
     else:
         elements.append(Paragraph("No activity in this period.", styles["ReportSmall"]))
+
+    # --- Territory Visits — every hospital in the rep's territory, incl. zero-visit ones ---
+    elements.append(Spacer(1, 8 * mm))
+    elements.extend(_visits_table(
+        styles, "Territory Visits", territory_visits,
+        "No territory assigned.",
+    ))
+
+    # --- Other Visits — hospitals the rep typed in manually, not in any territory ---
+    elements.append(Spacer(1, 8 * mm))
+    elements.extend(_visits_table(
+        styles, "Other Visits", other_visits,
+        "No visits to hospitals outside the territory in this period.",
+    ))
 
     doc.build(elements)
     buffer.seek(0)

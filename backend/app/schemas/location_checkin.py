@@ -16,6 +16,13 @@ class LocationCheckinSlot(str, Enum):
     EVENING = "17:00"
 
 
+class LocationCheckinStatus(str, Enum):
+    """Review state of a check-in, set by an executive or quoter."""
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
 class LocationCheckinCreate(BaseModel):
     """Schema for submitting a location check-in captured on the device."""
     slot: LocationCheckinSlot
@@ -46,6 +53,12 @@ class LocationCheckinResponse(BaseModel):
     latitude: float
     longitude: float
     accuracy: Optional[float] = None
+    status: LocationCheckinStatus
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class LocationCheckinStatusUpdate(BaseModel):
+    """Schema for an executive/quoter marking a check-in verified or rejected."""
+    status: LocationCheckinStatus

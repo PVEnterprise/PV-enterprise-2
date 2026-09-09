@@ -344,6 +344,8 @@ export interface AuthResponse {
 export type RoleName = 'executive' | 'sales_rep' | 'decoder' | 'quoter' | 'inventory_admin';
 
 /** A sales rep's GPS fix from one of the sreedevi-sales PWA's four daily check-in prompts. */
+export type LocationCheckinStatus = 'pending' | 'verified' | 'rejected';
+
 export interface LocationCheckin {
   id: string;
   user_id: string;
@@ -354,5 +356,6 @@ export interface LocationCheckin {
   latitude: number;
   longitude: number;
   accuracy?: number | null;
+  status: LocationCheckinStatus;
   created_at: string;
 }

@@ -462,9 +462,14 @@ class ApiService {
     return (await this.client.post(`/procurement/${id}/receive`, data)).data;
   }
 
-  // Location check-ins (sales rep location tracking - executive only, see sreedevi-sales PWA)
+  // Location check-ins (sales rep location tracking - executive/quoter, see sreedevi-sales PWA)
   getLocationCheckins = async (params?: { user_id?: string; checkin_date?: string }) => {
     return (await this.client.get('/location-checkins/', { params })).data;
+  }
+
+  /** Executive/quoter: mark a check-in verified or rejected. */
+  updateLocationCheckinStatus = async (checkinId: string, status: 'verified' | 'rejected') => {
+    return (await this.client.patch(`/location-checkins/${checkinId}/status`, { status })).data;
   }
 
   /** Triggers the reminder push immediately instead of waiting for its scheduled time. */

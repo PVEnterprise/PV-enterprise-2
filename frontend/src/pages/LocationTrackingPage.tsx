@@ -1,17 +1,32 @@
 /**
- * Executive-only view of sales reps' location check-ins, submitted from the
+ * Executive/quoter view of sales reps' location check-ins, submitted from the
  * sreedevi-sales PWA's four daily reminders (10:00, 12:00, 2:30pm, 5:00pm).
- * Also lets an executive trigger that reminder push on demand — to nudge a
- * rep who hasn't checked in, or to test the push pipeline without waiting
- * for the scheduled time.
+ * Lets a reviewer verify or reject each check-in, and trigger the reminder
+ * push on demand — to nudge a rep who hasn't checked in, or to test the push
+ * pipeline without waiting for the scheduled time.
  */
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, MapPin, Send } from 'lucide-react';
+import { Check, ExternalLink, MapPin, Send, X } from 'lucide-react';
+import clsx from 'clsx';
 import { format, parseISO } from 'date-fns';
 import api from '@/services/api';
-import { LocationCheckin, User } from '@/types';
-import DataTable, { Column } from '@/components/common/DataTable';
+import { LocationCheckin, LocationCheckinStatus, User } from '@/types';
+import DataTable, { Action, Column } from '@/components/common/DataTable';
+
+const STATUS_STYLES: Record<LocationCheckinStatus, string> = {
+  pending: 'bg-gray-100 text-gray-700',
+  verified: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-red-100 text-red-700',
+};
+
+function StatusBadge({ status }: { status: LocationCheckinStatus }) {
+  return (
+    <span className={clsx('inline-block rounded-full px-2.5 py-1 text-xs font-medium capitalize', STATUS_STYLES[status])}>
+      {status}
+    </span>
+  );
+}
 
 const SLOT_LABELS: Record<string, string> = {
   '10:00': '10:00 AM',
@@ -57,6 +72,14 @@ export default function LocationTrackingPage() {
     },
   });
 
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'verified' | 'rejected' }) =>
+      api.updateLocationCheckinStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['location-checkins'] });
+    },
+  });
+
   const columns: Column<LocationCheckin>[] = [
     { key: 'user.full_name', label: 'Sales Rep', sortable: true },
     {
@@ -91,6 +114,29 @@ export default function LocationTrackingPage() {
       key: 'accuracy',
       label: 'Accuracy',
       render: (value: number | null) => (value != null ? `±${Math.round(value)}m` : '—'),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      render: (value: LocationCheckinStatus) => <StatusBadge status={value} />,
+    },
+  ];
+
+  const rowActions: Action<LocationCheckin>[] = [
+    {
+      label: 'Verify',
+      icon: <Check size={16} />,
+      onClick: (row) => updateStatus.mutate({ id: row.id, status: 'verified' }),
+      show: (row) => row.status !== 'verified',
+      variant: 'primary',
+    },
+    {
+      label: 'Reject',
+      icon: <X size={16} />,
+      onClick: (row) => updateStatus.mutate({ id: row.id, status: 'rejected' }),
+      show: (row) => row.status !== 'rejected',
+      variant: 'danger',
     },
   ];
 
@@ -161,6 +207,7 @@ export default function LocationTrackingPage() {
       <DataTable
         data={checkins ?? []}
         columns={columns}
+        actions={rowActions}
         isLoading={isLoading}
         emptyMessage="No check-ins for this day."
         tableId="location-checkins"

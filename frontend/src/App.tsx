@@ -292,7 +292,7 @@ function AppRoutes() {
         <Route
           path="location-tracking"
           element={
-            <RoleRoute allowedRoles={['executive']}>
+            <RoleRoute allowedRoles={['executive', 'quoter']}>
               <LocationTrackingPage />
             </RoleRoute>
           }

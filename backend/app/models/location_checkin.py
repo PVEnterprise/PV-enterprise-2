@@ -22,6 +22,7 @@ class LocationCheckin(BaseModel):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     accuracy = Column(Float, nullable=True)  # meters, from the browser Geolocation API
+    status = Column(String(20), nullable=False, default="pending", server_default="pending", index=True)  # pending, verified, rejected
 
     # Relationships
     user = relationship("User", back_populates="location_checkins", foreign_keys=[user_id])

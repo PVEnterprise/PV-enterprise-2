@@ -23,7 +23,7 @@ router = APIRouter()
 SLOT_LABELS = {slot: label for slot, label, _hour, _minute in REMINDER_SLOTS}
 
 # Roles allowed to trigger an on-demand reminder push (mirrors location_checkins.py).
-MANAGER_ROLES = {"executive"}
+MANAGER_ROLES = {"executive", "quoter"}
 
 
 @router.get("/vapid-public-key", response_model=VapidPublicKeyResponse)
@@ -87,7 +87,7 @@ def send_reminder_now(
     if current_user.role_name not in MANAGER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only executives can send check-in reminders",
+            detail="Only executives and quoters can send check-in reminders",
         )
     if not settings.VAPID_PRIVATE_KEY or not settings.VAPID_PUBLIC_KEY:
         raise HTTPException(
