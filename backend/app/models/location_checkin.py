@@ -18,7 +18,11 @@ class LocationCheckin(BaseModel):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     slot = Column(String(20), nullable=False, index=True)  # "10:00", "12:00", "14:30", "17:00"
     hospital_name = Column(String(255), nullable=False)  # free text, not linked to the customers table
-    recorded_at = Column(DateTime, nullable=False, index=True)  # device timestamp when GPS was captured
+    # timezone=True so the stored value carries its UTC offset — without it,
+    # the API serializes recorded_at with no offset suffix at all, and any
+    # viewer (e.g. the admin Location Tracking page) parses that as if it
+    # were already in their own local time instead of converting from UTC.
+    recorded_at = Column(DateTime(timezone=True), nullable=False, index=True)  # device timestamp when GPS was captured
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     accuracy = Column(Float, nullable=True)  # meters, from the browser Geolocation API
