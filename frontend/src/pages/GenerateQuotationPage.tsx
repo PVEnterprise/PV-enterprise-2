@@ -4,7 +4,7 @@
 import { Fragment, useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, FileText, Edit2, X, Check, Plus, Search, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, FileText, Edit2, X, Check, Plus, Search, Tag } from 'lucide-react';
 import api from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { Inventory as InventoryFull } from '@/types';
@@ -89,6 +89,64 @@ const defaultDescription = (item: OrderItem) => {
   return item.inventory?.description || '';
 };
 
+// Groups any section_name-bearing array by set — unassigned items ('') first,
+// then each named set in first-occurrence order. Relative order of items
+// within a group is preserved from the input array.
+const groupBySection = <T extends { section_name?: string | null }>(items: T[]) => {
+  const keys = Array.from(new Set(items.map((i) => i.section_name || '')));
+  const ordered = [...keys.filter((k) => k === ''), ...keys.filter((k) => k !== '')];
+  return ordered.map((sectionKey) => ({
+    sectionKey,
+    entries: items.filter((i) => (i.section_name || '') === sectionKey),
+  }));
+};
+
+// Reorders groups so every previously-known set keeps its existing relative
+// position, and any set not in `knownOrder` (i.e. brand new) is pushed after
+// all of them — this is what guarantees a newly created set always renders
+// last instead of wherever its first item happened to land in the array.
+const sortGroupsKnownFirst = <T,>(groups: { sectionKey: string; entries: T[] }[], knownOrder: string[]) => {
+  const rank = new Map(knownOrder.map((k, i) => [k, i]));
+  return [...groups].sort((a, b) => {
+    const ra = rank.has(a.sectionKey) ? rank.get(a.sectionKey)! : Infinity;
+    const rb = rank.has(b.sectionKey) ? rank.get(b.sectionKey)! : Infinity;
+    return ra - rb;
+  });
+};
+
+// Splices `newRaw` into `kept` so it lands at 1-based `position` within its
+// own set (sectionKey) — e.g. position 2 means "become the 2nd item of this
+// set", pushing the previous #2 and everything after it (in that same set)
+// down by one. Omitted/undefined `position` appends after the set's last
+// item (or at the very end of `kept` if the set is empty/new). This works
+// identically for the unassigned ('') bucket as for any named set.
+const spliceIntoSection = <T extends { section_name?: string | null }>(
+  kept: T[],
+  sectionKey: string,
+  position: number | undefined,
+  newRaw: T
+) => {
+  if (position !== undefined) {
+    let seen = 0;
+    for (let i = 0; i < kept.length; i++) {
+      if ((kept[i].section_name || '') === sectionKey) {
+        seen++;
+        if (seen === position) {
+          kept.splice(i, 0, newRaw);
+          return;
+        }
+      }
+    }
+  }
+  for (let i = kept.length - 1; i >= 0; i--) {
+    if ((kept[i].section_name || '') === sectionKey) {
+      kept.splice(i + 1, 0, newRaw);
+      return;
+    }
+  }
+  kept.push(newRaw);
+};
+
 export default function GenerateQuotationPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -127,6 +185,24 @@ export default function GenerateQuotationPage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedCatalog, setSelectedCatalog] = useState<InventoryFull | null>(null);
   const [addQuantity, setAddQuantity] = useState<number>(1);
+  // Which set (section_name) the item being added should join — '' means no set
+  const [addItemSectionChoice, setAddItemSectionChoice] = useState<string>('');
+  const [addItemNewSectionMode, setAddItemNewSectionMode] = useState(false);
+  const [addItemNewSectionName, setAddItemNewSectionName] = useState('');
+  // 1-based position the new item should take within its target set — '' means
+  // "append at the end" (the default shown in the field)
+  const [addItemPositionInSet, setAddItemPositionInSet] = useState<string>('');
+
+  // Per-item set (section_name) reassignment — clicking an item's set badge
+  // opens an inline picker to move it into/out of a set.
+  const [sectionEditingId, setSectionEditingId] = useState<string | null>(null);
+  const [sectionEditingNewMode, setSectionEditingNewMode] = useState(false);
+  const [sectionEditingNewName, setSectionEditingNewName] = useState('');
+
+  // Click-to-edit Sr No — lets you reposition an item within its own set by
+  // typing the position it should take; everything else in that set shifts.
+  const [editingSrNoFor, setEditingSrNoFor] = useState<string | null>(null);
+  const [srNoDraft, setSrNoDraft] = useState<string>('');
 
   // Check role access
   const canAccess = user?.role_name === 'quoter' || user?.role_name === 'executive';
@@ -252,6 +328,27 @@ export default function GenerateQuotationPage() {
     });
   }, [order?.items, selectedPriceListId, priceListItems, discountPercent, customUnitPrices, customQuantities, customDescriptions]);
 
+  // Sets (order items' section_name) already assigned in the Decode screen —
+  // offered as choices when adding an item to a set or moving one between sets.
+  const existingSections = useMemo(
+    () => Array.from(new Set((order?.items || []).map((i) => i.section_name).filter((s): s is string => !!s))),
+    [order?.items]
+  );
+
+  // Group items by set for display — unassigned items (no section_name) come
+  // first, followed by each named set in first-seen order. Grouping is purely
+  // a display concern: it doesn't require items of the same set to be
+  // contiguous in the underlying array.
+  const groupedRows = useMemo(() => {
+    const withIndex = quotationItems.map((item, idx) => ({ item, idx }));
+    const keys = Array.from(new Set(withIndex.map(({ item }) => item.section_name || '')));
+    const ordered = [...keys.filter((k) => k === ''), ...keys.filter((k) => k !== '')];
+    return ordered.map((sectionKey) => ({
+      sectionKey,
+      entries: withIndex.filter(({ item }) => (item.section_name || '') === sectionKey),
+    }));
+  }, [quotationItems]);
+
   // Calculate totals
   const subTotal = useMemo(() => 
     quotationItems.reduce((sum, item) => sum + (Number(item.final_unit_price) * item.quantity), 0),
@@ -368,29 +465,111 @@ export default function GenerateQuotationPage() {
     },
   });
 
+  // Turns a live OrderItem (plus any in-flight local edits) into the raw dict
+  // the full-replace endpoint expects. `sectionOverride` lets a caller change
+  // the set without first mutating `order.items`.
+  const toRawPayload = (item: OrderItem, sectionOverride?: string | null) => ({
+    inventory_id: item.is_nq ? null : item.inventory_id,
+    quantity: customQuantities[item.id] !== undefined ? customQuantities[item.id] : item.quantity,
+    unit_price: item.is_nq ? null : (customUnitPrices[item.id] !== undefined ? customUnitPrices[item.id] : item.unit_price),
+    gst_percentage: item.is_nq ? 0 : item.gst_percentage,
+    section_name: sectionOverride !== undefined ? sectionOverride : (item.section_name || null),
+    item_description: customDescriptions[item.id] !== undefined ? customDescriptions[item.id] : item.item_description,
+    is_nq: !!item.is_nq,
+  });
+
   const buildItemsPayload = (opts: {
     removeId?: string;
     addItem?:
       | { inventory_id: string; quantity: number; unit_price: number; gst_percentage: number; is_nq?: false }
       | { is_nq: true; quantity: number; item_description: string };
-    addAtIndex?: number;
+    addItemSection?: string | null;
+    addItemPosition?: number;
+    sectionUpdateId?: string;
+    sectionUpdateValue?: string | null;
   } = {}) => {
+    // The set order already established by the last save — any set not in
+    // this list is brand new and must be pushed to the end (see
+    // sortGroupsKnownFirst), regardless of where its item gets spliced in.
+    const previousSections = groupBySection(order?.items || []).map((g) => g.sectionKey);
+
     const kept = (order?.items || [])
       .filter((item) => item.id !== opts.removeId)
-      .map((item) => ({
-        inventory_id: item.is_nq ? null : item.inventory_id,
-        quantity: customQuantities[item.id] !== undefined ? customQuantities[item.id] : item.quantity,
-        unit_price: item.is_nq ? null : (customUnitPrices[item.id] !== undefined ? customUnitPrices[item.id] : item.unit_price),
-        gst_percentage: item.is_nq ? 0 : item.gst_percentage,
-        section_name: item.section_name || null,
-        item_description: customDescriptions[item.id] !== undefined ? customDescriptions[item.id] : item.item_description,
-        is_nq: !!item.is_nq,
-      }));
+      .map((item) =>
+        toRawPayload(item, item.id === opts.sectionUpdateId ? (opts.sectionUpdateValue ?? null) : undefined)
+      );
+
     if (opts.addItem) {
-      const insertAt = opts.addAtIndex !== undefined ? opts.addAtIndex : kept.length;
-      kept.splice(insertAt, 0, { ...opts.addItem, section_name: null } as any);
+      spliceIntoSection(kept, opts.addItemSection || '', opts.addItemPosition, {
+        ...opts.addItem,
+        section_name: opts.addItemSection ?? null,
+      } as any);
     }
-    return kept;
+
+    const ordered = sortGroupsKnownFirst(groupBySection(kept), previousSections);
+    return ordered.flatMap((g) => g.entries);
+  };
+
+  // Move an item into a different set, out of its set (pass null), or into a
+  // brand-new set (any string not already among existingSections).
+  const handleUpdateItemSection = (item: OrderItem, newSection: string | null) => {
+    setSectionEditingId(null);
+    setSectionEditingNewMode(false);
+    setSectionEditingNewName('');
+    if ((item.section_name || null) === (newSection || null)) return;
+    updateItemsMutation.mutate(buildItemsPayload({ sectionUpdateId: item.id, sectionUpdateValue: newSection }));
+  };
+
+  const handleSectionSelectChange = (item: OrderItem, value: string) => {
+    if (value === '__new__') {
+      setSectionEditingNewMode(true);
+      setSectionEditingNewName('');
+      return;
+    }
+    handleUpdateItemSection(item, value || null);
+  };
+
+  const handleConfirmNewSectionForItem = (item: OrderItem) => {
+    const trimmed = sectionEditingNewName.trim();
+    if (!trimmed) {
+      setSectionEditingId(null);
+      setSectionEditingNewMode(false);
+      return;
+    }
+    handleUpdateItemSection(item, trimmed);
+  };
+
+  // Move an item to a new 1-based position within its own set — everything
+  // between its old and new position shifts to make room. Other sets, and
+  // their internal order, are left untouched.
+  const handleReorderWithinSection = (sectionKey: string, itemId: string, newPosition: number) => {
+    const group = groupedRows.find((g) => g.sectionKey === sectionKey);
+    if (!group) return;
+    const currentOrder = group.entries.map((e) => e.item);
+    const fromPos = currentOrder.findIndex((i) => i.id === itemId);
+    if (fromPos === -1) return;
+    const targetIndex = Math.max(1, Math.min(currentOrder.length, newPosition)) - 1;
+    if (targetIndex === fromPos) return;
+
+    const reordered = [...currentOrder];
+    const [moved] = reordered.splice(fromPos, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    const previousSections = groupBySection(order?.items || []).map((g) => g.sectionKey);
+    const groups = groupedRows.map((g) => ({
+      sectionKey: g.sectionKey,
+      entries: (g.sectionKey === sectionKey ? reordered : g.entries.map((e) => e.item)).map((item) =>
+        toRawPayload(item)
+      ),
+    }));
+    const ordered = sortGroupsKnownFirst(groups, previousSections);
+    updateItemsMutation.mutate(ordered.flatMap((g) => g.entries));
+  };
+
+  const commitSrNoEdit = (sectionKey: string, itemId: string) => {
+    const n = parseInt(srNoDraft, 10);
+    setEditingSrNoFor(null);
+    if (!isNaN(n)) handleReorderWithinSection(sectionKey, itemId, n);
   };
 
   const handleDeleteItem = (item: OrderItem) => {
@@ -415,10 +594,55 @@ export default function GenerateQuotationPage() {
     setSelectedCatalog(null);
     setCatalogSearch('');
     setAddQuantity(1);
+    setAddItemSectionChoice('');
+    setAddItemNewSectionMode(false);
+    setAddItemNewSectionName('');
+    setAddItemPositionInSet('');
+  };
+
+  // Opens the inline add-item form. `section` pre-targets a set (e.g. from
+  // that set's "+ Add Item to Set" header link, or the set of a neighboring
+  // row) — omit it for "no set" (the bottom "Add Item" row's default). The
+  // Position field defaults to "append at the end" but can be typed over to
+  // land the item anywhere — works the same for the unassigned bucket.
+  const openAddItem = (index: number, section: string = '') => {
+    setAddItemAt(index);
+    setAddItemSectionChoice(section);
+    setAddItemNewSectionMode(false);
+    setAddItemNewSectionName('');
+    setAddItemPositionInSet('');
+  };
+
+  const resolveAddItemSection = (): string | null =>
+    addItemNewSectionMode ? (addItemNewSectionName.trim() || null) : (addItemSectionChoice || null);
+
+  // Size of whichever set is currently targeted in the add-item form — used
+  // both to compute the default "append" position and to validate a typed one.
+  const addItemTargetSetSize = addItemNewSectionMode
+    ? 0
+    : (groupedRows.find((g) => g.sectionKey === (addItemSectionChoice || ''))?.entries.length ?? 0);
+  const addItemMaxPosition = addItemTargetSetSize + 1;
+
+  // A blank field means "append at the end" (always valid). A typed value
+  // outside [1, size+1] is a real error, not silently clamped — the caller
+  // must surface it rather than guess what the user meant.
+  const validateAddItemPosition = (): { position?: number; error?: string } => {
+    if (addItemNewSectionMode) return { position: 1 };
+    if (addItemPositionInSet === '') return { position: undefined };
+    const n = parseInt(addItemPositionInSet, 10);
+    if (isNaN(n) || n < 1 || n > addItemMaxPosition) {
+      return { error: `Position must be between 1 and ${addItemMaxPosition} for this set.` };
+    }
+    return { position: n };
   };
 
   const handleAddItem = () => {
     if (!selectedCatalog || addQuantity <= 0) return;
+    const { position, error } = validateAddItemPosition();
+    if (error) {
+      alert(error);
+      return;
+    }
 
     let unitPrice = Number(selectedCatalog.unit_price);
     let taxPercent = Number(selectedCatalog.tax || 5);
@@ -432,7 +656,8 @@ export default function GenerateQuotationPage() {
 
     updateItemsMutation.mutate(
       buildItemsPayload({
-        addAtIndex: addItemAt ?? undefined,
+        addItemSection: resolveAddItemSection(),
+        addItemPosition: position,
         addItem: {
           inventory_id: selectedCatalog.id,
           quantity: addQuantity,
@@ -450,10 +675,16 @@ export default function GenerateQuotationPage() {
   const handleAddNQItem = () => {
     const description = catalogSearch.trim();
     if (!description || addQuantity <= 0) return;
+    const { position, error } = validateAddItemPosition();
+    if (error) {
+      alert(error);
+      return;
+    }
 
     updateItemsMutation.mutate(
       buildItemsPayload({
-        addAtIndex: addItemAt ?? undefined,
+        addItemSection: resolveAddItemSection(),
+        addItemPosition: position,
         addItem: {
           is_nq: true,
           quantity: addQuantity,
@@ -591,7 +822,10 @@ export default function GenerateQuotationPage() {
     );
   }
 
+  const addItemPositionCheck = validateAddItemPosition();
+
   const addItemForm = (
+    <div className="flex flex-col gap-1">
     <div className="flex items-center gap-2">
       <div className="relative w-64">
         <div className="relative">
@@ -621,17 +855,65 @@ export default function GenerateQuotationPage() {
           </div>
         )}
       </div>
-      <input
-        type="number"
-        min={1}
-        value={addQuantity}
-        onChange={(e) => setAddQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-        className="input input-sm w-16 text-xs text-center"
-        title="Quantity"
-      />
+      <label className="flex items-center gap-1 text-[11px] text-gray-500">
+        Qty
+        <input
+          type="number"
+          min={1}
+          value={addQuantity}
+          onChange={(e) => setAddQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+          className="input input-sm w-14 text-xs text-center"
+          title="Quantity"
+        />
+      </label>
+      {addItemNewSectionMode ? (
+        <input
+          type="text"
+          value={addItemNewSectionName}
+          onChange={(e) => setAddItemNewSectionName(e.target.value)}
+          placeholder="New set name"
+          autoFocus
+          className="input input-sm w-28 text-xs"
+        />
+      ) : (
+        <select
+          value={addItemSectionChoice}
+          onChange={(e) => {
+            if (e.target.value === '__new__') {
+              setAddItemNewSectionMode(true);
+              setAddItemNewSectionName('');
+            } else {
+              setAddItemSectionChoice(e.target.value);
+            }
+          }}
+          className="input input-sm w-28 text-xs"
+          title="Assign to a set — the item joins the end of it; reorder afterward by editing its Sr No"
+        >
+          <option value="">No Set</option>
+          {existingSections.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+          <option value="__new__">+ New Set…</option>
+        </select>
+      )}
+      <label className="flex items-center gap-1 text-[11px] text-gray-500">
+        Pos
+        <input
+          type="number"
+          min={1}
+          max={addItemMaxPosition}
+          value={addItemNewSectionMode ? 1 : (addItemPositionInSet !== '' ? addItemPositionInSet : String(addItemMaxPosition))}
+          onChange={(e) => setAddItemPositionInSet(e.target.value)}
+          disabled={addItemNewSectionMode}
+          className={`input input-sm w-14 text-xs text-center disabled:opacity-50 ${
+            addItemPositionCheck.error ? 'border-red-400 bg-red-50' : ''
+          }`}
+          title="Position within the set (1 = first) — leave as shown to append at the end"
+        />
+      </label>
       <button
         onClick={handleAddItem}
-        disabled={!selectedCatalog || updateItemsMutation.isPending}
+        disabled={!selectedCatalog || !!addItemPositionCheck.error || updateItemsMutation.isPending}
         className="btn btn-primary btn-sm text-xs px-3 py-1.5 disabled:opacity-40"
       >
         <Check size={13} className="mr-1" />
@@ -639,7 +921,7 @@ export default function GenerateQuotationPage() {
       </button>
       <button
         onClick={handleAddNQItem}
-        disabled={!catalogSearch.trim() || updateItemsMutation.isPending}
+        disabled={!catalogSearch.trim() || !!addItemPositionCheck.error || updateItemsMutation.isPending}
         className="btn btn-secondary btn-sm text-xs px-3 py-1.5 disabled:opacity-40"
         title="Add a dummy line for a requirement we don't supply — no catalog match needed, no price, no effect on totals"
       >
@@ -652,6 +934,10 @@ export default function GenerateQuotationPage() {
       >
         <X size={14} />
       </button>
+    </div>
+    {addItemPositionCheck.error && (
+      <p className="text-xs text-red-600 pl-1">{addItemPositionCheck.error}</p>
+    )}
     </div>
   );
 
@@ -801,6 +1087,7 @@ export default function GenerateQuotationPage() {
                 <tr className="border-b">
                   <th className="text-left p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Sr No</th>
                   <th className="text-left p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Catalog No</th>
+                  <th className="text-left p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Set</th>
                   <th className="text-left p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Description</th>
                   <th className="text-left p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">HSN Code</th>
                   <th className="text-right p-3 text-xs font-semibold text-gray-700 whitespace-nowrap">Unit Price</th>
@@ -814,20 +1101,125 @@ export default function GenerateQuotationPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {quotationItems.map((item, index) => (
+                {groupedRows.map(({ sectionKey, entries }) => (
+                  <Fragment key={`group-${sectionKey || 'none'}`}>
+                    {sectionKey && (
+                      <tr className="bg-blue-50">
+                        <td colSpan={13} className="px-3 py-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide flex items-center gap-1.5">
+                              <Tag size={12} />
+                              {sectionKey}
+                              <span className="text-blue-400 font-normal normal-case">
+                                ({entries.length} item{entries.length !== 1 ? 's' : ''})
+                              </span>
+                            </span>
+                            <button
+                              onClick={() => openAddItem(quotationItems.length, sectionKey)}
+                              disabled={updateItemsMutation.isPending}
+                              className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
+                            >
+                              <Plus size={12} /> Add Item to Set
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {entries.map(({ item, idx: index }, posInGroup) => (
                   <Fragment key={item.id}>
                     {addItemAt === index && (
                       <tr className="bg-gray-50/50">
-                        <td colSpan={12} className="p-2">{addItemForm}</td>
+                        <td colSpan={13} className="p-2">{addItemForm}</td>
                       </tr>
                     )}
                     <tr className={`hover:bg-gray-50 group ${item.is_nq ? 'bg-amber-50/40' : ''}`}>
-                      <td className="p-3 text-xs text-gray-900 whitespace-nowrap">{index + 1}</td>
+                      <td className="p-3 text-xs text-gray-900 whitespace-nowrap">
+                        {editingSrNoFor === item.id ? (
+                          <input
+                            type="number"
+                            min={1}
+                            max={entries.length}
+                            autoFocus
+                            value={srNoDraft}
+                            onChange={(e) => setSrNoDraft(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => commitSrNoEdit(sectionKey, item.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitSrNoEdit(sectionKey, item.id);
+                              if (e.key === 'Escape') setEditingSrNoFor(null);
+                            }}
+                            className="w-12 text-center border border-blue-400 rounded px-1 py-0.5 text-xs"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => { setEditingSrNoFor(item.id); setSrNoDraft(String(posInGroup + 1)); }}
+                            disabled={updateItemsMutation.isPending}
+                            className="hover:text-blue-600 hover:underline"
+                            title="Click to reposition within this set"
+                          >
+                            {posInGroup + 1}
+                          </button>
+                        )}
+                      </td>
                       <td className="p-3 text-xs font-mono text-gray-900 whitespace-nowrap">
                         {item.is_nq ? (
                           <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold" title="Not Quoted — dummy line, no price impact">NQ</span>
                         ) : (
                           item.inventory?.sku
+                        )}
+                      </td>
+                      <td className="p-3 text-xs whitespace-nowrap">
+                        {sectionEditingId === item.id ? (
+                          sectionEditingNewMode ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={sectionEditingNewName}
+                                onChange={(e) => setSectionEditingNewName(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleConfirmNewSectionForItem(item)}
+                                placeholder="New set name"
+                                autoFocus
+                                className="input input-sm w-24 text-xs py-0.5"
+                              />
+                              <button onClick={() => handleConfirmNewSectionForItem(item)} className="p-0.5 hover:bg-green-100 rounded" title="Save">
+                                <Check size={12} className="text-green-600" />
+                              </button>
+                              <button
+                                onClick={() => { setSectionEditingId(null); setSectionEditingNewMode(false); }}
+                                className="p-0.5 hover:bg-red-100 rounded"
+                                title="Cancel"
+                              >
+                                <X size={12} className="text-red-600" />
+                              </button>
+                            </div>
+                          ) : (
+                            <select
+                              autoFocus
+                              value={item.section_name || ''}
+                              onChange={(e) => handleSectionSelectChange(item, e.target.value)}
+                              onBlur={() => setSectionEditingId(null)}
+                              className="input input-sm w-28 text-xs py-0.5"
+                            >
+                              <option value="">No Set</option>
+                              {existingSections.map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                              <option value="__new__">+ New Set…</option>
+                            </select>
+                          )
+                        ) : (
+                          <button
+                            onClick={() => setSectionEditingId(item.id)}
+                            disabled={updateItemsMutation.isPending}
+                            className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                              item.section_name
+                                ? 'bg-blue-50 border-blue-200 text-blue-700 hover:border-blue-400'
+                                : 'border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500'
+                            }`}
+                            title={item.section_name ? 'Change set' : 'Add to a set'}
+                          >
+                            {item.section_name || '+ Set'}
+                          </button>
                         )}
                       </td>
                       <td className="p-3 text-xs text-gray-700 max-w-[220px]">
@@ -889,22 +1281,6 @@ export default function GenerateQuotationPage() {
                       <td className="p-1 text-center">
                         <div className="flex items-center justify-center">
                           <button
-                            onClick={() => setAddItemAt(index)}
-                            disabled={updateItemsMutation.isPending}
-                            className="p-0.5 rounded text-gray-300 group-hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                            title="Insert item above"
-                          >
-                            <ChevronUp size={13} />
-                          </button>
-                          <button
-                            onClick={() => setAddItemAt(index + 1)}
-                            disabled={updateItemsMutation.isPending}
-                            className="p-0.5 rounded text-gray-300 group-hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                            title="Insert item below"
-                          >
-                            <ChevronDown size={13} />
-                          </button>
-                          <button
                             onClick={() => handleDeleteItem(item)}
                             disabled={updateItemsMutation.isPending}
                             className="p-0.5 rounded text-gray-300 group-hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -916,14 +1292,16 @@ export default function GenerateQuotationPage() {
                       </td>
                     </tr>
                   </Fragment>
+                    ))}
+                  </Fragment>
                 ))}
 
                 {/* Add Item row — also hosts the insert form when appending at the end */}
                 <tr className="bg-gray-50/50">
-                  <td colSpan={12} className="p-2">
+                  <td colSpan={13} className="p-2">
                     {addItemAt === quotationItems.length ? addItemForm : (
                       <button
-                        onClick={() => setAddItemAt(quotationItems.length)}
+                        onClick={() => openAddItem(quotationItems.length)}
                         className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded hover:bg-blue-50 transition-colors"
                       >
                         <Plus size={14} />
