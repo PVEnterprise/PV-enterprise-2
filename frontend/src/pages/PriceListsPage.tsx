@@ -48,6 +48,8 @@ export default function PriceListsPage() {
   const [debouncedItemSearch, setDebouncedItemSearch] = useState<string>('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importWorkbook, setImportWorkbook] = useState<any>(null);
+  const [importSheet, setImportSheet] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -128,99 +130,123 @@ export default function PriceListsPage() {
     }
   };
 
+  // Find the header row (may sit below a title row) and the catalog/price/tax column indexes
+  const findImportColumns = (rows: any[][]) => {
+    const norm = (v: any) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    for (let r = 0; r < Math.min(rows.length, 15); r++) {
+      const cells = (rows[r] || []).map(norm);
+      const catalogCol = cells.findIndex(c => c.startsWith('catalog') || c === 'sku' || c === 'cat no');
+      const priceCol = cells.findIndex(c => c === 'price' || c === 'unit price' || c === 'rate');
+      if (catalogCol >= 0 && priceCol >= 0) {
+        const taxCol = cells.findIndex(c => c.startsWith('tax'));
+        return { headerRow: r, catalogCol, priceCol, taxCol };
+      }
+    }
+    return null;
+  };
+
+  const getSheetRows = (sheetName: string, XLSX: any): any[][] =>
+    XLSX.utils.sheet_to_json(importWorkbook.Sheets[sheetName], { header: 1, defval: null });
+
+  const handleImportFileChange = async (file: File | null) => {
+    setImportFile(file);
+    setImportWorkbook(null);
+    setImportSheet('');
+    if (!file) return;
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    // Ignore sheets hidden in Excel; users only see (and expect us to read) the visible ones
+    const sheetMeta = workbook.Workbook?.Sheets || [];
+    const visibleSheets = workbook.SheetNames.filter((_, i) => !sheetMeta[i]?.Hidden);
+    setImportWorkbook({ ...workbook, SheetNames: visibleSheets.length ? visibleSheets : workbook.SheetNames });
+    // Default to a sheet with recognizable columns, preferring one named like the price list
+    const usable = visibleSheets.filter(name =>
+      findImportColumns(XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: null }))
+    );
+    const listWords = (selectedPriceList?.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const preferred = usable.find(name => listWords.some(w => name.toLowerCase().includes(w)));
+    setImportSheet(preferred || usable[0] || visibleSheets[0] || workbook.SheetNames[0]);
+  };
+
   const handleImportExcel = async () => {
-    if (!importFile || !selectedPriceList) return;
+    if (!importWorkbook || !importSheet || !selectedPriceList) return;
 
     try {
-      // Dynamically import xlsx library
       const XLSX = await import('xlsx');
-      
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const data = e.target?.result;
-          const workbook = XLSX.read(data, { type: 'binary' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+      const rows = getSheetRows(importSheet, XLSX);
+      const cols = findImportColumns(rows);
+      if (!cols) {
+        alert(`Could not find "Catalog No" and "Price" columns in sheet "${importSheet}".`);
+        return;
+      }
 
-          let updatedCount = 0;
-          let errors: string[] = [];
+      // Match SKUs ignoring case and spaces ("12 0000" == "120000")
+      const skuKey = (v: any) => String(v ?? '').replace(/\s+/g, '').toLowerCase();
+      const itemsBySku = new Map(priceListItems.map(item => [skuKey(item.inventory.sku), item]));
 
-          // Process each row
-          for (const row of jsonData) {
-            const catalogNo = row['Catalog No'] || row['Catalog no'] || row['catalog no'];
-            const price = row['Price'] || row['price'];
-            const taxPercent = row['Tax %'] || row['Tax%'] || row['tax %'] || row['tax%'];
+      let updatedCount = 0;
+      let errors: string[] = [];
 
-            if (!catalogNo || !price) {
-              errors.push(`Skipped row: Missing catalog number or price`);
-              continue;
-            }
+      for (let r = cols.headerRow + 1; r < rows.length; r++) {
+        const row = rows[r] || [];
+        const catalogNo = row[cols.catalogCol];
+        const price = row[cols.priceCol];
+        const taxPercent = cols.taxCol >= 0 ? row[cols.taxCol] : null;
 
-            // Find matching item
-            const matchingItem = priceListItems.find(
-              item => item.inventory.sku.toLowerCase() === catalogNo.toString().toLowerCase()
-            );
+        // Silently skip fully blank rows
+        if (row.every((c: any) => c === null || String(c).trim() === '')) continue;
 
-            if (matchingItem) {
-              const newPrice = parseFloat(price);
-              if (isNaN(newPrice) || newPrice <= 0) {
-                errors.push(`Invalid price for ${catalogNo}: ${price}`);
-                continue;
-              }
-
-              // Parse tax percentage (optional)
-              let newTaxPercent = matchingItem.tax_percentage; // Keep existing if not provided
-              if (taxPercent !== undefined && taxPercent !== null && taxPercent !== '') {
-                const parsedTax = parseFloat(taxPercent);
-                if (!isNaN(parsedTax) && parsedTax >= 0 && parsedTax <= 100) {
-                  newTaxPercent = parsedTax;
-                } else {
-                  errors.push(`Invalid tax percentage for ${catalogNo}: ${taxPercent}`);
-                }
-              }
-
-              // Update the price and tax
-              await api.updatePriceListItem(
-                selectedPriceList.id,
-                matchingItem.id,
-                { 
-                  unit_price: newPrice,
-                  tax_percentage: newTaxPercent
-                }
-              );
-              updatedCount++;
-            } else {
-              errors.push(`Catalog number not found: ${catalogNo}`);
-            }
-          }
-
-          // Refresh the items list
-          queryClient.invalidateQueries({ queryKey: ['priceListItems', selectedPriceList.id] });
-
-          // Show results
-          let message = `Successfully updated ${updatedCount} item(s).`;
-          if (errors.length > 0) {
-            message += `\n\nWarnings:\n${errors.slice(0, 5).join('\n')}`;
-            if (errors.length > 5) {
-              message += `\n... and ${errors.length - 5} more`;
-            }
-          }
-          alert(message);
-
-          setShowImportModal(false);
-          setImportFile(null);
-        } catch (error) {
-          console.error('Error processing Excel file:', error);
-          alert('Error processing Excel file. Please check the format and try again.');
+        if (!catalogNo || price === null || price === undefined || price === '') {
+          errors.push(`Row ${r + 1}: Missing catalog number or price`);
+          continue;
         }
-      };
 
-      reader.readAsBinaryString(importFile);
+        const matchingItem = itemsBySku.get(skuKey(catalogNo));
+        if (!matchingItem) {
+          errors.push(`Catalog number not found: ${catalogNo}`);
+          continue;
+        }
+
+        const newPrice = parseFloat(String(price).replace(/,/g, ''));
+        if (isNaN(newPrice) || newPrice <= 0) {
+          errors.push(`Invalid price for ${catalogNo}: ${price}`);
+          continue;
+        }
+
+        // Parse tax percentage (optional)
+        let newTaxPercent = matchingItem.tax_percentage; // Keep existing if not provided
+        if (taxPercent !== undefined && taxPercent !== null && taxPercent !== '') {
+          const parsedTax = parseFloat(taxPercent);
+          if (!isNaN(parsedTax) && parsedTax >= 0 && parsedTax <= 100) {
+            newTaxPercent = parsedTax;
+          } else {
+            errors.push(`Invalid tax percentage for ${catalogNo}: ${taxPercent}`);
+          }
+        }
+
+        await api.updatePriceListItem(selectedPriceList.id, matchingItem.id, {
+          unit_price: newPrice,
+          tax_percentage: newTaxPercent,
+        });
+        updatedCount++;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['priceListItems', selectedPriceList.id] });
+
+      let message = `Successfully updated ${updatedCount} item(s) from sheet "${importSheet}".`;
+      if (errors.length > 0) {
+        message += `\n\nWarnings:\n${errors.slice(0, 5).join('\n')}`;
+        if (errors.length > 5) {
+          message += `\n... and ${errors.length - 5} more`;
+        }
+      }
+      alert(message);
+
+      setShowImportModal(false);
+      handleImportFileChange(null);
     } catch (error) {
-      console.error('Error importing Excel:', error);
-      alert('Error importing Excel file. Please make sure the file is valid.');
+      console.error('Error processing Excel file:', error);
+      alert('Error processing Excel file. Please check the format and try again.');
     }
   };
 
@@ -655,7 +681,7 @@ export default function PriceListsPage() {
                 <ul className="text-sm text-gray-600 list-disc list-inside space-y-1 mb-4">
                   <li><strong>Catalog No</strong> - Item SKU/Catalog number</li>
                   <li><strong>Item Description</strong> - Item description (optional)</li>
-                  <li><strong>Price</strong> - New unit price</li>
+                  <li><strong>Price</strong> (or <strong>Unit Price</strong>) - New unit price</li>
                   <li><strong>Tax %</strong> - Tax percentage (optional)</li>
                 </ul>
                 <p className="text-xs text-gray-500 italic">
@@ -670,7 +696,7 @@ export default function PriceListsPage() {
                 <input
                   type="file"
                   accept=".xlsx,.xls"
-                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                  onChange={(e) => handleImportFileChange(e.target.files?.[0] || null)}
                   className="block w-full text-sm text-gray-500
                     file:mr-4 file:py-2 file:px-4
                     file:rounded file:border-0
@@ -684,12 +710,29 @@ export default function PriceListsPage() {
                   </p>
                 )}
               </div>
+
+              {importWorkbook && importWorkbook.SheetNames.length > 1 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Sheet
+                  </label>
+                  <select
+                    value={importSheet}
+                    onChange={(e) => setImportSheet(e.target.value)}
+                    className="input w-full"
+                  >
+                    {importWorkbook.SheetNames.map((name: string) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => {
                     setShowImportModal(false);
-                    setImportFile(null);
+                    handleImportFileChange(null);
                   }}
                   className="btn btn-secondary flex-1"
                 >
@@ -697,7 +740,7 @@ export default function PriceListsPage() {
                 </button>
                 <button
                   onClick={handleImportExcel}
-                  disabled={!importFile}
+                  disabled={!importWorkbook || !importSheet}
                   className="btn btn-primary flex-1"
                 >
                   Import
