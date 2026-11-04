@@ -512,7 +512,8 @@ class EstimatePDFGenerator:
 
             if has_named_sections and sec:
                 section_subtotal_rows.append(len(table_data))
-                table_data.append([f'Sub Total — {sec}'] + [''] * (num_cols - 2) + [format_indian_number(float(sec_subtotal))])
+                # Per-set subtotal is post-tax, i.e. the sum of the set's Total column
+                table_data.append([f'Sub Total — {sec}'] + [''] * (num_cols - 2) + [format_indian_number(float(sec_subtotal + sec_igst))])
 
         discount_amount = subtotal * (Decimal(str(discount_percentage)) / 100)
         subtotal_after_discount = subtotal - discount_amount
