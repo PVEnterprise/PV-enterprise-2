@@ -257,6 +257,7 @@ class InvoicePDFGenerator:
                 data.append([Paragraph(f"<b>{sec}</b>", self.styles["SectionHeader"])] + [''] * (num_cols - 1))
 
             sec_subtotal = Decimal("0.00")
+            sec_igst = Decimal("0.00")
             for item in sections_items[sec]:
                 i += 1
                 rate = Decimal(item.order_item.unit_price or 0)
@@ -267,6 +268,7 @@ class InvoicePDFGenerator:
                 amt = discounted_rate * qty
                 igst = amt * gst / Decimal("100")
                 sec_subtotal += amt
+                sec_igst += igst
                 subtotal += amt
                 total_igst += igst
                 # Optional batch/manufacturing details, shown under the description.
@@ -311,7 +313,8 @@ class InvoicePDFGenerator:
                     ])
             if has_named_sections and sec:
                 section_subtotal_rows.append(len(data))
-                data.append(["Sub Total"] + [''] * (num_cols - 2) + [format_indian_number(sec_subtotal)])
+                # Per-set subtotal is post-tax, i.e. the sum of the set's Amount column
+                data.append(["Sub Total"] + [''] * (num_cols - 2) + [format_indian_number(sec_subtotal + sec_igst)])
 
         if not has_named_sections:
             data.append(["Sub Total"] + [''] * (num_cols - 2) + [format_indian_number(subtotal)])
